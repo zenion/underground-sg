@@ -1,0 +1,29 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# capture data never goes in git
+captures/
+*.bundle/
+capture-*/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# OS
+.DS_Store
+Thumbs.db
