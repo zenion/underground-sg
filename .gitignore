@@ -3,21 +3,49 @@
 .env.*
 !.env.example
 
-# capture data never goes in git
-captures/
-*.bundle/
-capture-*/
+# signing and store credentials
+credentials.json
+*.p8
+*.p12
+*.mobileprovision
 
-# Python
+# capture data never goes in git. Anchored to the repo root, so hand-made fixtures
+# named capture-<id>/ and Swift resource bundles elsewhere stay tracked.
+/captures/
+/capture-*/
+/*.bundle/
+
+# restricted_zones outlines (back-of-house areas) are private
+db/private/
+
+# local data volumes (Docker), and fixtures recorded in venues (.data/fixtures/)
+.data/
+
+# Node, pnpm, Turborepo, Vite
+node_modules/
+dist/
+.turbo/
+coverage/
+
+# Expo: ios/ and android/ are generated (Continuous Native Generation).
+# The Swift source in apps/mapper/modules/capture-native/ios/ is tracked.
+.expo/
+apps/mapper/ios/
+apps/mapper/android/
+*.ipa
+*.apk
+*.aab
+
+# Go (services/localization)
+services/localization/bin/
+*.test
+coverage.out
+
+# Python (offline tooling and containerised batch workers only)
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
-
-# Node
-node_modules/
-.next/
-dist/
 
 # Xcode
 DerivedData/

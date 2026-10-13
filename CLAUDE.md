@@ -6,50 +6,69 @@ A free public map of downtown Singapore's underground pedestrian links and mall 
 
 ## Status
 
-Pre-code. Nothing is scaffolded yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT).
+Pre-code. Nothing is scaffolded yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
 
 ## Planned layout
 
 ```
 apps/
-  mapper-ios/        Swift + ARKit mapper app: capture, on-device preview, draft editing, testing
-  web/               Next.js + React + MapLibre GL JS public webapp
+  mapper/                    Expo (React Native, TS) mapper app: capture UI, preview, drafts, route tests, upload
+    modules/capture-native/  local Expo module in Swift: ARKit, keyframes, Vision blur, bundle writer, packBundle
+  web/                       Vite + React + MapLibre GL JS v6 public webapp; moderation UI as an authenticated route
 services/
-  api/               Python, FastAPI: ingest, map snapshots, moderation, localization endpoint
-  processing/        Python workers: reconstruct, align, georeference, extract, diff, index
-  localization/      image retrieval + feature matching, pose solve
+  api/                       Node, Fastify 5, Kysely: ingest, map snapshots, moderation
+  processing/                TS workers in separate processes: validate, privacy re-check, align, extract, diff
+  localization/              Go service, Phase 4 (own go.mod): retrieval, feature matching, pose solve
 packages/
-  map-style/         one MapLibre style shared by web and iOS
-  routing/           cost model + router (TypeScript); keep the iOS port in step
+  contracts/                 JSON Schema 2020-12 for every file format and API; TS and Swift types generated
+  routing/                   cost model + router, used by web and mapper (no port)
+  map-style/                 one MapLibre style shared by web and mapper
+  floorplan/                 floor triangles to walkable polygon; runs in Hermes and in processing
 db/
-  schema.sql         PostGIS schema (draft v0); move to migrations once the API exists
+  migrations/                dbmate, plain SQL
+  schema.sql                 draft schema (v1) until the Phase 1 migration task turns it into the first migration
 docs/
-  spec.md, backlog.md, capture-bundle.md, decisions/
+  spec.md, backlog.md, capture-bundle.md, decisions/, reviews/
+  snapshot-format.md, diff-format.md (to be written)
 ```
 
 Create directories as work starts. Don't scaffold empty ones.
 
 ## Rules that must not break
 
-- **Privacy** (`docs/decisions/0005-privacy-by-design.md`): blur faces and screens on the phone before writing any image; never store or log localization query photos; raw bundles are private. Add a test whenever an image path changes.
-- **Moderation:** nothing reaches the public map without an approved change set. The only exception is the owner publishing mapper-mode work, recorded as `auto_published`.
-- **Public walkways only:** never model or publish back-of-house, service or security areas.
+- **Privacy** (`docs/decisions/0005-privacy-by-design.md`):
+  - Blur faces, the heads of detected people and screens on the phone: every keyframe through the one `writeBlurredJPEG` path before it is written, and photos taken outside a capture through `blurPhoto(src, dst)` before they are stored or uploaded, deleting the unblurred source at once. Every other image path (anchor photos, status evidence, landmark crops) follows ADR 0005.
+  - Never store or log localization query photos or feature payloads. Raw bundles, anchor photos and contributor trajectories are private.
+  - Images that reach Node stream to private storage or stay in memory. Never use `@fastify/multipart` `saveRequestFiles` or multer disk storage.
+  - Tests: the CI blur test for any change to the module's image code; the localization test for no temp files and no body bytes in logs; a new test whenever an image path changes.
+  - Fixtures in git are synthetic, recorded where the owner is happy to publish them (no images or GNSS fixes), or images used with the subject's consent or under an open licence. Nothing recorded in a venue goes in git: keep it in the git-ignored `.data/fixtures/`, and tests that need it skip when it is absent.
+- **Moderation:**
+  - Nothing reaches the public map except through a published change set: `approved` through `moderator_review`, or `auto_published` through `owner_mapper` (the owner's structural work) or `trusted_status_auto` (status edits). The database enforces who may use each path.
+  - The automated gates (privacy re-check, restricted-zone check, alignment residual checks, at least two street priors per connected group) must pass on every path, recorded in `moderation_events`, before a publish path is set. A failed gate or an open privacy flag blocks publishing; the owner or a moderator clears a privacy flag explicitly, and that is recorded too.
+  - Every map version except a rollback publishes at least one change set. Seed data (venues and levels) and the imported OSM street graph are written by the owner's scripts, and reach the public files only inside such a version.
+- **Public walkways only:** never model or publish back-of-house, service or security areas. Record them as `restricted_zones`: extraction clips against them, and no feature may overlap the interior of one (sharing an edge is fine); the database refuses an overlap. The outlines are private: never commit them, put them in public files or log them.
 - **Snapshots are immutable:** never edit a published `map_versions` snapshot. Publish a new version instead.
+- **Native boundary:** no per-frame data or images cross from the Swift module into JavaScript. JS gets a session handle, status events at about 5 Hz and compact results.
+- **Heavy work never runs in the API process.** It goes to worker processes through the job queue.
+- **Languages:** server code is TypeScript on Node; Go only in `services/localization`; Python only for offline tooling and containerised batch workers, never in the API or the localization serving path. cgo only inside Linux containers.
 
 ## Conventions
 
 - Geometry is stored in WGS84 (EPSG:4326). Do metric work in SVY21 (EPSG:3414); never measure in degrees.
-- `ordinal` is a city-wide height band: 0 = street, -1 = B1, -2 = B2. Venue-signed names ("B2") live in `levels.name`.
-- Units are metres and seconds. Times are `timestamptz`, displayed in Asia/Singapore.
-- Capture bundles follow `docs/capture-bundle.md`. Change that doc first, then both sides, and bump `schema_version`.
-- Routing cost and penalties live in one shared config (`docs/decisions/0003-routing.md`).
-- Base data: OneMap for tiles and surveyed coordinates (needs an API account), OSM for footpaths. Keep attribution visible on every map view.
+- `ordinal` is the level switcher's display band: 0 = street, -1 = first basement band, and so on; several levels of one venue may share a band. Physical height is `levels.elevation_m`. Venue-signed names ("B2") live in `levels.name`. Routing never infers a connection from equal ordinals.
+- Units are metres and seconds; routing cost is time in seconds. Times are `timestamptz`, displayed in Asia/Singapore; opening hours are evaluated in Asia/Singapore time.
+- `packages/contracts` is the source of truth for every file format and API. CI regenerates the types and fails on a diff.
+- Capture bundles follow `docs/capture-bundle.md`. Change that doc first, then `packages/contracts`, then the Swift module and the validator, and bump `schema_version`.
+- Routing cost and penalties live in `packages/routing/routing-config.json` (`docs/decisions/0003-routing.md`).
+- Base data: OneMap raster tiles (the OneMap API account is for search only), the OSM street graph for footpaths, LTA's MRT Station Exit data for exit positions. Keep OneMap, OpenStreetMap and LTA attribution visible on every map view.
 
 ## Environment
 
-- The owner's machine is Windows. Backend and webapp run fine there or in WSL. Use Docker for PostGIS (`postgis/postgis` image).
-- The iOS app needs macOS, Xcode and an iPhone Pro or iPad Pro with LiDAR. It can't be built on Windows.
-- No secrets in the repo. OneMap credentials and storage keys go in `.env` files, which are git-ignored.
+- The owner's machine is Windows. Keep the repo on the Windows filesystem and run Node, pnpm and Expo natively on Windows (Metro in WSL needs mirrored networking or `--tunnel`). Docker Desktop with the WSL2 backend runs PostGIS (`postgis/postgis:18-3.6`) and RustFS as the local S3.
+- No Mac. iOS builds run on EAS Build or on GitHub macOS runners; JS changes reach the phone through the dev client and Metro. Escape hatch: a rented cloud Mac for occasional Xcode, Simulator or Instruments days.
+- Capture device: iPhone 17 Pro Max on current iOS; avoid iOS 26.4-26.6.0 (LiDAR drift regression). The owner creates the Apple Developer Program membership and the Expo account when the Swift spike starts.
+- Budget is as low as possible. Phases 1-3 run on the owner's PC, with uploads over the home LAN; public map files go to Cloudflare Pages and R2. No GPU without the owner's explicit approval.
+- No secrets in the repo, which will be public on GitHub. OneMap credentials and storage keys go in `.env` files, which are git-ignored. Never commit signing files (`credentials.json`, `*.p8`, `*.p12`, `*.mobileprovision`).
 
 ## How to work here
 
