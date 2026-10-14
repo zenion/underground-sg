@@ -37,7 +37,7 @@ Only with the owner's explicit approval. Nothing in the MVP pipeline needs one. 
 ### Builds and accounts
 
 - iOS builds start on the EAS Free plan and on GitHub macOS runners, which are free for the public repo. Xcode Cloud is an option. EAS Starter is paid for only if the native loop becomes the bottleneck ([0007](0007-expo-mapper-app.md)).
-- Through Phase 3 the only subscription is the Apple Developer Program (US$99/yr); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates the Apple membership, and an Expo account, when the Swift spike starts.
+- Through Phase 3 the only subscription is the Apple Developer Program (US$99/yr); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates the Apple membership when the Swift spike starts, and the free Expo account now, for Expo Go ([0007](0007-expo-mapper-app.md)).
 
 ### OneMap
 

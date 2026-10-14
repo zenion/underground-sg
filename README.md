@@ -2,7 +2,7 @@
 
 Find your way through downtown Singapore's underground links and malls: see where you are, and get a route between two street-level points that stays underground.
 
-Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded; no apps or services are built yet. The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
+Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded. The mapper app is a shell that runs in Expo Go ([apps/mapper](apps/mapper/README.md)); no services are built yet. The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
 
 ## Docs
 
@@ -35,7 +35,7 @@ pnpm install
 pnpm check
 ```
 
-`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md).
+`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md). `pnpm test:venue` runs the tests that need meshes recorded in a venue, from the git-ignored `.data/fixtures/`; they skip when the files are absent. `pnpm mapper` starts Metro for the mapper app in Expo Go on the phone (see [apps/mapper/README.md](apps/mapper/README.md)), and `pnpm build` exports its iOS JavaScript bundle.
 
 Map data © OneMap / Singapore Land Authority and © OpenStreetMap contributors.
 

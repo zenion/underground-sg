@@ -32,6 +32,9 @@ coverage/
 .expo/
 apps/mapper/ios/
 apps/mapper/android/
+# Written by Expo CLI, and the mapper's copy of the MapLibre worker (scripts/maplibre-worker.mts)
+apps/mapper/expo-env.d.ts
+apps/mapper/src/map/generated/
 *.ipa
 *.apk
 *.aab

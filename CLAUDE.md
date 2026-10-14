@@ -6,7 +6,7 @@ A free public map of downtown Singapore's underground pedestrian links and mall 
 
 ## Status
 
-Root tooling is scaffolded (pnpm 12 workspaces, Turborepo, TypeScript 7, Vitest 5, Biome, CI on Ubuntu and Windows), and `packages/contracts` has the capture bundle v1 schemas, codegen and the bundle validator (`validate-bundle`); no apps or services exist yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
+Root tooling is scaffolded (pnpm 12 workspaces, Turborepo, TypeScript 7, Vitest 5, Biome, CI on Ubuntu and Windows), `packages/contracts` has the capture bundle v1 schemas, codegen and the bundle validator (`validate-bundle`), `packages/floorplan` turns floor triangles into the approximate walkable outline and coverage grid, and `apps/mapper` is an Expo SDK 57 shell that runs in Expo Go (map drawing, the floor-plan benchmark, device checks) until a development build exists; no services exist yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
 
 ## Planned layout
 
@@ -70,7 +70,7 @@ Create directories as work starts. Don't scaffold empty ones.
 - Tests that read the git-ignored `.data/fixtures/` or need PostGIS or RustFS run as separate uncached Turborepo tasks (for example `test:venue`, `test:db` with `passThroughEnv`), so cached results never hide a skipped or stateful test.
 - The owner's machine is Windows. Keep the repo on the Windows filesystem and run Node, pnpm and Expo natively on Windows (Metro in WSL needs mirrored networking or `--tunnel`). Docker Desktop with the WSL2 backend runs PostGIS (`postgis/postgis:18-3.6`) and RustFS as the local S3.
 - No Mac. iOS builds run on EAS Build or on GitHub macOS runners; JS changes reach the phone through the dev client and Metro. Escape hatch: a rented cloud Mac for occasional Xcode, Simulator or Instruments days.
-- Capture device: iPhone 17 Pro Max on current iOS; avoid iOS 26.4-26.6.0 (LiDAR drift regression). The owner creates the Apple Developer Program membership and the Expo account when the Swift spike starts.
+- Capture device: iPhone 17 Pro Max on current iOS; avoid iOS 26.4-26.6.0 (LiDAR drift regression). The owner creates the Expo account now (Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account) and joins the Apple Developer Program when the Swift spike starts.
 - Budget is as low as possible. Phases 1-3 run on the owner's PC, with uploads over the home LAN; public map files go to Cloudflare Pages and R2. No GPU without the owner's explicit approval.
 - No secrets in the repo, which will be public on GitHub. OneMap credentials and storage keys go in `.env` files, which are git-ignored. Never commit signing files (`credentials.json`, `*.p8`, `*.p12`, `*.mobileprovision`).
 

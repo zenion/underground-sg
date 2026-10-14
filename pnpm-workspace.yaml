@@ -16,3 +16,9 @@ catalog:
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade
+
+# semver 6.3.1, which @babel/core and its helpers ask for (^6.3.1) under Expo and React Native,
+# was published without provenance after 7.x had it, so trustPolicy refuses it, and 6.3.0 has
+# the CVE-2022-25883 ReDoS. semver 7 keeps the 6.x API those packages use.
+overrides:
+  "semver@6": 7.8.5

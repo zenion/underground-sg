@@ -12,7 +12,9 @@
     "gen": "turbo run gen",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:venue": "turbo run test:venue",
     "build": "turbo run build",
+    "mapper": "pnpm --filter @usg/mapper start --go",
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
