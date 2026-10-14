@@ -8,14 +8,16 @@ Test fixtures: the repo will be public. Fixtures in git are synthetic, recorded 
 
 ## Phase 1: Groundwork
 
-Gate: one venue gives written permission to scan. The code tasks don't wait for the gate, but nothing inside a venue is scanned before it.
+Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's landlord gave permission.** Nothing inside any other venue is scanned before that venue says yes too.
 
 ### Owner tasks
 
 - [ ] [Owner] Site walk of the City Hall cluster: confirm the boundary and list every public level on the pedestrian network (basements, the street-level floor, link bridges and the vertical connectors between them), every exit and every link
   - Also note each link's and exit's opening hours, where MRT paid areas start (fare-gate lines), back-of-house and service areas next to public walkways (for `restricted_zones`), and when shops open
   - Choose the height datum: a reference street-level floor that `levels.elevation_m` is measured from. Record it in [spec.md](spec.md)
-- [ ] [Owner] Permission request to Funan's landlord for the B2 UPL (first ask), then Raffles City and CityLink. Ask whether the permission also covers publishing photos; if it doesn't, landmark photos stay out of the MVP
+- [x] [Owner] Permission request to Funan's landlord for the B2 UPL (granted 2026-10-15). Keep the letter out of the repo; the seed script records only a reference to it in `venues.permission`
+- [ ] [Owner] Record the scope of Funan's permission: which areas, any conditions (times, notice, escort), and whether it covers publishing photos; if it doesn't, landmark photos stay out of the MVP
+- [ ] [Owner] Permission requests to Raffles City and CityLink, asking the same photo question
 - [ ] [Owner] Ask the MRT operator and LTA about scanning the City Hall and Esplanade station concourses
 - [ ] [Owner] Register a OneMap API account (needed for the search API; tiles need no token) and check the terms for tiles and attribution. Email SLA about overlaying the map on OneMap tiles and about tile caching or offline packs, which need SLA's written permission first
 - [ ] [Owner] Decide the map data licence: ODbL or not, now with the option of shipping the OSM-derived street graph as a separate ODbL file, `street.json` (see [0003](decisions/0003-routing.md)). The separate-file approach needs legal review
