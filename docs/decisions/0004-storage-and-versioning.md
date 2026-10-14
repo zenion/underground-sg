@@ -6,7 +6,7 @@ Status: accepted · 2026-10-12 · amended 2026-10-12
 
 ### HEAD and change sets
 
-- PostGIS tables hold HEAD, the latest approved map. The draft is [`db/schema.sql`](../../db/schema.sql) until the Phase 1 migration task turns it into the first dbmate migration in `db/migrations/`.
+- PostGIS tables hold HEAD, the latest approved map. The schema is the dbmate migrations in `db/migrations/`, starting from the draft v1; [`db/schema.sql`](../../db/schema.sql) is a generated snapshot of the result.
 - Every HEAD table (`venues`, `levels`, `spaces`, `nodes`, `edges`, `anchors`, `pois`) has `rev integer NOT NULL DEFAULT 1`, bumped on each approved change.
 - Pending work lives in `change_sets.diff` and is applied to HEAD only on approval, in one transaction. Every change set records `base_version_id`, the version it was based on.
 - Diff entries are `{op, feature_type, id, base_rev, before, after}`. The format goes in `docs/diff-format.md`, with a JSON Schema in `packages/contracts` (both written in Phase 1).

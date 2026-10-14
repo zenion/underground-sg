@@ -13,7 +13,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "build": "turbo run build",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "test:db": "turbo run test:db",
+    "migrate": "pnpm --filter @usg/db migrate",
+    "db": "pnpm --filter @usg/db run",
+    "buckets": "pnpm --filter @usg/scripts buckets"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

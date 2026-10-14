@@ -40,3 +40,7 @@ pnpm-lock.yaml linguist-generated=true
 # in GitHub PR views; CI regenerates them and fails on a diff.
 packages/contracts/src/generated/** linguist-generated=true
 packages/contracts/generated/** linguist-generated=true
+
+# Generated from the migrations by `pnpm db dump` (db/scripts/dump.ts): collapsed in GitHub PR
+# views, since the migration shows the change; CI regenerates it and fails on a diff.
+db/schema.sql linguist-generated=true

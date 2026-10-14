@@ -22,6 +22,7 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 - [ ] [Owner] Register a OneMap API account (needed for the search API; tiles need no token) and check the terms for tiles and attribution. Email SLA about overlaying the map on OneMap tiles and about tile caching or offline packs, which need SLA's written permission first
 - [ ] [Owner] Decide the map data licence: ODbL or not, now with the option of shipping the OSM-derived street graph as a separate ODbL file, `street.json` (see [0003](decisions/0003-routing.md)). The separate-file approach needs legal review
 - [ ] [Owner] Create the public GitHub repo, or approve Claude Code creating it. Check that `.env` files are git-ignored before the first push
+- [ ] [Owner] Once CI has run on GitHub, add the `Database (postgis)` check to `main`'s branch protection beside the two `Lint, typecheck and test` checks, if it should be required
 - [ ] [Owner] When the Swift spike starts: join the Apple Developer Program (US$99/yr) and create an Expo account
 - [ ] [Owner] Before the first recorded bundle reaches the PC: turn on disk encryption (BitLocker, for example) for the drive that holds the Docker data (PostGIS, RustFS) and for the backup drive ([0009](decisions/0009-hosting-and-budget.md))
 - [ ] [Owner] Register the iPhone 17 Pro Max for development builds (`eas device:create`) and turn on Developer Mode on the phone
@@ -32,9 +33,11 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 - [x] Monorepo scaffold per `CLAUDE.md` (repo root): pnpm workspaces + Turborepo, TypeScript strict, Vitest, lint and format (Biome), `.editorconfig`, `.gitattributes`, GitHub Actions CI running lint, typecheck and tests on Ubuntu and Windows
   - Done when: a fresh clone installs and passes lint, typecheck and tests on Windows-native Node, and in CI once the GitHub repo exists
   - Checked with throwaway packages (TypeScript 7, `.ts` imports across packages, Vitest 5, Node running `.ts` directly); CI first runs when the repo is pushed
-- [ ] `docker-compose.yml` with `postgis/postgis:18-3.6` and RustFS (SeaweedFS as the fallback; MinIO community edition is archived), plus a migrate script that runs dbmate
+- [x] `docker-compose.yml` with `postgis/postgis:18-3.6` and RustFS (SeaweedFS as the fallback; MinIO community edition is archived), plus a migrate script that runs dbmate
   - Done when: `docker compose up` followed by the migrate script gives an empty, valid database on Docker Desktop (WSL2 backend), and the local buckets exist
-- [ ] Turn `db/schema.sql` (draft v1) into the first dbmate migration in `db/migrations/`. From then on, schema changes are new migrations
+  - `docker compose up -d --wait`, `pnpm migrate` and `pnpm buckets` (README, Local stack). Images pinned by digest (RustFS 1.0.1); settings in `.env`, copied from `.env.example`; ports bound to 127.0.0.1. Buckets: `usg-bundles`, `usg-exports` (private) and `usg-public` ([0009](decisions/0009-hosting-and-budget.md))
+- [x] Turn `db/schema.sql` (draft v1) into the first dbmate migration in `db/migrations/`. From then on, schema changes are new migrations
+  - `db/` is the `@usg/db` package. `db/schema.sql` is now a generated snapshot (`pnpm db dump`, pg_dump inside the PostGIS container); CI regenerates it and fails on a diff
 - [ ] Seed script (`db/`): the five core venues (`operator`, `permission`, footprint) and their pedestrian-network levels (`name` as the venue signs it, `ordinal` band, `sort_key`; `elevation_m` stays NULL until measured). Names come from the site walk. It writes HEAD directly, so its rows reach the public files only inside a version that publishes a change set (see the moderation rule in `CLAUDE.md`)
   - Done when: it loads into an empty database and running it twice changes nothing
 - [ ] OSM import (`services/processing`): fetch footways, pedestrian ways and crossings for the cluster's bounding box (Overpass API) into `street_nodes` and `street_edges`. Filter out ways with `tunnel=yes`, `indoor=*`, a negative `level` or `layer`, and ways inside venue footprints (OSM already maps some underground links). Set `covered` from `covered=yes` plus tunnel, building and roof heuristics; compute `length_m` in SVY21
@@ -46,13 +49,14 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 
 - [ ] Fastify 5 app on Node 26: health check, config from `.env` (git-ignored; commit an example file), Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in), route schemas that reference `packages/contracts`, OpenAPI emitted by @fastify/swagger
   - Done when: the health check reaches PostGIS and RustFS, and the tests run against the compose stack
-- [ ] Database rule tests (run against the compose PostGIS, with synthetic fixtures at real City Hall coordinates). Each rule gets a passing and a refused case:
+- [x] Database rule tests (run against the compose PostGIS, with synthetic fixtures at real City Hall coordinates). Each rule gets a passing and a refused case:
   - `nodes.ordinal` and `anchors.ordinal` stay in step with `levels.ordinal`; `UNIQUE (venue_id, name)` allows two levels in one band; stairs and escalators are never `step_free`
   - publish paths: `owner_mapper` needs tier `owner` and track `structural`; `trusted_status_auto` needs track `status`, tier `trusted`, `moderator` or `owner`, and `valid_until` on every report; `moderator_review` needs a `moderator` or `owner` reviewer who is not the contributor; `decision` and `publish_path` agree
   - no publish path without a `gates_passed` event, or with a failed or privacy-flagged capture, on every path
   - a published change set, its captures and its status reports are frozen; `rejected` and `rolled_back` are final; status change sets have no diff and no version, and only they carry status reports; a structural change set has a version exactly when it is published; every version except a rollback publishes a change set
   - `map_versions` and `moderation_events` refuse UPDATE, DELETE and TRUNCATE; `map_head` cannot be deleted and only moves forward
   - restricted zones: a feature overlapping a zone's interior is refused and one sharing its edge is accepted; a level or venue with zones cannot be deleted; an invalid outline is refused
+  - Done: `pnpm test:db` (Vitest, `db/test/db/`), replacing the psql script `db/tests/schema-rules.sql`. Each test file gets its own database copied from a migrated template. CI runs them in the `Database (postgis)` job against a service container (first run when the repo is pushed); also tested: the initial migration's down section drops everything it created
 - [ ] Choose the job queue: pg-boss or graphile-worker (Postgres-backed, no Redis). Record the choice in [0006](decisions/0006-typescript-backend.md), enqueue from `services/api` and run jobs in `services/processing`
   - Done when: a job enqueued in the same transaction as a row insert runs in a separate worker process, never in the API process
 - [ ] `GET /map/latest`: metadata for the current version (from `map_head`) and the URLs of its files, for the owner's tools on the LAN (the mapper app and the change-set preview). Public clients read `latest.json`, which can lag `map_head` until the reconcile job runs
@@ -153,6 +157,8 @@ Gate: captured segments align end to end on the street map.
 - [ ] Owner device token (`services/api`, `apps/mapper`): one owner contributor (tier `owner`) and per-device tokens, stored hashed; the phone keeps its token in the iOS Keychain. `captures.contributor_id` comes from the token, never from the manifest, and owner-only routes such as the change-set preview need a token too. Real sign-in comes in Phase 4
   - Done when: an upload or an owner-only request without a valid token is refused
 - [ ] Multipart upload API (`services/api`, `POST /captures`): insert the `captures` row (`device_model`, `os_version`, `app_version`), create an S3 multipart upload on RustFS and return presigned part URLs that the phone can reach on the LAN (not `localhost`); complete with ListParts, then set `status = 'uploaded'` and enqueue validation in one transaction. Bundle bytes go straight to storage and never pass through the API process
+  - Before RustFS's S3 port is bound beyond 127.0.0.1: replace the root key pair in `.env` (the one in `.env.example` is public) with generated credentials, and give the API a non-root access key limited to the bundles bucket ([0009](decisions/0009-hosting-and-budget.md))
+  - Done when: the API refuses to start when it presigns URLs for a host other than loopback and its S3 key pair, or RustFS's root pair, is still `.env.example`'s
 - [ ] Upload from the phone (`apps/mapper`): after `packBundle`, enqueue every part at once with expo-file-system `File.createUploadTask` (background session) while the app is in the foreground. Add the small native uploader (`allowsCellularAccess = false`) only if strict Wi-Fi-only or surviving a killed app turns out to be needed
   - Done when: a pilot-sized bundle uploads over home Wi-Fi, carries on with the app in the background, and completes on the server
 - [ ] Validation job (`services/processing`): fetch the bundle from private storage, run the validator, set `captures.status` and `failure_reason`

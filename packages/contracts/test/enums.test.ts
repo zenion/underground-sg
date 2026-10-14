@@ -14,11 +14,17 @@ import {
 } from "../src/index.ts";
 import { readSchema, type SchemaObject } from "./schemas.ts";
 
+// The generated snapshot of the migrated schema (pg_dump --schema-only; `pnpm db dump`).
 const schemaSql = readFileSync(new URL("../../../db/schema.sql", import.meta.url), "utf8");
 
-/** The values of `CREATE TYPE <name> AS ENUM (...)` in db/schema.sql, in order. */
+/**
+ * The values of `CREATE TYPE public.<name> AS ENUM (...)` in db/schema.sql, in order. pg_dump
+ * qualifies the name with its schema and puts one value per line.
+ */
 function sqlEnum(name: string): string[] {
-  const match = new RegExp(`CREATE TYPE\\s+${name}\\s+AS ENUM\\s*\\(([^)]*)\\)`).exec(schemaSql);
+  const match = new RegExp(`^CREATE TYPE public\\.${name} AS ENUM \\(([^)]*)\\);$`, "m").exec(
+    schemaSql,
+  );
   if (match?.[1] === undefined) throw new Error(`db/schema.sql has no enum ${name}`);
   return [...match[1].matchAll(/'([^']*)'/g)].map((value) => String(value[1]));
 }

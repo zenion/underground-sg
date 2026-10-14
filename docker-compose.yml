@@ -1,0 +1,68 @@
+# The local stack for Phases 1-3 (docs/decisions/0009-hosting-and-budget.md): PostGIS, and
+# RustFS as the local S3 stand-in.
+#
+#   docker compose up -d --wait
+#   pnpm migrate    # creates the app database and applies db/migrations (dbmate)
+#   pnpm buckets    # creates the local buckets
+#
+# Settings come from .env at the repo root: copy .env.example. Ports are bound to 127.0.0.1
+# only; data lives in the named volumes below, inside Docker Desktop's disk image.
+
+name: usg
+
+services:
+  postgis:
+    # amd64 only: the postgis/postgis images have no arm64 build. Pinned by digest; CI's
+    # "Database (postgis)" job uses the same reference (db/test/unit/stack.test.ts checks).
+    image: postgis/postgis:18-3.6@sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?copy .env.example to .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env}
+      # The image's init script loads PostGIS, topology and the tiger geocoder into this
+      # database. The app database is created by `pnpm migrate` from template1 instead, so
+      # it holds only what the migrations create.
+      POSTGRES_DB: postgres
+    ports:
+      - 127.0.0.1:${POSTGRES_PORT:?copy .env.example to .env}:5432
+    volumes:
+      # PostgreSQL 18 images keep their data in /var/lib/postgresql/18/docker.
+      - postgis-data:/var/lib/postgresql
+    healthcheck:
+      # Over TCP: during first start-up the init scripts run on a socket-only server.
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  rustfs:
+    # RustFS 1.0.1 (Apache-2.0), pinned by digest. SeaweedFS is the fallback; MinIO's
+    # community edition is archived.
+    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
+    environment:
+      # Root credentials. The scripts use them as their S3 key pair.
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?copy .env.example to .env}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?copy .env.example to .env}
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+    ports:
+      # S3 API and web console. The multipart-upload task (Phase 2) opens the S3 port to the
+      # LAN, so the phone can reach presigned part URLs. Before binding beyond 127.0.0.1,
+      # replace the root key pair in .env (.env.example's is public) with a generated one,
+      # and give the API its own non-root key limited to the bundles bucket.
+      - 127.0.0.1:${RUSTFS_PORT:?copy .env.example to .env}:9000
+      - 127.0.0.1:${RUSTFS_CONSOLE_PORT:?copy .env.example to .env}:9001
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  postgis-data:
+  rustfs-data:
