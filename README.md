@@ -25,7 +25,7 @@ Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffol
 
 ## Development
 
-You need Node 24 LTS, pnpm 12 and Docker Desktop (WSL2 backend on Windows). The repo pins pnpm through `packageManager` in `package.json`.
+You need Node 26 (the repo follows the latest Node release), pnpm 12 and Docker Desktop (WSL2 backend on Windows). The repo pins pnpm through `packageManager` in `package.json`.
 
 ```bash
 pnpm install

@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Cancel superseded PR runs only; every push to main gets a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -24,13 +25,20 @@ jobs:
     env:
       TURBO_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      # Actions are pinned by commit SHA; Dependabot keeps the pins and comments current.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          persist-credentials: false
+      # Installs the pnpm pinned in package.json (native binary, signature-checked), Node from
+      # .node-version, and runs pnpm install --frozen-lockfile.
+      - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+        with:
+          cache: true
+          require-lockfile: true
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # pnpm 12 writes a two-document lockfile that GitHub's dependency graph can't read yet
+      # (dependabot/dependabot-core#15904), so Dependabot alerts miss npm packages. Audit here.
+      - if: runner.os == 'Linux'
+        run: pnpm audit --audit-level high

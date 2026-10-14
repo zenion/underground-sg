@@ -8,7 +8,7 @@ The server side is TypeScript on Node. The one exception is the localization ser
 
 | Component | Choice |
 | --- | --- |
-| API (`services/api`) | Node 24 LTS (Node 26 once it is LTS), Fastify 5, Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in) |
+| API (`services/api`) | Node 26 (the latest release; the owner tracks the newest Node rather than only LTS), Fastify 5, Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in) |
 | Jobs | A Postgres-backed job queue, no Redis: pg-boss or graphile-worker, chosen in the Phase 1 job-queue task |
 | Processing (`services/processing`) | TypeScript workers in separate processes, never in the API process. ONNX Runtime (onnxruntime-node) for the privacy re-check |
 | Localization (`services/localization`, Phase 4) | Go with its own `go.mod`: onnxruntime_go, PoseLib through a cgo shim, built in a Linux container ([0002](0002-photo-localization.md)) |

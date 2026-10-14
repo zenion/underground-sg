@@ -44,7 +44,7 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 
 ### API skeleton (`services/api`)
 
-- [ ] Fastify 5 app on Node 24 LTS: health check, config from `.env` (git-ignored; commit an example file), Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in), route schemas that reference `packages/contracts`, OpenAPI emitted by @fastify/swagger
+- [ ] Fastify 5 app on Node 26: health check, config from `.env` (git-ignored; commit an example file), Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in), route schemas that reference `packages/contracts`, OpenAPI emitted by @fastify/swagger
   - Done when: the health check reaches PostGIS and RustFS, and the tests run against the compose stack
 - [ ] Database rule tests (run against the compose PostGIS, with synthetic fixtures at real City Hall coordinates). Each rule gets a passing and a refused case:
   - `nodes.ordinal` and `anchors.ordinal` stay in step with `levels.ordinal`; `UNIQUE (venue_id, name)` allows two levels in one band; stairs and escalators are never `step_free`
@@ -203,6 +203,7 @@ Gate: routes verified on foot.
 Gate: public beta goes live.
 
 - Localization (`services/localization`, Go): onnxruntime_go on CPU, MegaLoc retrieval, (RaCo-)ALIKED + LightGlue (LightGlue-ONNX exports), PoseLib through a cgo shim, built in a Linux container. A model allow-list in CI. The index is built per published version from approved captures only
+- Models over about 50 MB are fetched at build time with a pinned checksum, never committed (GitHub rejects files over 100 MB)
 - `POST /locate` with the privacy-path checklist and its no-temp-file, no-body-logging test; rate limits and a bounded queue. CPU benchmark on Funan data: 3 s is measured and reported, not a gate; a GPU only with the owner's approval
 - An owner-only draft index on the server for testing a photo locate against the draft in mapper mode
 - Contributor sign-up: email one-time codes plus passkeys (Better Auth is the likely library; confirm then), trust tiers, shared drafts (a server-side `drafts` table) and external TestFlight

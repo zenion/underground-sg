@@ -4,7 +4,6 @@
     "target": "es2024",
     "lib": ["es2024"],
     "module": "nodenext",
-    "moduleResolution": "nodenext",
     "types": [],
 
     "strict": true,

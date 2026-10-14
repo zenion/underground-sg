@@ -6,7 +6,7 @@ A free public map of downtown Singapore's underground pedestrian links and mall 
 
 ## Status
 
-Pre-code. Nothing is scaffolded yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
+Root tooling is scaffolded (pnpm 12 workspaces, Turborepo, TypeScript 7, Vitest 5, Biome, CI on Ubuntu and Windows); no apps, services or packages exist yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
 
 ## Planned layout
 
@@ -65,7 +65,9 @@ Create directories as work starts. Don't scaffold empty ones.
 
 ## Environment
 
-- Node 24 LTS (move to 26 once it is LTS on 2026-10-28) and pnpm 12, pinned in `package.json`. pnpm holds back packages published less than a day ago; don't add `minimumReleaseAgeExclude` entries to get around it, pin an older version instead.
+- Node: the latest release, not only LTS (26.x now), pinned in `.node-version`; CI follows it. pnpm 12, pinned through `packageManager` in `package.json`.
+- pnpm refuses versions published less than a day ago (`minimumReleaseAgeStrict`), so it fails instead of falling back. Pin an older version; never add `minimumReleaseAgeExclude` entries, and revert any pnpm writes.
+- Tests that read the git-ignored `.data/fixtures/` or need PostGIS or RustFS run as separate uncached Turborepo tasks (for example `test:venue`, `test:db` with `passThroughEnv`), so cached results never hide a skipped or stateful test.
 - The owner's machine is Windows. Keep the repo on the Windows filesystem and run Node, pnpm and Expo natively on Windows (Metro in WSL needs mirrored networking or `--tunnel`). Docker Desktop with the WSL2 backend runs PostGIS (`postgis/postgis:18-3.6`) and RustFS as the local S3.
 - No Mac. iOS builds run on EAS Build or on GitHub macOS runners; JS changes reach the phone through the dev client and Metro. Escape hatch: a rented cloud Mac for occasional Xcode, Simulator or Instruments days.
 - Capture device: iPhone 17 Pro Max on current iOS; avoid iOS 26.4-26.6.0 (LiDAR drift regression). The owner creates the Apple Developer Program membership and the Expo account when the Swift spike starts.

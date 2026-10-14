@@ -7,6 +7,9 @@
 *.cmd text eol=crlf
 
 # Binary formats: no line-ending conversion, no text diffs
+*.bin binary
+*.heic binary
+*.heif binary
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -17,7 +20,10 @@
 *.ply binary
 *.pbf binary
 *.onnx binary
+*.onnx.data binary
 *.mlmodel binary
+*.mlpackage/** binary
+*.mlmodelc/** binary
 *.tar binary
 *.tgz binary
 *.zip binary
@@ -26,4 +32,6 @@
 *.woff binary
 *.woff2 binary
 
-pnpm-lock.yaml linguist-generated=true -diff
+# Collapsed in GitHub PR views, but keep local diffs readable: lockfile changes are
+# supply-chain changes and get reviewed.
+pnpm-lock.yaml linguist-generated=true
