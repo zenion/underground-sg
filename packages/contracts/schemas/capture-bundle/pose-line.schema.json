@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/pose-line.schema.json",
+  "title": "PoseLine",
+  "description": "One line of poses.jsonl in a capture bundle, schema_version 1 (docs/capture-bundle.md): one line per frame, written by the Swift capture module. Checked by the validator, not by this schema: frame and t only increase, the line count matches manifest.frame_count and the keyframe lines match manifest.keyframe_count.",
+  "type": "object",
+  "properties": {
+    "frame": {
+      "$ref": "defs.schema.json#/$defs/frameIndex"
+    },
+    "t": {
+      "$ref": "defs.schema.json#/$defs/sessionTime"
+    },
+    "transform": {
+      "description": "ARKit's camera.transform at this frame. A snapshot: it can jump when ARKit closes a loop and is not corrected afterwards (see refined_keyframes.jsonl).",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/transform"
+        }
+      ]
+    },
+    "intrinsics": {
+      "description": "[fx, fy, cx, cy] in pixels, for an image of manifest.image_size.",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "tracking": {
+      "description": "ARKit's tracking state: normal, notAvailable, or limited:<reason> with ARKit's reason, for example limited:excessiveMotion. Processing drops limited frames.",
+      "type": "string",
+      "pattern": "^(normal|notAvailable|limited:[A-Za-z]+)$"
+    },
+    "keyframe": {
+      "description": "Whether this frame is a keyframe, with a JPEG, a depth PNG and a privacy/blur.jsonl line.",
+      "type": "boolean"
+    }
+  },
+  "required": ["frame", "t", "transform", "intrinsics", "tracking", "keyframe"],
+  "additionalProperties": false
+}

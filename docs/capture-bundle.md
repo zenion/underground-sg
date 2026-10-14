@@ -10,7 +10,7 @@ Who writes what ([0007](decisions/0007-expo-mapper-app.md)): the Swift module wr
 
 ## Changes from v0
 
-- Container defined: an uncompressed tar, uploaded as S3 multipart in 16 MB parts.
+- Container defined: an uncompressed tar, uploaded as S3 multipart in 16 MiB parts.
 - `manifest.json`: `contributor_id` removed; `session_started_at`, `image_size`, `depth_size`, `files` and `privacy.detector_versions` added.
 - `anchors.json`: an anchor is now a physical feature, with `kind`, `point`, `facing` and `registration`.
 - `tags.json`: `type` added (`node` or `poi`), so `toilet` is a POI.
@@ -23,7 +23,7 @@ Who writes what ([0007](decisions/0007-expo-mapper-app.md)): the Swift module wr
 
 The bundle starts as a directory on the phone, `capture-<capture_id>/`. When the segment is finished:
 
-1. `packBundle(dir, partBytes)` packs the directory as one uncompressed tar and splits it into 16 MB part files (the last part may be smaller). It then deletes the raw files, so the bundle is not stored twice.
+1. `packBundle(dir, partBytes)` packs the directory as one uncompressed tar and splits it into part files of 16 MiB (16,777,216 bytes, `UPLOAD_PART_BYTES` in `packages/contracts`; the last part may be smaller). It then deletes the raw files, so the bundle is not stored twice.
 2. The API creates an S3 multipart upload and returns a presigned URL for each part.
 3. While the app is in the foreground, it enqueues every part at once with expo-file-system's `File.createUploadTask` (a background session).
 4. The server completes the upload with `ListParts`, then validation runs ([Ingest and validation](#ingest-and-validation)).
@@ -51,6 +51,19 @@ capture-<capture_id>/
 
 Frame names are zero-padded frame indices (`000123`) and match `frame` in `poses.jsonl`. Files outside this layout are rejected.
 
+## Values
+
+These hold in every JSON and JSONL file, and the schemas check them:
+
+- Objects have exactly the fields this doc lists. Unknown fields are rejected, so adding a field is a breaking change.
+- UUIDs (`capture_id`, `anchor_id`) are lowercase. Swift's `uuidString` is uppercase, so lowercase it.
+- Date-times are RFC 3339 in Singapore time, with the offset `+08:00`; `Z` (UTC) is accepted too. Any other offset (`-05:00`, `+00:00`, `+0800`), or none, is invalid.
+- Frame indices run from 0 to 999999, so frame names always have six digits.
+- `t` is never negative: samples from before the session started are not written.
+- Text that may be `null` (a tag's `name` and `note`) is `null` rather than an empty string.
+- Paths in `manifest.files` and `anchors.json` use `/`.
+- Lists and text have upper bounds, far above what a segment needs, so a hostile file can't make validation slow: at most 10,000 tags, 20,000 entries in `manifest.files` and 1,000 boxes per keyframe; an anchor's or tag's `name` and each `privacy` text field up to 200 characters, a tag's `note` up to 2,000, and `app_version`, `device_model` and `os_version` up to 100.
+
 ## Coordinate frame and time base
 
 Everything spatial in a bundle is in the ARKit world frame of the session that recorded it: right-handed, metres, y up (gravity-aligned), origin where tracking started. The heading is arbitrary in every session, which is why segments need registration at their anchors (the hinge problem, [0008](decisions/0008-anchors-and-georeferencing.md)). The server, not the phone, transforms into SVY21 and WGS84 in the network adjustment. The phone's preview may use an approximate transform for display only.
@@ -62,9 +75,11 @@ Everything spatial in a bundle is in the ARKit world frame of the session that r
 
 ## Keyframes, depth and confidence
 
-- Keyframe JPEGs are written in the camera sensor's native landscape orientation, not rotated for display. Their size is `manifest.image_size`, and the `intrinsics` in `poses.jsonl` are for that size.
-- Depth PNGs are 16-bit greyscale in millimetres, from ARKit's `smoothedSceneDepth`, at `manifest.depth_size` (256 × 192), in the same orientation.
+- Keyframe JPEGs are 3-component colour (YCbCr, as JPEG stores RGB), written in the camera sensor's native landscape orientation, not rotated for display: width at least height. Their size is `manifest.image_size`, and the `intrinsics` in `poses.jsonl` are for that size.
+- A keyframe JPEG holds one image, the blurred keyframe: SOI, its segments, a frame header, one or more scans and EOI, with nothing after EOI. It carries no thumbnail or second image: no JFIF or JFXX thumbnail, no Exif thumbnail (IFD1) and no MPF segment, since the server's privacy re-check only looks at the main image. Other metadata, such as JFIF, Exif without a thumbnail or an ICC profile, is allowed.
+- Depth PNGs are 16-bit greyscale in millimetres, from ARKit's `smoothedSceneDepth`, at `manifest.depth_size`, which is always 256 × 192, in the same orientation.
 - Confidence PNGs are 8-bit, with ARKit's levels: 0 low, 1 medium, 2 high.
+- Depth and confidence PNGs are complete: the IHDR chunk first, at least one IDAT, the IEND chunk last, and nothing after IEND.
 - **Depth intrinsics** are the camera intrinsics scaled by `s = depth_w / image_w`: `[fx·s, fy·s, cx·s, cy·s]`. With the example values below, `s = 256 / 1920`, so `[1445.2, 1445.2, 958.4, 721.9]` becomes `[192.7, 192.7, 127.8, 96.3]`. One scale factor only works if both images have the same aspect ratio; the validator checks this.
 
 ## manifest.json
@@ -112,8 +127,8 @@ Everything spatial in a bundle is in the ARKit world frame of the session that r
 | `session_started_at` | Wall clock at `t` = 0 |
 | `started_at`, `ended_at` | Wall clock when the segment started and ended. All times are ISO 8601 with the offset, shown in Asia/Singapore |
 | `frame_count`, `keyframe_count` | Lines in `poses.jsonl`, and lines with `"keyframe": true` |
-| `image_size` | `[w, h]` of the keyframe JPEGs, in the sensor's native landscape orientation |
-| `depth_size` | `[w, h]` of the depth and confidence PNGs: `[256, 192]` |
+| `image_size` | `[w, h]` of the keyframe JPEGs, in the sensor's native landscape orientation (width at least height), with the same aspect ratio as `depth_size`, and at most 16,777,216 pixels (`maxImagePixels`) |
+| `depth_size` | `[w, h]` of the depth and confidence PNGs: always `[256, 192]` |
 | `drift_m` | See below; `null` when it can't be computed |
 | `privacy.blur_method` | How boxes were obscured: solid fill, or pixelation with the cell size |
 | `privacy.detector_versions` | The detector and its revision or model version for each box kind in `privacy/blur.jsonl` |
@@ -163,7 +178,7 @@ An anchor is a physical feature, not the phone's pose at a tap ([0008](decisions
 | `anchor_id` | The existing anchor's UUID, or `null` if the anchor is new |
 | `kind` | `floor_point`: an ARKit raycast to the floor at a door threshold or fare-gate line, plus the facing direction. `image_anchor`: an `ARImageAnchor` on a permanent planar sign, which gives a repeatable 6-DoF pose |
 | `name` | As used on site, e.g. "Funan B2 UPL door" |
-| `ordinal` | Display band of the anchor's level (0 street, -1 first basement band, ...). Processing sets `anchors.level_id` |
+| `ordinal` | Display band of the anchor's level (0 street, -1 first basement band, ...): an integer from -32768 to 32767, a `smallint` like `levels.ordinal`. Processing sets `anchors.level_id` |
 | `point` | `[x, y, z]` in the ARKit world: the floor point, or the image anchor's origin |
 | `facing` | Horizontal unit vector (y = 0) in the ARKit world: the direction the door or sign faces. Processing turns it into `anchors.facing_deg` |
 | `transform` | 16 floats: the image anchor's transform for an image anchor, otherwise the device pose at the tap |
@@ -268,6 +283,7 @@ end_header
 ```
 
 - Vertices are in the ARKit world frame, with each mesh anchor's transform applied as read at session end. Mesh anchors are concatenated; vertices are not merged across anchors.
+- Every face is a triangle, as in ARKit's mesh: its `vertex_indices` list has 3 entries, so each face record is 14 bytes (the count, three `uint` indices, the classification) and readers can rely on that.
 - `classification` holds the raw `ARMeshClassification` value of each face:
 
 | Value | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
@@ -278,7 +294,7 @@ end_header
 
 The rules are in [0005](decisions/0005-privacy-by-design.md). What they mean for a bundle:
 
-- **Blur before writing.** Unblurred images never enter the bundle. Every keyframe goes through the module's one `writeBlurredJPEG` path, which blurs before the JPEG is encoded.
+- **Blur before writing.** Unblurred images never enter the bundle. Every keyframe goes through the module's one `writeBlurredJPEG` path, which blurs before the JPEG is encoded, and the JPEG holds only that blurred image: no thumbnail or second image ([Keyframes](#keyframes-depth-and-confidence)).
 - **Blur is irreversible:** a solid fill, or pixelation with cells of 16 px or larger, over a padded box.
 - **What is blurred:**
   - faces (`VNDetectFaceRectanglesRequest`);
@@ -295,24 +311,44 @@ When the upload completes, ingest enqueues validation on the job queue. Validati
 
 **Hardening:**
 
-- Limits on total size, part count, file count and per-file size. The values are set with the validator.
-- Tar members must be regular files or directories under `capture-<capture_id>/`. Absolute paths, `..` segments and links are rejected.
-- Every member is listed in `manifest.files`, and every listed file is present, with matching byte count and SHA-256. When a stored bundle is validated again, the files of the keyframes in `captures.quarantined_frames` are expected to be missing.
+- Limits, sized for a 3 to 5 minute segment with plenty of headroom (the example segment above, 2 min 38 s, has 4210 frames and 312 keyframes). They are `DEFAULT_BUNDLE_LIMITS` in `packages/contracts`; raise one if real bundles come close.
+
+  | Limit | Value | Applies to |
+  | --- | --- | --- |
+  | `maxBundleBytes` | 2 GiB | The tar, or the sum of a directory's files: 128 upload parts of 16 MiB, so a bundle within the limit can always be uploaded |
+  | `maxUploadParts` | 128 | Parts of 16 MiB (16,777,216 bytes, `UPLOAD_PART_BYTES`). The API enforces it when it creates the multipart upload; the validator sees only the reassembled tar |
+  | `maxEntries` | 20,000 | Tar members or directory entries, directories included |
+  | `maxJsonBytes` | 16 MiB | Each JSON file, which is read into memory |
+  | `maxJsonlBytes` | 256 MiB | Each JSONL file, which is streamed |
+  | `maxJsonlLineBytes` | 64 KiB | One JSONL line |
+  | `maxJpegBytes` | 16 MiB | Each keyframe JPEG |
+  | `maxImagePixels` | 16,777,216 (4096 × 4096) | Pixels in a keyframe, `image_size` width × height. The JPEGs must have that size and `depth_size` is fixed, so this bounds what processing decodes. Processing still sets its own decoder pixel limit |
+  | `maxPngBytes` | 4 MiB | Each depth or confidence PNG |
+  | `maxPlyBytes` | 256 MiB | `mesh/scene.ply` |
+  | `maxPlyHeaderBytes` | 4 KiB | The PLY header |
+  | `maxPlyVertices` | 5,000,000 | PLY vertices, checked before the body is read |
+  | `maxPlyFaces` | 10,000,000 | PLY faces, checked before the body is read |
+
+- The tar is read once, as a stream. Its members must be regular files or directories under one `capture-<capture_id>/` directory, whose name matches `manifest.capture_id`. Rejected: absolute paths, `..`, empty or `.` segments, backslashes, control or non-ASCII characters, links, devices and FIFOs, duplicate names, bad header checksums, a cut-short tar, and anything but zero padding after the end-of-archive marker. Only plain ustar is read (POSIX or GNU-style headers, octal sizes): pax and GNU extension headers, such as long names, are rejected. `packBundle` writes plain ustar, and every bundle path fits in the 100-byte name field. A bundle directory is walked without following links.
+- Every member is listed in `manifest.files`, and every listed file is present, with matching byte count and SHA-256. When a stored bundle is validated again, the files of the keyframes in `captures.quarantined_frames` (in `keyframes/`, `depth/` and `confidence/`) are expected to be missing but still listed, and their lines in `poses.jsonl` and `privacy/blur.jsonl` stay. A quarantined frame must be a keyframe and not an anchor photo.
 - `mesh/scene.ply` is stream-parsed, with the header's element counts checked against limits before anything is allocated.
-- The validator is fuzz-tested.
+- Keyframe JPEGs and PNGs are walked to their end marker without decoding pixels. Schema validation stops at the first error in each document or line, and a JSONL file is parsed only up to its 100th invalid line: after that it can't be used for the cross-file checks, so the rest is only hashed. The cost of validating a bundle grows linearly with its size.
+- The validator is fuzz-tested: random byte changes and cuts to the tar, the PLY, the PNGs, the JPEGs and the JSONL give a report, never an exception or a hang.
 
 **Checks:**
 
-- `schema_version` is 1, and every JSON and JSONL file validates against its schema in `packages/contracts` (Ajv).
-- `frame_count` and `keyframe_count` match `poses.jsonl`. Each keyframe has a JPEG, a depth PNG and a `privacy/blur.jsonl` line, plus a confidence PNG if any are present.
-- `frame` and `t` only increase within each JSONL file.
-- JPEG sizes equal `image_size`; depth and confidence PNG sizes equal `depth_size`; the two have the same aspect ratio.
-- Exactly one `start` and one `end` anchor, and each anchor's `photo` is a keyframe in the bundle.
+- `schema_version` is 1, and every JSON and JSONL file validates against its schema in `packages/contracts` (Ajv). JSON is UTF-8 without a byte order mark; a blank JSONL line is invalid.
+- `frame_count` and `keyframe_count` match `poses.jsonl`. Each keyframe has a JPEG, a depth PNG and a `privacy/blur.jsonl` line, plus a confidence PNG if any are present. Images and blur lines exist only for keyframes, and each `refined_keyframes.jsonl` line is for a keyframe.
+- `frame` and `t` strictly increase within each JSONL file: each value is greater than the one on the line before, so a repeated value fails. This holds for `t` in `imu.jsonl` and `gnss.jsonl` too, so the writer drops a sample whose `t` equals the previous one (Core Location can deliver the same fix twice). Values in different files are not compared.
+- `depth_size` is `[256, 192]`. `image_size` and `depth_size` are landscape (width at least height) and have the same aspect ratio, and `image_size` is within `maxImagePixels`. JPEG sizes (from the frame header) equal `image_size`; depth and confidence PNG sizes (from IHDR) equal `depth_size`. Depth PNGs are 16-bit greyscale and confidence PNGs 8-bit greyscale.
+- Keyframe JPEGs are complete (SOI, a frame header, at least one scan, EOI, and nothing after EOI), 3-component colour, and carry no JFIF, JFXX or Exif thumbnail and no MPF segment. Depth and confidence PNGs are complete (IHDR first, an IDAT, IEND last, and nothing after IEND).
+- Exactly one `start` and one `end` anchor, and each anchor's `photo` is a keyframe in the bundle. `facing` is horizontal and of unit length within 0.001: |y| ≤ 0.001 and |length − 1| ≤ 0.001.
+- Each tag's `frame` is in `poses.jsonl`.
 - Blur boxes lie inside the image, and the privacy counts match `privacy/blur.jsonl`.
-- PLY header as above, with `classification` values 0 to 7.
+- PLY header exactly as above, with only the two counts varying (no comments or other properties); every face is a triangle, every vertex index is below the vertex count, and `classification` values run from 0 to 7.
 - The share of frames with `limited` tracking is reported.
 
-**The validator** is TypeScript: the `packages/contracts` schemas plus a CLI. Ingest uses it, and it runs on Windows against recorded bundles, without a phone. It replaces the planned Python validator.
+**The validator** is TypeScript: the `packages/contracts` schemas plus a CLI, `validate-bundle <path> [--json] [--quarantined 812,1004]`, where the path is a bundle directory or its tar. It exits 0 for a valid bundle, 1 for an invalid one and 2 when the bundle can't be read. Every problem has a stable code, the file and a message; `--json` prints the report, whose `failure_reason` ingest stores. Messages name files, lines and frames, never pose, time or GNSS values; a wrong `schema_version` is described by its type, and an unknown field's name is escaped and cut short. Checks beyond this doc are warnings, which don't make a bundle invalid: a transform whose last row isn't [0, 0, 0, 1] (written row-major), wall-clock times out of order, non-finite PLY vertices or bytes after the last face, a PNG whose IHDR CRC is wrong, and a preview that isn't a JSON object. Ingest uses the validator, and it runs on Windows against recorded bundles, without a phone. It replaces the planned Python validator.
 
 ## Open points
 
@@ -326,4 +362,5 @@ When the upload completes, ingest enqueues validation on the job queue. Validati
 | The screen detector model and its licence | Phase 1 spike ([0005](decisions/0005-privacy-by-design.md)) |
 | The server-side screen detector, and what a still-sharp screen does | Phase 2 screen re-check task ([0005](decisions/0005-privacy-by-design.md)) |
 | Which side writes `gnss.jsonl` | Phase 2, with the street priors |
-| Size and count limits; the quarantine threshold (starts at 5%); the drift threshold (starts around 1 m) | Tuning values: limits when the validator is built, thresholds from Phase 2 data |
+| Size and count limits | Set with the validator: see [Hardening](#ingest-and-validation). Raised if real bundles come close |
+| The quarantine threshold (starts at 5%); the drift threshold (starts around 1 m) | Tuning values from Phase 2 data |

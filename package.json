@@ -9,6 +9,7 @@
   "scripts": {
     "lint": "biome check .",
     "format": "biome check --write .",
+    "gen": "turbo run gen",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "build": "turbo run build",

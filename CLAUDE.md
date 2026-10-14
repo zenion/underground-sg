@@ -6,7 +6,7 @@ A free public map of downtown Singapore's underground pedestrian links and mall 
 
 ## Status
 
-Root tooling is scaffolded (pnpm 12 workspaces, Turborepo, TypeScript 7, Vitest 5, Biome, CI on Ubuntu and Windows); no apps, services or packages exist yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
+Root tooling is scaffolded (pnpm 12 workspaces, Turborepo, TypeScript 7, Vitest 5, Biome, CI on Ubuntu and Windows), and `packages/contracts` has the capture bundle v1 schemas, codegen and the bundle validator (`validate-bundle`); no apps or services exist yet. Current phase: **1, Groundwork** (see `docs/backlog.md`). The stack was decided on 2026-10-12: see `docs/reviews/2026-10-12-stack-review.md` and ADRs 0006-0009. The MVP covers only the City Hall cluster (City Hall MRT, Funan, Raffles City, CityLink, Esplanade MRT), and only levels on the pedestrian network. The owner is the only mapper through Phase 3; contributor sign-up arrives in Phase 4.
 
 ## Planned layout
 
@@ -58,7 +58,7 @@ Create directories as work starts. Don't scaffold empty ones.
 - `ordinal` is the level switcher's display band: 0 = street, -1 = first basement band, and so on; several levels of one venue may share a band. Physical height is `levels.elevation_m`. Venue-signed names ("B2") live in `levels.name`. Routing never infers a connection from equal ordinals.
 - Units are metres and seconds; routing cost is time in seconds. Times are `timestamptz`, displayed in Asia/Singapore; opening hours are evaluated in Asia/Singapore time.
 - TypeScript extends `tsconfig.base.json`: strict, erasable syntax only (no enums, namespaces or parameter properties) and `.ts` extensions in relative imports, so Node runs `.ts` files directly. Workspace packages export their TypeScript source, so a consumer typechecks a dependency's source under its own config: packages used by `apps/web` or `apps/mapper` stay environment-neutral (no Node globals or `node:` imports). Bundler packages override only `"module": "preserve"`. Shared tool versions come from the `catalog:` in `pnpm-workspace.yaml`. Biome lints and formats; Vitest tests. Run `pnpm check` before committing.
-- `packages/contracts` is the source of truth for every file format and API. CI regenerates the types and fails on a diff.
+- `packages/contracts` is the source of truth for every file format and API. After changing a schema, run `pnpm gen` and commit the output; CI regenerates the types and fails on a diff. Schemas stay within the subset Ajv, json-schema-to-typescript and quicktype all handle (rules in `packages/contracts/README.md`).
 - Capture bundles follow `docs/capture-bundle.md`. Change that doc first, then `packages/contracts`, then the Swift module and the validator, and bump `schema_version`.
 - Routing cost and penalties live in `packages/routing/routing-config.json` (`docs/decisions/0003-routing.md`).
 - Base data: OneMap raster tiles (the OneMap API account is for search only), the OSM street graph for footpaths, LTA's MRT Station Exit data for exit positions. Keep OneMap, OpenStreetMap and LTA attribution visible on every map view.

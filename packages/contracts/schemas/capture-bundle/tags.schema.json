@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/tags.schema.json",
+  "title": "CaptureTags",
+  "description": "tags.json of a capture bundle, schema_version 1 (docs/capture-bundle.md): the nodes and POIs tagged while walking: possibly none, at most 10000. Written by the mapper app's TypeScript side. Tags of a connector kind (escalator, lift, stairs, travelator, ramp) mark one landing each: one end of an escalator or stairs, or one lift stop. Checked by the validator, not by this schema: each tag's frame is a frame in poses.jsonl.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/tag"
+  },
+  "maxItems": 10000,
+  "$defs": {
+    "tag": {
+      "title": "CaptureTag",
+      "description": "A tagged node or POI. kind takes the node_kind values for a node and the poi_category values for a POI (db/schema.sql), so a toilet is a POI.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nodeTag"
+        },
+        {
+          "$ref": "#/$defs/poiTag"
+        }
+      ]
+    },
+    "nodeTag": {
+      "title": "NodeTag",
+      "description": "A tagged node: a junction, exit, entrance, door, fare gate, or one landing of a connector.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Tag type.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/nodeTagType"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "name": {
+          "description": "The name as signed, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame": {
+          "description": "The frame whose device pose gave the position.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/frameIndex"
+            }
+          ]
+        },
+        "position": {
+          "description": "Position in the ARKit world, from the device pose at frame.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/vec3"
+            }
+          ]
+        },
+        "note": {
+          "description": "Free text for the moderator, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["type", "kind", "name", "frame", "position", "note"],
+      "additionalProperties": false
+    },
+    "poiTag": {
+      "title": "PoiTag",
+      "description": "A tagged point of interest, such as a toilet or a shop.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Tag type.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/poiTagType"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/poiCategory"
+        },
+        "name": {
+          "description": "The name as signed, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame": {
+          "description": "The frame whose device pose gave the position.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/frameIndex"
+            }
+          ]
+        },
+        "position": {
+          "description": "Position in the ARKit world, from the device pose at frame.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/vec3"
+            }
+          ]
+        },
+        "note": {
+          "description": "Free text for the moderator, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["type", "kind", "name", "frame", "position", "note"],
+      "additionalProperties": false
+    },
+    "nodeTagType": {
+      "title": "NodeTagType",
+      "description": "node: a tagged node.",
+      "type": "string",
+      "const": "node"
+    },
+    "poiTagType": {
+      "title": "PoiTagType",
+      "description": "poi: a tagged POI.",
+      "type": "string",
+      "const": "poi"
+    },
+    "nodeKind": {
+      "title": "NodeTagKind",
+      "description": "Kind of a tagged node: the node_kind values in db/schema.sql.",
+      "type": "string",
+      "enum": [
+        "junction",
+        "exit",
+        "entrance",
+        "escalator",
+        "lift",
+        "stairs",
+        "fare_gate",
+        "door",
+        "travelator",
+        "ramp"
+      ]
+    },
+    "poiCategory": {
+      "title": "PoiTagKind",
+      "description": "Kind of a tagged POI: the poi_category values in db/schema.sql.",
+      "type": "string",
+      "enum": ["shop", "food", "toilet", "atm", "info", "nursing_room", "other"]
+    }
+  }
+}
