@@ -768,7 +768,6 @@ CREATE TABLE public.status_reports (
 --
 
 CREATE TABLE public.street_connectors (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
     node_id uuid NOT NULL,
     osm_node_id bigint NOT NULL,
     length_m real NOT NULL,
@@ -981,7 +980,7 @@ ALTER TABLE ONLY public.status_reports
 --
 
 ALTER TABLE ONLY public.street_connectors
-    ADD CONSTRAINT street_connectors_pkey PRIMARY KEY (id);
+    ADD CONSTRAINT street_connectors_pkey PRIMARY KEY (node_id);
 
 --
 -- Name: street_edges street_edges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1183,12 +1182,6 @@ CREATE INDEX status_reports_feature_idx ON public.status_reports USING btree (fe
 --
 
 CREATE INDEX street_connectors_geom_idx ON public.street_connectors USING gist (geom);
-
---
--- Name: street_connectors_node_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX street_connectors_node_idx ON public.street_connectors USING btree (node_id);
 
 --
 -- Name: street_connectors_osm_node_idx; Type: INDEX; Schema: public; Owner: -
@@ -1573,4 +1566,5 @@ ALTER TABLE ONLY public.street_edges
 --
 
 INSERT INTO public.schema_migrations (version) VALUES
-    ('20261014210350');
+    ('20261014210350'),
+    ('20261014225324');

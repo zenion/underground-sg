@@ -6,7 +6,9 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/db/schema.sql",
-        "$TURBO_ROOT$/docs/capture-bundle.md"
+        "$TURBO_ROOT$/docs/capture-bundle.md",
+        "$TURBO_ROOT$/docs/snapshot-format.md",
+        "$TURBO_ROOT$/docs/diff-format.md"
       ]
     }
   }

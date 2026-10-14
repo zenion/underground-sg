@@ -1,0 +1,1287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/diff/change-set-diff.schema.json",
+  "title": "ChangeSetDiff",
+  "description": "change_sets.diff (docs/diff-format.md): a structural change set's changes to HEAD, one entry per touched row, at most 10000. A status change set's diff is empty. Private: diffs are never published. Geometry is GeoJSON in WGS84. Checked by the validator, not by this schema: at most one entry per feature_type and id, a modify changes something, no add or modify references a row the same diff removes, the rules the database also enforces (from_node differs from to_node, stairs and escalators are never step_free, a street prior has its source and sigma), and the coordinate rules of map/defs.schema.json.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/entry"
+  },
+  "maxItems": 10000,
+  "$defs": {
+    "entry": {
+      "title": "DiffEntry",
+      "description": "One change to one HEAD row. Venues and levels can only be modified: the owner's seed script adds and removes them.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/venueModify"
+        },
+        {
+          "$ref": "#/$defs/levelModify"
+        },
+        {
+          "$ref": "#/$defs/spaceAdd"
+        },
+        {
+          "$ref": "#/$defs/spaceModify"
+        },
+        {
+          "$ref": "#/$defs/spaceRemove"
+        },
+        {
+          "$ref": "#/$defs/nodeAdd"
+        },
+        {
+          "$ref": "#/$defs/nodeModify"
+        },
+        {
+          "$ref": "#/$defs/nodeRemove"
+        },
+        {
+          "$ref": "#/$defs/edgeAdd"
+        },
+        {
+          "$ref": "#/$defs/edgeModify"
+        },
+        {
+          "$ref": "#/$defs/edgeRemove"
+        },
+        {
+          "$ref": "#/$defs/poiAdd"
+        },
+        {
+          "$ref": "#/$defs/poiModify"
+        },
+        {
+          "$ref": "#/$defs/poiRemove"
+        },
+        {
+          "$ref": "#/$defs/anchorAdd"
+        },
+        {
+          "$ref": "#/$defs/anchorModify"
+        },
+        {
+          "$ref": "#/$defs/anchorRemove"
+        }
+      ]
+    },
+    "venueModify": {
+      "title": "VenueModify",
+      "description": "An entry that changes an existing feature in venues.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "venue"
+        },
+        "id": {
+          "description": "The row's id (venues.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/venueRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/venueRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "levelModify": {
+      "title": "LevelModify",
+      "description": "An entry that changes an existing feature in levels.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "level"
+        },
+        "id": {
+          "description": "The row's id (levels.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/levelRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/levelRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "spaceAdd": {
+      "title": "SpaceAdd",
+      "description": "An entry that adds a new feature in spaces.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "add"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "space"
+        },
+        "id": {
+          "description": "The new row's id: a new UUID.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "Always null: a new row has no rev.",
+          "type": "null"
+        },
+        "before": {
+          "description": "Always null for an add.",
+          "type": "null"
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/spaceRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "spaceModify": {
+      "title": "SpaceModify",
+      "description": "An entry that changes an existing feature in spaces.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "space"
+        },
+        "id": {
+          "description": "The row's id (spaces.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/spaceRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/spaceRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "spaceRemove": {
+      "title": "SpaceRemove",
+      "description": "An entry that removes an existing feature in spaces.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "remove"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "space"
+        },
+        "id": {
+          "description": "The row's id (spaces.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/spaceRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "Always null for a remove.",
+          "type": "null"
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "nodeAdd": {
+      "title": "NodeAdd",
+      "description": "An entry that adds a new feature in nodes.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "add"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "node"
+        },
+        "id": {
+          "description": "The new row's id: a new UUID.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "Always null: a new row has no rev.",
+          "type": "null"
+        },
+        "before": {
+          "description": "Always null for an add.",
+          "type": "null"
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/nodeRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "nodeModify": {
+      "title": "NodeModify",
+      "description": "An entry that changes an existing feature in nodes.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "node"
+        },
+        "id": {
+          "description": "The row's id (nodes.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/nodeRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/nodeRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "nodeRemove": {
+      "title": "NodeRemove",
+      "description": "An entry that removes an existing feature in nodes.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "remove"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "node"
+        },
+        "id": {
+          "description": "The row's id (nodes.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/nodeRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "Always null for a remove.",
+          "type": "null"
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "edgeAdd": {
+      "title": "EdgeAdd",
+      "description": "An entry that adds a new feature in edges.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "add"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "edge"
+        },
+        "id": {
+          "description": "The new row's id: a new UUID.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "Always null: a new row has no rev.",
+          "type": "null"
+        },
+        "before": {
+          "description": "Always null for an add.",
+          "type": "null"
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/edgeRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "edgeModify": {
+      "title": "EdgeModify",
+      "description": "An entry that changes an existing feature in edges.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "edge"
+        },
+        "id": {
+          "description": "The row's id (edges.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/edgeRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/edgeRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "edgeRemove": {
+      "title": "EdgeRemove",
+      "description": "An entry that removes an existing feature in edges.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "remove"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "edge"
+        },
+        "id": {
+          "description": "The row's id (edges.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/edgeRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "Always null for a remove.",
+          "type": "null"
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "poiAdd": {
+      "title": "PoiAdd",
+      "description": "An entry that adds a new feature in pois.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "add"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "poi"
+        },
+        "id": {
+          "description": "The new row's id: a new UUID.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "Always null: a new row has no rev.",
+          "type": "null"
+        },
+        "before": {
+          "description": "Always null for an add.",
+          "type": "null"
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/poiRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "poiModify": {
+      "title": "PoiModify",
+      "description": "An entry that changes an existing feature in pois.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "poi"
+        },
+        "id": {
+          "description": "The row's id (pois.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/poiRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/poiRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "poiRemove": {
+      "title": "PoiRemove",
+      "description": "An entry that removes an existing feature in pois.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "remove"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "poi"
+        },
+        "id": {
+          "description": "The row's id (pois.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/poiRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "Always null for a remove.",
+          "type": "null"
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "anchorAdd": {
+      "title": "AnchorAdd",
+      "description": "An entry that adds a new feature in anchors.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "add"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "anchor"
+        },
+        "id": {
+          "description": "The new row's id: a new UUID.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "Always null: a new row has no rev.",
+          "type": "null"
+        },
+        "before": {
+          "description": "Always null for an add.",
+          "type": "null"
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/anchorRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "anchorModify": {
+      "title": "AnchorModify",
+      "description": "An entry that changes an existing feature in anchors.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "modify"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "anchor"
+        },
+        "id": {
+          "description": "The row's id (anchors.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/anchorRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "The row as the change set leaves it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/anchorRow"
+            }
+          ]
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "anchorRemove": {
+      "title": "AnchorRemove",
+      "description": "An entry that removes an existing feature in anchors.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "type": "string",
+          "const": "remove"
+        },
+        "feature_type": {
+          "type": "string",
+          "const": "anchor"
+        },
+        "id": {
+          "description": "The row's id (anchors.id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "base_rev": {
+          "description": "The row's rev when the diff was made. Approval refuses the change set (needs_rebase) if HEAD's rev differs.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before": {
+          "description": "The row as it was when the diff was made.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/anchorRow"
+            }
+          ]
+        },
+        "after": {
+          "description": "Always null for a remove.",
+          "type": "null"
+        }
+      },
+      "required": ["op", "feature_type", "id", "base_rev", "before", "after"],
+      "additionalProperties": false
+    },
+    "venueRow": {
+      "title": "VenueRow",
+      "description": "The diffable columns of a venues row. permission is not one: only the owner's seed script writes it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "venues.name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/venueKind"
+        },
+        "operator": {
+          "description": "venues.operator: the landlord or station operator, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "footprint": {
+          "description": "venues.footprint, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/multiPolygon"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["name", "kind", "operator", "footprint"],
+      "additionalProperties": false
+    },
+    "levelRow": {
+      "title": "LevelRow",
+      "description": "The diffable columns of a levels row.",
+      "type": "object",
+      "properties": {
+        "venue_id": {
+          "description": "levels.venue_id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "ordinal": {
+          "$ref": "../map/defs.schema.json#/$defs/ordinal"
+        },
+        "name": {
+          "description": "levels.name, as the venue signs it.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "elevation_m": {
+          "description": "levels.elevation_m, or null until measured.",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sort_key": {
+          "description": "levels.sort_key.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/smallint"
+            }
+          ]
+        }
+      },
+      "required": ["venue_id", "ordinal", "name", "elevation_m", "sort_key"],
+      "additionalProperties": false
+    },
+    "spaceRow": {
+      "title": "SpaceRow",
+      "description": "The diffable columns of a spaces row.",
+      "type": "object",
+      "properties": {
+        "level_id": {
+          "description": "spaces.level_id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/spaceKind"
+        },
+        "name": {
+          "description": "spaces.name, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "geom": {
+          "description": "spaces.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/polygon"
+            }
+          ]
+        }
+      },
+      "required": ["level_id", "kind", "name", "geom"],
+      "additionalProperties": false
+    },
+    "nodeRow": {
+      "title": "NodeRow",
+      "description": "The diffable columns of a nodes row. ordinal is not one: a trigger copies it from the level.",
+      "type": "object",
+      "properties": {
+        "level_id": {
+          "description": "nodes.level_id, or null for a node outside any venue.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/nodeKind"
+        },
+        "name": {
+          "description": "nodes.name, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "street_name": {
+          "description": "nodes.street_name, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "connector_id": {
+          "description": "nodes.connector_id, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elevation_m": {
+          "description": "nodes.elevation_m, or null.",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "geom": {
+          "description": "nodes.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/point"
+            }
+          ]
+        }
+      },
+      "required": [
+        "level_id",
+        "kind",
+        "name",
+        "street_name",
+        "connector_id",
+        "elevation_m",
+        "geom"
+      ],
+      "additionalProperties": false
+    },
+    "edgeRow": {
+      "title": "EdgeRow",
+      "description": "The diffable columns of an edges row.",
+      "type": "object",
+      "properties": {
+        "from_node": {
+          "description": "edges.from_node.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "to_node": {
+          "description": "edges.to_node.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/edgeKind"
+        },
+        "oneway": {
+          "description": "edges.oneway.",
+          "type": "boolean"
+        },
+        "access": {
+          "$ref": "../map/defs.schema.json#/$defs/edgeAccess"
+        },
+        "opening_hours": {
+          "description": "edges.opening_hours, or null for always open.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/openingHours"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level_id": {
+          "description": "edges.level_id, or null for a vertical connector.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "connector_id": {
+          "description": "edges.connector_id, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "length_m": {
+          "description": "edges.length_m, in metres.",
+          "type": "number",
+          "minimum": 0
+        },
+        "step_free": {
+          "description": "edges.step_free.",
+          "type": "boolean"
+        },
+        "sheltered": {
+          "description": "edges.sheltered.",
+          "type": "boolean"
+        },
+        "outdoor": {
+          "description": "edges.outdoor.",
+          "type": "boolean"
+        },
+        "geom": {
+          "description": "edges.geom, or null. Runs from from_node to to_node.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/lineString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "from_node",
+        "to_node",
+        "kind",
+        "oneway",
+        "access",
+        "opening_hours",
+        "level_id",
+        "connector_id",
+        "length_m",
+        "step_free",
+        "sheltered",
+        "outdoor",
+        "geom"
+      ],
+      "additionalProperties": false
+    },
+    "poiRow": {
+      "title": "PoiRow",
+      "description": "The diffable columns of a pois row.",
+      "type": "object",
+      "properties": {
+        "space_id": {
+          "description": "pois.space_id, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level_id": {
+          "description": "pois.level_id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "name": {
+          "description": "pois.name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "category": {
+          "$ref": "../map/defs.schema.json#/$defs/poiCategory"
+        },
+        "geom": {
+          "description": "pois.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/point"
+            }
+          ]
+        }
+      },
+      "required": ["space_id", "level_id", "name", "category", "geom"],
+      "additionalProperties": false
+    },
+    "anchorRow": {
+      "title": "AnchorRow",
+      "description": "The diffable columns of an anchors row. ordinal is not one: a trigger copies it from the level. Private, like the whole diff: anchors are never published.",
+      "type": "object",
+      "properties": {
+        "node_id": {
+          "description": "anchors.node_id, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/anchorKind"
+        },
+        "name": {
+          "description": "anchors.name, for example Funan B2 UPL door.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "level_id": {
+          "description": "anchors.level_id, or null for a street anchor.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "facing_deg": {
+          "description": "anchors.facing_deg: the way the door or sign faces, in degrees clockwise from SVY21 grid north, at least 0 and below 360; or null.",
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 360
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "surveyed_geom": {
+          "description": "anchors.surveyed_geom: the street prior, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prior_source": {
+          "description": "anchors.prior_source, or null without a street prior.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/streetPriorSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prior_sigma_m": {
+          "description": "anchors.prior_sigma_m, in metres, or null without a street prior.",
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "photo_uri": {
+          "description": "anchors.photo_uri: the private storage key of the reference photo, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "node_id",
+        "kind",
+        "name",
+        "level_id",
+        "facing_deg",
+        "surveyed_geom",
+        "prior_source",
+        "prior_sigma_m",
+        "photo_uri"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

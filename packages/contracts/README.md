@@ -1,29 +1,42 @@
 # @usg/contracts
 
-JSON Schema 2020-12 files for the project's file formats, with TypeScript and Swift types generated from them, and the capture bundle validator. The schemas are the machine-readable form of the docs: for the capture bundle, [docs/capture-bundle.md](../../docs/capture-bundle.md) comes first, then these schemas, then the Swift module and the validator, and `schema_version` is bumped on a breaking change (a new field, enum value or file included).
+JSON Schema 2020-12 files for the project's file formats, with TypeScript and Swift types generated from them, the capture bundle validator, and validators for the public map files and change-set diffs. The schemas are the machine-readable form of the docs, which come first:
+
+| Format | Doc | Schemas |
+| --- | --- | --- |
+| Capture bundle | [docs/capture-bundle.md](../../docs/capture-bundle.md) | `schemas/capture-bundle/` |
+| Public map files: `latest.json`, `indoor.json`, `street.json`, `status.json` | [docs/snapshot-format.md](../../docs/snapshot-format.md) | `schemas/snapshot/` |
+| Change-set diff (`change_sets.diff`) | [docs/diff-format.md](../../docs/diff-format.md) | `schemas/diff/` |
+
+The map files and the diff share `schemas/map/defs.schema.json`: the HEAD tables' enums and GeoJSON geometry. Change the doc, then the schemas, then the code that writes and reads the format. The capture bundle and the snapshot files bump their `schema_version` on a breaking change (a new field, enum value or file included).
 
 ## What's here
 
 | Path | What it is |
 | --- | --- |
 | `schemas/capture-bundle/` | Capture bundle v1: one schema per JSON file (`manifest`, `anchors`, `tags`), one per JSONL line (`pose-line`, `refined-keyframe-line`, `imu-line`, `gnss-line`, `blur-line`), and `defs.schema.json` with the shared definitions |
-| `src/index.ts` | The `.` entry: the generated types plus constants (`SCHEMA_VERSION`, the schema file for each bundle file, the enum values, `DEPTH_SIZE`, `UPLOAD_PART_BYTES`) |
-| `src/schema-files.ts` | Node only: the list of schema files and their reader, shared by the generator and the validator's Ajv setup |
-| `src/generated/capture-bundle.ts` | Generated TypeScript types. Do not edit |
+| `schemas/map/defs.schema.json` | The map data model's shared definitions: positions and geometries, ordinal, the enums of `db/schema.sql` |
+| `schemas/snapshot/` | The public map files, snapshot format v1: `latest`, `indoor`, `street`, `status` |
+| `schemas/diff/change-set-diff.schema.json` | `change_sets.diff`: one branch per feature type and op a change set may use |
+| `src/index.ts` | The `.` entry: the generated types; constants (`SCHEMA_VERSION`, the schema file for each document, the enum values, `DEPTH_SIZE`, `UPLOAD_PART_BYTES`, the snapshot paths and cache headers); and the checks the map schemas can't express (`checkIndoorSnapshot`, `checkChangeSetDiff` and the rest, in `src/map.ts`, `src/snapshot.ts` and `src/diff.ts`) |
+| `src/schema-files.ts` | Node only: the list of schema files and their reader, shared by the generator and the Ajv setup |
+| `src/generated/contracts.ts` | Generated TypeScript types for every schema. Do not edit |
+| `src/validators.ts` | The `./validators` entry (Node only, Ajv): `validateSnapshotFile`, `validateVersion`, `validateChangeSetDiff`, `snapshotSha256`, `verifyLatestPointer`, `streetConnectorId` |
 | `generated/swift/CaptureBundle.swift` | Generated Swift Codable types. Do not edit |
 | `src/bundle-validator/` | The bundle validator and its CLI, `cli.ts` (Node only; see [Bundle validator](#bundle-validator)) |
 | `scripts/gen.ts` | The generator (`pnpm gen`); `scripts/codegen.ts` does the work |
-| `test/` | Ajv strict-mode compile, the doc's examples and invalid variants, enums against `db/schema.sql`, a check that the generated files are current, and the validator's tests (`bundle-*.test.ts`) on synthetic bundles generated in code by `bundle-fixture.ts` and `tar-writer.ts` |
+| `test/` | Ajv strict-mode compile, the docs' examples and invalid variants, enums and columns against `db/schema.sql`, a check that the generated files are current, the bundle validator's tests (`bundle-*.test.ts`) on synthetic bundles generated in code by `bundle-fixture.ts` and `tar-writer.ts`, and the map files' and diff's tests (`snapshot.test.ts`, `diff.test.ts`, `docs.test.ts`) on the synthetic City Hall examples in `map-examples.ts` |
 
 Package exports:
 
 - `@usg/contracts`: types and constants. Environment-neutral (no Node APIs, no Ajv), so the mapper app (Hermes) and the webapp can import it. `pnpm typecheck` checks this: besides the package's own `tsc`, it runs `tsc -p tsconfig.neutral.json`, which compiles `src/index.ts` and what it imports with only the ES2024 library (no Node or DOM types) and `noUncheckedSideEffectImports`, so a Node global or a `node:` import (static, side-effect or dynamic) fails. A test follows the entry's imports and checks they stay inside the package.
 - `@usg/contracts/schemas/*`: the schema files, for example `@usg/contracts/schemas/capture-bundle/manifest.schema.json` (import it `with { type: "json" }`, or read the file).
 - `@usg/contracts/bundle-validator`: the Node-only bundle validator, with Ajv. Ajv stays out of the `.` entry; a test checks that the `.` entry never reaches it.
+- `@usg/contracts/validators`: the Node-only validators for the public map files and change-set diffs, with Ajv and `node:crypto`: the schema, then the `check*` functions (`validateVersion` checks a version's two files against each other too), plus the content hashes of [snapshot-format.md](../../docs/snapshot-format.md#content-addressing) and street connectors' ids (UUIDv5, which needs SHA-1).
 
 ## Schema ids
 
-Each schema's `$id` is `https://underground-sg.local/schemas/<family>/<file>`, which mirrors the directory layout, so a relative `$ref` such as `defs.schema.json#/$defs/uuid` resolves the same way against the `$id` (Ajv, quicktype) and against the file on disk. The `$id`s are identifiers only: nothing fetches them, and the generator refuses to resolve anything outside this package.
+Each schema's `$id` is `https://underground-sg.local/schemas/<family>/<file>` (`SCHEMA_BASE_URL` plus its path under `schemas/`), which mirrors the directory layout, so a relative `$ref` such as `defs.schema.json#/$defs/uuid` or `../map/defs.schema.json#/$defs/point` resolves the same way against the `$id` (Ajv, quicktype, json-schema-to-typescript) and against the file on disk. The map definitions reuse the capture bundle's `uuid`, `sha256`, `dateTime` and anchor kind through such references, so each is one type across the formats. The `$id`s are identifiers only: nothing fetches them, and the generator refuses to resolve anything outside this package.
 
 ## Generating code
 
@@ -31,11 +44,11 @@ Each schema's `$id` is `https://underground-sg.local/schemas/<family>/<file>`, w
 pnpm gen
 ```
 
-Run it after changing a schema and commit the output. It writes `src/generated/capture-bundle.ts` with json-schema-to-typescript and `generated/swift/CaptureBundle.swift` with quicktype, and deletes anything else in those two directories. The output is deterministic and the same on Windows and Linux: inputs come from the fixed list in `src/capture-bundle.ts`, schemas are read only from this package, line endings are LF, and no paths, times or tool versions are written. CI runs `pnpm gen` on Ubuntu and Windows and fails on any diff; the package tests also generate into a temporary directory and compare, so `pnpm test` catches stale output locally.
+Run it after changing a schema and commit the output. It writes `src/generated/contracts.ts` with json-schema-to-typescript and `generated/swift/CaptureBundle.swift` with quicktype, and deletes anything else in those two directories. The documents it covers are `DOCUMENT_GROUPS` in `scripts/codegen.ts`, built from the constants in `src/capture-bundle.ts`, `src/snapshot.ts` and `src/diff.ts`. Every document gets TypeScript types, and each opts in or out of Swift (`swift`): the capture bundle's documents opt in, because the Swift module writes them; the map files and the diff opt out, because no Swift code reads them. The output is deterministic and the same on Windows and Linux: inputs come from that fixed list, schemas are read only from this package, line endings are LF, and no paths, times or tool versions are written. CI runs `pnpm gen` on Ubuntu and Windows and fails on any diff; the package tests also generate into a temporary directory and compare, so `pnpm test` catches stale output locally.
 
 Biome skips directories named `generated` (`biome.json`): the generators own the formatting of their output (json-schema-to-typescript runs Prettier with the repo's settings, and Biome can't format Swift), and lint fixes to generated code would be overwritten. `tsc` still typechecks the generated TypeScript.
 
-The TypeScript types are compiled from one in-memory root, `CaptureBundleDocuments` (bundle path to document type, for example `CaptureBundleDocuments["poses.jsonl"]` is `PoseLine`), so every shared type is declared once.
+The TypeScript types are compiled from one in-memory root, `ContractDocuments`, with a type map per group: `CaptureBundleDocuments` (bundle path to document type, for example `CaptureBundleDocuments["poses.jsonl"]` is `PoseLine`), `SnapshotDocuments` (`SnapshotDocuments["indoor.json"]` is `IndoorSnapshot`) and `DiffDocuments` (`ChangeSetDiff`). One compile declares every shared type once, so titles must be unique across all the schemas.
 
 ## Swift
 
@@ -166,13 +179,13 @@ The fuzz tests take `FUZZ_SEED` and `FUZZ_RUNS` from the environment (defaults: 
 
 The schemas stay within what Ajv 8 (`ajv/dist/2020` with ajv-formats), json-schema-to-typescript and quicktype (Swift) all handle the same way. `test/schemas.test.ts` enforces the first five rules.
 
-1. **Keywords:** `$schema`, `$id`, `$ref`, `$defs`, `title`, `description`, `type`, `enum`, `const`, `properties`, `required`, `additionalProperties`, `items`, `minItems`, `maxItems`, `minimum`, `maximum`, `exclusiveMinimum`, `minLength`, `maxLength`, `pattern`, `format`, `anyOf`, `oneOf`, `allOf`. Nothing else: json-schema-to-typescript and quicktype ignore keywords such as `if`/`then`, `unevaluatedProperties` or `patternProperties`, so the types would be wider than what validation accepts. (Both also ignore the bounds `minLength`, `maxLength`, `minimum` and `maximum`, which only narrow the values, not the types.)
+1. **Keywords:** `$schema`, `$id`, `$ref`, `$defs`, `title`, `description`, `type`, `enum`, `const`, `properties`, `required`, `additionalProperties`, `items`, `minItems`, `maxItems`, `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `minLength`, `maxLength`, `pattern`, `format`, `anyOf`, `oneOf`, `allOf`. Nothing else: json-schema-to-typescript and quicktype ignore keywords such as `if`/`then`, `unevaluatedProperties` or `patternProperties`, so the types would be wider than what validation accepts. (Both also ignore the bounds `minLength`, `maxLength`, `minimum`, `maximum` and the exclusive bounds, which only narrow the values, not the types.) `multipleOf` is left out as well: Ajv tests it by division, so `multipleOf: 1e-7` rejects valid 7-decimal coordinates through rounding error. Coordinate decimals are checked in code (`hasAtMostDecimals`).
 2. **Every object has `"additionalProperties": false`.** Unknown fields are rejected; adding a field is a `schema_version` bump.
 3. **A `$ref` has no sibling keywords.** json-schema-to-typescript merges a `$ref` and its siblings into a new numbered type (`DateTime1`). To describe a property that uses a shared definition, wrap it: `{ "description": "...", "allOf": [{ "$ref": "defs.schema.json#/$defs/vec3" }] }`.
 4. **`type` is one string.** Ajv's strict mode rejects `"type": ["string", "null"]`; write a nullable value as `"anyOf": [{ ... }, { "type": "null" }]`.
-5. **Fixed-length arrays** use `items` with `minItems` equal to `maxItems`, never `prefixItems`: json-schema-to-typescript turns them into tuples (`[number, number, number]`), quicktype into arrays. Definitions live under `$defs` (2020-12), not `definitions`; all three tools resolve `$ref`s into `$defs` as JSON pointers.
+5. **Fixed-length arrays** use `items` with `minItems` equal to `maxItems`, never `prefixItems`: json-schema-to-typescript turns them into tuples (`[number, number, number]`), quicktype into arrays. Give other bounded lists a `maxItems` above 20, or json-schema-to-typescript writes a union of a tuple for every length up to it. Definitions live under `$defs` (2020-12), not `definitions`; all three tools resolve `$ref`s into `$defs` as JSON pointers.
 6. **Discriminated unions** are a `oneOf` of complete object schemas, each with a `const` discriminator: TypeScript gets `NodeTag | PoiTag`, quicktype merges the branches into one struct. Give the discriminators and the branches' enums titled definitions whose names share a word (`NodeTagType` and `PoiTagType`, `NodeTagKind` and `PoiTagKind`): quicktype names a merged enum from the common prefix or suffix of the names, and an untitled one gets a meaningless name such as `TypeEnum`.
 7. **Formats:** only `date-time`, and with a `pattern` as well, so a validator that treats `format` as an annotation still requires the offset.
 8. **Give every reusable definition a `title`:** it becomes the type name in both languages.
 
-Constraints that JSON Schema can't express are left to the bundle validator and listed in each schema's `description`: for example exactly one start and one end anchor, `facing` being a horizontal unit vector, counts matching other files, and `frame` and `t` only increasing.
+Constraints that JSON Schema can't express are left to the validators (the bundle validator, and the `check*` functions for the map files and the diff) and listed in each schema's `description`: for example exactly one start and one end anchor, `facing` being a horizontal unit vector, counts matching other files, and `frame` and `t` only increasing.

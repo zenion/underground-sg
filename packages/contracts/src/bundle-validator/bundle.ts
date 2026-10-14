@@ -18,7 +18,7 @@ import type {
   PoseLine,
   RefinedKeyframeLine,
   Transform,
-} from "../generated/capture-bundle.ts";
+} from "../generated/contracts.ts";
 import { type ImageSize, JpegParser, type PngHeader, PngParser } from "./images.ts";
 import { LineSplitter } from "./jsonl.ts";
 import {

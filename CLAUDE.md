@@ -31,7 +31,7 @@ scripts/                     @usg/scripts: scripts for the local stack (`pnpm bu
 docker-compose.yml           local stack: PostGIS and RustFS; settings in .env (copy .env.example)
 docs/
   spec.md, backlog.md, capture-bundle.md, decisions/, reviews/
-  snapshot-format.md, diff-format.md (to be written)
+  snapshot-format.md, diff-format.md
 ```
 
 Create directories as work starts. Don't scaffold empty ones.

@@ -33,3 +33,26 @@ test("a negative length is refused", () =>
       { code: SQLSTATE.checkViolation, constraint: "street_connectors_length_m_check" },
     );
   }));
+
+test("an exit has at most one street connector, keyed by its node", () =>
+  db.rolledBack(async () => {
+    await db.query(
+      "INSERT INTO street_nodes (osm_node_id, geom) VALUES (1001, $1::geometry), (1002, $2::geometry)",
+      [
+        `SRID=4326;POINT(${AT.northBridgeRoadVertex.join(" ")})`,
+        `SRID=4326;POINT(${AT.northBridgeRoadExit.join(" ")})`,
+      ],
+    );
+    const connector = line(AT.northBridgeRoadExit, AT.northBridgeRoadVertex);
+    await db.query(
+      `INSERT INTO street_connectors (node_id, osm_node_id, length_m, geom)
+       VALUES ($1, 1001, 12, $2::geometry)`,
+      [NODE.northBridgeRoadExit, connector],
+    );
+    await db.expectRefused(
+      `INSERT INTO street_connectors (node_id, osm_node_id, length_m, geom)
+       VALUES ($1, 1002, 0, $2::geometry)`,
+      [NODE.northBridgeRoadExit, connector],
+      { code: SQLSTATE.uniqueViolation, constraint: "street_connectors_pkey" },
+    );
+  }));

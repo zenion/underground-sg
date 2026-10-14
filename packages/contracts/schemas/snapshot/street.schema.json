@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/snapshot/street.schema.json",
+  "title": "StreetSnapshot",
+  "description": "street.json of a published map version, schema_version 1 (docs/snapshot-format.md): the street graph imported from OpenStreetMap (street_nodes and street_edges), under the ODbL, kept in its own file apart from the indoor data (docs/decisions/0003-routing.md). Checked by the validator, not by this schema: at most 7 decimals in coordinates, latitudes within -90 to 90, street node ids unique, every edge's from_osm_node and to_osm_node is a street node in the file, every edge's line starts exactly at from_osm_node and ends exactly at to_osm_node, and features sorted with nodes first (by id), then edges (by osm_way_id, from_osm_node, to_osm_node).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "FeatureCollection"
+    },
+    "schema_version": {
+      "description": "Version of the snapshot format.",
+      "type": "integer",
+      "const": 1
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "features": {
+      "description": "Street nodes, then street edges. At most 200000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/feature"
+      },
+      "maxItems": 200000
+    }
+  },
+  "required": ["type", "schema_version", "source", "features"],
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "title": "StreetSource",
+      "description": "Where the street graph comes from and its licence. Clients show the attribution wherever the street graph is used.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "const": "OpenStreetMap"
+        },
+        "licence": {
+          "description": "The Open Database License 1.0 (SPDX identifier).",
+          "type": "string",
+          "const": "ODbL-1.0"
+        },
+        "licence_url": {
+          "type": "string",
+          "const": "https://opendatacommons.org/licenses/odbl/1-0/"
+        },
+        "attribution": {
+          "type": "string",
+          "const": "© OpenStreetMap contributors"
+        },
+        "attribution_url": {
+          "type": "string",
+          "const": "https://www.openstreetmap.org/copyright"
+        }
+      },
+      "required": ["name", "licence", "licence_url", "attribution", "attribution_url"],
+      "additionalProperties": false
+    },
+    "feature": {
+      "title": "StreetFeature",
+      "description": "One feature of street.json; properties.feature_type says which kind.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/node"
+        },
+        {
+          "$ref": "#/$defs/edge"
+        }
+      ]
+    },
+    "node": {
+      "title": "StreetNodeFeature",
+      "description": "A vertex of the street graph (street_nodes).",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "The OpenStreetMap node id (street_nodes.osm_node_id).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/osmId"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/nodeProperties"
+        },
+        "geometry": {
+          "description": "street_nodes.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/point"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "nodeProperties": {
+      "title": "StreetNodeProperties",
+      "description": "A street node has no other properties.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type.",
+          "type": "string",
+          "const": "street_node"
+        }
+      },
+      "required": ["feature_type"],
+      "additionalProperties": false
+    },
+    "edge": {
+      "title": "StreetEdgeFeature",
+      "description": "A footpath segment between two street nodes (street_edges). It has no feature id: street_edges.id changes on every import, so an edge is identified by osm_way_id, from_osm_node and to_osm_node.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "properties": {
+          "$ref": "#/$defs/edgeProperties"
+        },
+        "geometry": {
+          "description": "street_edges.geom, running from from_osm_node to to_osm_node: its first position is exactly from_osm_node's and its last exactly to_osm_node's.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/lineString"
+            }
+          ]
+        }
+      },
+      "required": ["type", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "edgeProperties": {
+      "title": "StreetEdgeProperties",
+      "description": "What clients need of a street edge. Street edges are walkable both ways.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type.",
+          "type": "string",
+          "const": "street_edge"
+        },
+        "osm_way_id": {
+          "description": "The OpenStreetMap way the segment belongs to.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/osmId"
+            }
+          ]
+        },
+        "from_osm_node": {
+          "description": "One end: a street_node feature's id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/osmId"
+            }
+          ]
+        },
+        "to_osm_node": {
+          "description": "The other end: a street_node feature's id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/osmId"
+            }
+          ]
+        },
+        "highway": {
+          "description": "The way's OpenStreetMap highway tag, for example footway, pedestrian or steps; null if it has none. Step-free routing avoids steps.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "footway": {
+          "description": "The way's OpenStreetMap footway tag, for example sidewalk or crossing; null if it has none.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "covered": {
+          "description": "Under cover: covered=yes, or the import's tunnel, building and roof heuristics.",
+          "type": "boolean"
+        },
+        "length_m": {
+          "description": "Length in metres, measured in SVY21, rounded to 2 decimals.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "feature_type",
+        "osm_way_id",
+        "from_osm_node",
+        "to_osm_node",
+        "highway",
+        "footway",
+        "covered",
+        "length_m"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
