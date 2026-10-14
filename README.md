@@ -11,6 +11,8 @@ Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffol
 | [docs/spec.md](docs/spec.md) | Product and technical spec, the source of truth |
 | [docs/backlog.md](docs/backlog.md) | Tasks by phase, in detail for phases 1 and 2 |
 | [docs/capture-bundle.md](docs/capture-bundle.md) | Format of a capture upload, shared by the mapper app and the server |
+| [docs/snapshot-format.md](docs/snapshot-format.md) | The public map files: `latest.json`, each version's `indoor.json` and `street.json`, and the `status.json` overlay |
+| [docs/diff-format.md](docs/diff-format.md) | A change set's diff, and how approval applies it to the map |
 | [docs/decisions/](docs/decisions/) | Why the key choices were made |
 | [docs/reviews/](docs/reviews/) | Background research behind the decisions, such as the 2026-10-12 stack review |
 | [db/](db/) | The PostGIS schema: dbmate migrations, a generated `schema.sql` snapshot and the database rule tests |

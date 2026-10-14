@@ -1,14 +1,23 @@
 import { readdirSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { CAPTURE_BUNDLE_SCHEMA_BASE_URL, type CaptureBundleJsonPath } from "../src/index.ts";
+import {
+  CAPTURE_BUNDLE_SCHEMA_BASE_URL,
+  type CaptureBundleJsonPath,
+  DIFF_SCHEMA_BASE_URL,
+  MAP_SCHEMA_BASE_URL,
+  SCHEMA_BASE_URL,
+  SNAPSHOT_SCHEMA_BASE_URL,
+} from "../src/index.ts";
 import * as examples from "./examples.ts";
 import {
   ALL_SCHEMA_FILES,
   createAjv,
   readSchema,
-  SCHEMA_DIR,
-  type SchemaObject,
+  SCHEMAS_DIR,
   validatorFor,
+  walkSchema,
 } from "./schemas.ts";
 
 /**
@@ -34,6 +43,7 @@ const ALLOWED_KEYWORDS = new Set([
   "minimum",
   "maximum",
   "exclusiveMinimum",
+  "exclusiveMaximum",
   "minLength",
   "maxLength",
   "pattern",
@@ -43,43 +53,34 @@ const ALLOWED_KEYWORDS = new Set([
   "allOf",
 ]);
 
-/** Calls `visit` on every subschema of `schema`, with a JSON-pointer-like location. */
-function walk(schema: SchemaObject, at: string, visit: (s: SchemaObject, at: string) => void) {
-  visit(schema, at);
-  for (const key of ["properties", "$defs"]) {
-    const children = schema[key] as Record<string, SchemaObject> | undefined;
-    for (const [name, child] of Object.entries(children ?? {})) {
-      walk(child, `${at}/${key}/${name}`, visit);
-    }
-  }
-  if (typeof schema["items"] === "object") {
-    walk(schema["items"] as SchemaObject, `${at}/items`, visit);
-  }
-  for (const key of ["anyOf", "oneOf", "allOf"]) {
-    const children = schema[key] as SchemaObject[] | undefined;
-    children?.forEach((child, i) => {
-      walk(child, `${at}/${key}/${i}`, visit);
-    });
-  }
-}
-
 describe("schema files", () => {
-  test("every file in schemas/capture-bundle is listed in the package constants", () => {
-    const onDisk = readdirSync(SCHEMA_DIR).sort();
+  test("every file under schemas/ is listed in the package constants", () => {
+    const dir = fileURLToPath(SCHEMAS_DIR);
+    const onDisk = readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(dir, join(entry.parentPath, entry.name)).replaceAll("\\", "/"))
+      .sort();
     expect(onDisk).toEqual([...ALL_SCHEMA_FILES].sort());
+  });
+
+  test("each family's $id base is the shared base plus its directory", () => {
+    expect(CAPTURE_BUNDLE_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}capture-bundle/`);
+    expect(MAP_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}map/`);
+    expect(SNAPSHOT_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}snapshot/`);
+    expect(DIFF_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}diff/`);
   });
 
   test.each(ALL_SCHEMA_FILES)("%s declares 2020-12, its $id, a title and a description", (file) => {
     const schema = readSchema(file);
     expect(schema["$schema"]).toBe("https://json-schema.org/draft/2020-12/schema");
-    expect(schema["$id"]).toBe(`${CAPTURE_BUNDLE_SCHEMA_BASE_URL}${file}`);
+    expect(schema["$id"]).toBe(`${SCHEMA_BASE_URL}${file}`);
     expect(schema["title"]).toEqual(expect.any(String));
     expect(schema["description"]).toEqual(expect.any(String));
   });
 
   test.each(ALL_SCHEMA_FILES)("%s stays in the portable subset", (file) => {
     const problems: string[] = [];
-    walk(readSchema(file), file, (schema, at) => {
+    walkSchema(readSchema(file), file, (schema, at) => {
       for (const key of Object.keys(schema)) {
         if (!ALLOWED_KEYWORDS.has(key)) problems.push(`${at}: keyword ${key}`);
       }
@@ -100,7 +101,7 @@ describe("schema files", () => {
   test.each(ALL_SCHEMA_FILES)("%s compiles under Ajv 2020 strict mode", (file) => {
     // createAjv adds every schema; getSchema compiles one and throws on any strict-mode issue.
     const ajv = createAjv();
-    expect(ajv.getSchema(`${CAPTURE_BUNDLE_SCHEMA_BASE_URL}${file}`)).toBeTypeOf("function");
+    expect(ajv.getSchema(`${SCHEMA_BASE_URL}${file}`)).toBeTypeOf("function");
   });
 });
 

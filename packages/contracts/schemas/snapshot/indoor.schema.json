@@ -1,0 +1,753 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/snapshot/indoor.schema.json",
+  "title": "IndoorSnapshot",
+  "description": "indoor.json of a published map version, schema_version 1 (docs/snapshot-format.md): the indoor map as IMDF-like GeoJSON features: venues, levels, spaces, nodes, edges, POIs and street connectors. Public: it holds only what clients need for display and routing, never anchors, restricted zones, permissions, contributors, change sets, captures, private URIs or revs. Checked by the validator, not by this schema: at most 7 decimals in coordinates, latitudes within -90 to 90, closed rings, feature ids unique and equal to properties.id, references resolve within the file (level venue_id, the level_id of spaces, nodes and POIs, edge from_node and to_node, POI space_id, connector node_id), an edge's line starts exactly at from_node and ends exactly at to_node, a connector's line starts exactly at its node, at most one connector per node, each connector's id derived from its node_id, and features sorted by type in the order venue, level, space, node, edge, poi, street_connector, then by id.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "FeatureCollection"
+    },
+    "schema_version": {
+      "description": "Version of the snapshot format.",
+      "type": "integer",
+      "const": 1
+    },
+    "features": {
+      "description": "Every feature, sorted by type, then by id. At most 100000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/feature"
+      },
+      "maxItems": 100000
+    }
+  },
+  "required": ["type", "schema_version", "features"],
+  "additionalProperties": false,
+  "$defs": {
+    "feature": {
+      "title": "IndoorFeature",
+      "description": "One feature of indoor.json; properties.feature_type says which kind.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/venue"
+        },
+        {
+          "$ref": "#/$defs/level"
+        },
+        {
+          "$ref": "#/$defs/space"
+        },
+        {
+          "$ref": "#/$defs/node"
+        },
+        {
+          "$ref": "#/$defs/edge"
+        },
+        {
+          "$ref": "#/$defs/poi"
+        },
+        {
+          "$ref": "#/$defs/streetConnector"
+        }
+      ]
+    },
+    "venue": {
+      "title": "VenueFeature",
+      "description": "A venue (venues): a mall, MRT station or link, with its footprint.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "venues.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/venueProperties"
+        },
+        "geometry": {
+          "description": "venues.footprint, or null when HEAD has none.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/multiPolygon"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "venueProperties": {
+      "title": "VenueProperties",
+      "description": "What clients need of a venue.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "venue"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "name": {
+          "description": "The venue's name, for example Funan.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/venueKind"
+        }
+      },
+      "required": ["feature_type", "id", "name", "kind"],
+      "additionalProperties": false
+    },
+    "level": {
+      "title": "LevelFeature",
+      "description": "A level (levels) of a venue. Levels have no geometry. The level switcher groups levels by ordinal band and orders them by sort_key within a band.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "levels.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/levelProperties"
+        },
+        "geometry": {
+          "description": "Always null: levels have no outline.",
+          "type": "null"
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "levelProperties": {
+      "title": "LevelProperties",
+      "description": "What clients need of a level.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "level"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "venue_id": {
+          "description": "The venue the level belongs to.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "name": {
+          "description": "The name as the venue signs it, for example \"B2\".",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "ordinal": {
+          "$ref": "../map/defs.schema.json#/$defs/ordinal"
+        },
+        "sort_key": {
+          "description": "Orders levels of one venue that share a band.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/smallint"
+            }
+          ]
+        },
+        "elevation_m": {
+          "description": "Floor height in metres relative to the cluster height datum, or null until measured.",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["feature_type", "id", "venue_id", "name", "ordinal", "sort_key", "elevation_m"],
+      "additionalProperties": false
+    },
+    "space": {
+      "title": "SpaceFeature",
+      "description": "A space (spaces): a walkable or named area on one level.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "spaces.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/spaceProperties"
+        },
+        "geometry": {
+          "description": "spaces.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/polygon"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "spaceProperties": {
+      "title": "SpaceProperties",
+      "description": "What clients need of a space.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "space"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "level_id": {
+          "description": "The space's level.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "ordinal": {
+          "description": "The band of the space's level (levels.ordinal), for the level filter.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/ordinal"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/spaceKind"
+        },
+        "name": {
+          "description": "The name as signed, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["feature_type", "id", "level_id", "ordinal", "kind", "name"],
+      "additionalProperties": false
+    },
+    "node": {
+      "title": "NodeFeature",
+      "description": "A node (nodes) of the indoor routing graph: a junction, exit, entrance, door, fare gate, or one landing of a vertical connector.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "nodes.id. Status reports (status.json) key nodes by it.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/nodeProperties"
+        },
+        "geometry": {
+          "description": "nodes.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/point"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "nodeProperties": {
+      "title": "NodeProperties",
+      "description": "What clients need of a node.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "node"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "level_id": {
+          "description": "The node's level, or null for a node outside any venue (a street exit).",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ordinal": {
+          "description": "The band of the node's level, 0 without a level (nodes.ordinal).",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/ordinal"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/nodeKind"
+        },
+        "name": {
+          "description": "The name as signed, for example Exit A, or null.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "street_name": {
+          "description": "For an exit or entrance: the street or building it opens onto, used as its label. Null otherwise.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "connector_id": {
+          "description": "Groups the landings of one physical escalator, lift, stairs, travelator or ramp; null for other nodes.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "feature_type",
+        "id",
+        "level_id",
+        "ordinal",
+        "kind",
+        "name",
+        "street_name",
+        "connector_id"
+      ],
+      "additionalProperties": false
+    },
+    "edge": {
+      "title": "EdgeFeature",
+      "description": "An edge (edges) of the indoor routing graph. A vertical connector (escalator, stairs, lift, ramp, travelator) joins landings on different levels, has level_id null and is drawn on both end bands.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "edges.id. Status reports (status.json) key edges by it.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/edgeProperties"
+        },
+        "geometry": {
+          "description": "edges.geom, or a straight line from from_node to to_node when HEAD has none. Runs from from_node to to_node: its first position is exactly from_node's and its last exactly to_node's, so a route drawn edge by edge has no gaps.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/lineString"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "edgeProperties": {
+      "title": "EdgeProperties",
+      "description": "What clients need of an edge: its endpoints and the routing attributes (docs/decisions/0003-routing.md).",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "edge"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "from_node": {
+          "description": "The node the edge starts at.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "to_node": {
+          "description": "The node the edge ends at.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "from_ordinal": {
+          "description": "The band of from_node, for the level filter.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/ordinal"
+            }
+          ]
+        },
+        "to_ordinal": {
+          "description": "The band of to_node, for the level filter. Differs from from_ordinal only on a connector between bands.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/ordinal"
+            }
+          ]
+        },
+        "level_id": {
+          "description": "The edge's level, or null for a vertical connector.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "../map/defs.schema.json#/$defs/edgeKind"
+        },
+        "connector_id": {
+          "description": "The physical connector the edge belongs to, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "oneway": {
+          "description": "true: traversable only from from_node to to_node.",
+          "type": "boolean"
+        },
+        "access": {
+          "$ref": "../map/defs.schema.json#/$defs/edgeAccess"
+        },
+        "opening_hours": {
+          "description": "When the edge is open; null means always open. An exit's hours are on the edges leading to it.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/openingHours"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "length_m": {
+          "description": "Length in metres, measured in SVY21, rounded to 2 decimals.",
+          "type": "number",
+          "minimum": 0
+        },
+        "step_free": {
+          "description": "Usable without steps; never true for stairs and escalators.",
+          "type": "boolean"
+        },
+        "sheltered": {
+          "description": "Under cover.",
+          "type": "boolean"
+        },
+        "outdoor": {
+          "description": "Outdoors; drawn dashed, and avoided when \"stay underground\" is on.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "feature_type",
+        "id",
+        "from_node",
+        "to_node",
+        "from_ordinal",
+        "to_ordinal",
+        "level_id",
+        "kind",
+        "connector_id",
+        "oneway",
+        "access",
+        "opening_hours",
+        "length_m",
+        "step_free",
+        "sheltered",
+        "outdoor"
+      ],
+      "additionalProperties": false
+    },
+    "poi": {
+      "title": "PoiFeature",
+      "description": "A point of interest (pois): a shop, toilet, ATM and so on.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "pois.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/poiProperties"
+        },
+        "geometry": {
+          "description": "pois.geom.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/point"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "poiProperties": {
+      "title": "PoiProperties",
+      "description": "What clients need of a POI.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "poi"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "level_id": {
+          "description": "The POI's level.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "ordinal": {
+          "description": "The band of the POI's level, for the level filter.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/ordinal"
+            }
+          ]
+        },
+        "space_id": {
+          "description": "The space the POI is in, or null.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "The name as signed.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "category": {
+          "$ref": "../map/defs.schema.json#/$defs/poiCategory"
+        }
+      },
+      "required": ["feature_type", "id", "level_id", "ordinal", "space_id", "name", "category"],
+      "additionalProperties": false
+    },
+    "streetConnector": {
+      "title": "StreetConnectorFeature",
+      "description": "A street connector (street_connectors): joins an exit or entrance node to the nearest vertex of the street graph in street.json. Derived and rebuilt in every publish, keyed by its node: an exit or entrance has at most one, and its id is derived from node_id, so it stays the same from version to version.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Feature"
+        },
+        "id": {
+          "description": "The UUIDv5 of node_id (as lowercase text) in the namespace 1ffdedde-dd2f-4f6d-a18a-800669a179e1 (docs/snapshot-format.md). street_connectors has no id of its own.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "properties": {
+          "$ref": "#/$defs/streetConnectorProperties"
+        },
+        "geometry": {
+          "description": "street_connectors.geom: from the node to the street vertex, starting exactly at the node's position and ending exactly at the street node's.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/lineString"
+            }
+          ]
+        }
+      },
+      "required": ["type", "id", "properties", "geometry"],
+      "additionalProperties": false
+    },
+    "streetConnectorProperties": {
+      "title": "StreetConnectorProperties",
+      "description": "What clients need of a street connector.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "description": "The feature type (IMDF's feature_type, inside properties so that map style filters can read it).",
+          "type": "string",
+          "const": "street_connector"
+        },
+        "id": {
+          "description": "The feature's id again: MapLibre identifies a GeoJSON feature only by a numeric id or by a property it promotes (promoteId), so renderers read this one.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "node_id": {
+          "description": "The exit or entrance node.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "osm_node_id": {
+          "description": "The street vertex: a street_node feature's id in street.json.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/osmId"
+            }
+          ]
+        },
+        "ordinal": {
+          "description": "The band of the node, for the level filter.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/ordinal"
+            }
+          ]
+        },
+        "length_m": {
+          "description": "Length in metres, measured in SVY21, rounded to 2 decimals.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["feature_type", "id", "node_id", "osm_node_id", "ordinal", "length_m"],
+      "additionalProperties": false
+    }
+  }
+}

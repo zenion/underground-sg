@@ -1,8 +1,9 @@
-// The migrations give an empty, valid database, and the initial migration's down section
-// drops everything its up section created.
+// The migrations give an empty, valid database, and their down sections, run newest first, drop
+// everything the up sections created.
 
+import { readdirSync } from "node:fs";
 import { describe, expect, inject, test } from "vitest";
-import { withDatabase } from "../../src/config.ts";
+import { MIGRATIONS_DIR, withDatabase } from "../../src/config.ts";
 import { dbmateOrThrow } from "../../src/dbmate.ts";
 import { useDatabase } from "./harness.ts";
 
@@ -59,8 +60,8 @@ describe("the migrated database", () => {
   });
 });
 
-describe("rolling back the initial migration", () => {
-  test("drops everything it created, and migrating again restores it", async () => {
+describe("rolling back every migration", () => {
+  test("drops everything they created, and migrating again restores it", async () => {
     const migrated = await objects();
     expect(migrated.extensions).toEqual(["plpgsql", "postgis"]);
     expect(migrated.types).toContain("publish_path");
@@ -70,7 +71,10 @@ describe("rolling back the initial migration", () => {
       new URL(inject("serverUrl")),
       await db.value<string>("SELECT current_database()"),
     );
-    dbmateOrThrow(["rollback"], url);
+    // dbmate rolls back one migration at a time, newest first.
+    const migrations = readdirSync(MIGRATIONS_DIR).filter((file) => file.endsWith(".sql"));
+    expect(migrations.length).toBeGreaterThan(0);
+    for (const _ of migrations) dbmateOrThrow(["rollback"], url);
     expect(await objects()).toEqual({
       extensions: ["plpgsql"],
       tables: ["schema_migrations"],

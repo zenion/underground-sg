@@ -1,5 +1,4 @@
-// Ajv for the capture bundle schemas (Node only). The validators are compiled once per process,
-// on first use.
+// Ajv for the schemas (Node only). The validators are compiled once per process, on first use.
 
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
@@ -8,7 +7,7 @@ import {
   CAPTURE_BUNDLE_SCHEMA_FILES,
   type CaptureBundleJsonPath,
 } from "../capture-bundle.ts";
-import { ALL_CAPTURE_BUNDLE_SCHEMA_FILES, readCaptureBundleSchema } from "../schema-files.ts";
+import { ALL_SCHEMA_FILES, readSchema } from "../schema-files.ts";
 import { displayPath } from "./report.ts";
 
 const addFormats = addFormatsModule.default;
@@ -25,12 +24,13 @@ export interface AjvOptions {
 
 /**
  * Ajv for JSON Schema 2020-12 in strict mode, with `format` asserted (ajv-formats) and every
- * capture bundle schema added. Nothing is fetched: the `$id`s are identifiers only.
+ * schema in the package added (the capture bundle's, the map definitions, the snapshot files'
+ * and the diff's). Nothing is fetched: the `$id`s are identifiers only.
  */
 export function createAjv(options: AjvOptions = {}): Ajv2020 {
   const ajv = new Ajv2020({ strict: true, allErrors: options.allErrors ?? false });
   addFormats(ajv);
-  for (const file of ALL_CAPTURE_BUNDLE_SCHEMA_FILES) ajv.addSchema(readCaptureBundleSchema(file));
+  for (const file of ALL_SCHEMA_FILES) ajv.addSchema(readSchema(file));
   return ajv;
 }
 

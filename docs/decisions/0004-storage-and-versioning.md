@@ -1,6 +1,6 @@
 # 0004: PostGIS HEAD tables plus immutable published snapshots
 
-Status: accepted · 2026-10-12 · amended 2026-10-12
+Status: accepted · 2026-10-12 · amended 2026-10-15
 
 ## Decision
 
@@ -9,23 +9,23 @@ Status: accepted · 2026-10-12 · amended 2026-10-12
 - PostGIS tables hold HEAD, the latest approved map. The schema is the dbmate migrations in `db/migrations/`, starting from the draft v1; [`db/schema.sql`](../../db/schema.sql) is a generated snapshot of the result.
 - Every HEAD table (`venues`, `levels`, `spaces`, `nodes`, `edges`, `anchors`, `pois`) has `rev integer NOT NULL DEFAULT 1`, bumped on each approved change.
 - Pending work lives in `change_sets.diff` and is applied to HEAD only on approval, in one transaction. Every change set records `base_version_id`, the version it was based on.
-- Diff entries are `{op, feature_type, id, base_rev, before, after}`. The format goes in `docs/diff-format.md`, with a JSON Schema in `packages/contracts` (both written in Phase 1).
+- Diff entries are `{op, feature_type, id, base_rev, before, after}`, with whole rows as `before` and `after`: [diff-format.md](../diff-format.md), with a JSON Schema in `packages/contracts`. A change set may add, modify and remove spaces, nodes, edges, POIs and anchors, and modify venues and levels.
 - A change set lists its captures in `change_set_captures`. One with no captures is a manual edit (move a node, retag, redraw an outline) and can publish only through `moderator_review` or `owner_mapper`. A status change set has an empty diff: its content is its `status_reports` rows.
 - `change_sets.publish_path` records how a change set was published. The decision is `approved` on `moderator_review`, and `auto_published` on `owner_mapper` (structural only) and `trusted_status_auto` (status only); a CHECK ties the two, and "published" means one of those two decisions. A trigger enforces eligibility by trust tier. Every moderation action is appended to `moderation_events`.
 - The automated gates ([spec](../spec.md), crowdsourcing and moderation) run on every path, and their result is recorded in `moderation_events` (`gates_passed` or `gates_failed`). The database refuses to set a publish path without a `gates_passed` that no later `gates_failed` overrides, or while a linked capture has failed or carries a privacy flag. So a change set is inserted as `pending` and published by an update.
 - Once published, a change set cannot be deleted, and its diff, track, contributor, base version, reviewer and version are frozen, as are its `change_set_captures` and `status_reports` rows. `rejected` and `rolled_back` are final.
-- Every map version except a rollback publishes at least one change set. Seed data (venues and levels from the site walk) and the imported OSM street graph are written by the owner's scripts, not through change sets, and reach the public files only inside such a version.
+- Every map version except a rollback publishes at least one change set. Seed data (venues and levels from the site walk) and the imported OSM street graph are written by the owner's scripts, not through change sets, and reach the public files only inside such a version. Only the seed script adds or removes venues and levels, and it removes one only when no other HEAD row references it (the cascade would otherwise change HEAD without a change set). Once a row exists, the seed script writes only `venues.permission`, which no diff carries, so it bumps no `rev`. Every other column of a venue or level changes only through change sets (a level's measured height, a renamed level, a redrawn footprint), so re-running the seed script never undoes an approved change.
 
 ### Approval and publish order
 
 For a structural change set (status edits are below):
 
 1. Lock `map_head` with `SELECT ... FOR UPDATE`, so approvals are serialised.
-2. Check that every touched feature still has the `rev` the diff was based on, and that a rollback has not undone the change set's base version (see [Rollback](#rollback)). If either fails, the decision becomes `needs_rebase` and nothing is applied.
+2. Run the rebase check of [diff-format.md](../diff-format.md#approval): the diff still validates, every touched feature still has the `rev` the diff was based on, every row it references still exists, no remove would cascade or remove an anchor a capture uses, and a rollback has not undone the change set's base version (see [Rollback](#rollback)). If any of these fails, the decision becomes `needs_rebase` and nothing is applied.
 3. Apply the diff and bump revs.
-4. Rebuild `street_connectors` for every exit and entrance (in SVY21), then build the public files from HEAD inside the transaction.
+4. Rebuild `street_connectors` for every exit and entrance (in SVY21; one per node, keyed by `node_id`), then build the public files from HEAD inside the transaction.
 5. Upload them to a content-addressed, immutable key, before commit.
-6. Write the private full export.
+6. Write the private full export, under a key of its own for the version. Never derive it from `snapshot_sha256`: two versions can share their public files while their private rows (anchors) differ.
 7. Insert the `map_versions` row (`snapshot_uri`, `snapshot_sha256`, `private_export_uri`), mark the change sets published with its `map_version_id`, and point `map_head` at it. `map_head` cannot be deleted and only moves forward.
 8. Commit.
 9. Update the short-TTL `latest.json` pointer. If that update fails, a reconcile job repairs it.
@@ -52,9 +52,9 @@ Short-TTL files outside versions:
 | `latest.json` | Pointer to the current version |
 | `status.json` | The status overlay, keyed by stable feature IDs, with `valid_from` and `valid_until` |
 
-The format goes in `docs/snapshot-format.md`, with JSON Schemas in `packages/contracts` (both written in Phase 1). That doc also defines what `snapshot_sha256` hashes, since a version has two files. Public files are served from Cloudflare (Pages + R2). Nothing private goes there.
+The format is [snapshot-format.md](../snapshot-format.md), with JSON Schemas in `packages/contracts`. A version's files live under `snapshots/<snapshot_sha256>/`, stored brotli-compressed. `snapshot_sha256` is the SHA-256 of the two files' `sha256sum --text` lines (`indoor.json` then `street.json`, each hashed as decoded JSON), and `snapshot_uri` is that directory relative to the root of the public files. The files are written deterministically and every id in them is stable, so identical content always gets the same immutable path. Both files share the directory, so clients fetch `street.json` again after each publish even when the street graph hasn't changed; that is accepted for its simplicity ([snapshot-format.md](../snapshot-format.md#content-addressing)). Public files are served from Cloudflare (Pages + R2). Nothing private goes there.
 
-`street_connectors` and the street tables are not HEAD tables. The street graph is imported reference data: each version's `street.json` is built from it as it stands at publish, and a rollback does not roll it back. Connectors are derived and rebuilt in every publish (step 4), so they always match the street graph they are published with.
+`street_connectors` and the street tables are not HEAD tables. The street graph is imported reference data: each version's `street.json` is built from it as it stands at publish, and a rollback does not roll it back. Connectors are derived and rebuilt in every publish (step 4), so they always match the street graph they are published with. Each is keyed by its node, and its public id is derived from the node's, so it stays the same from version to version.
 
 The API's `GET /map/latest` reads `map_head` and serves the owner's tools on the LAN. Public clients read only `latest.json`, which can lag `map_head` until the reconcile job runs.
 
@@ -62,7 +62,7 @@ The API's `GET /map/latest` reads `map_head` and serves the owner's tools on the
 
 Status edits ("exit closed", "lift down") never create a map version. Each is a row in `status_reports` (`is_open`, `valid_from`, `valid_until`, a private `evidence_uri`) linked to a status change set; the database only lets status change sets carry reports. Active rows build `status.json`. Nodes and edges no longer have `status_open`.
 
-Reports published through `trusted_status_auto` must have `valid_until`; an open-ended closure needs `moderator_review`. The maximum duration is a tuning value set in Phase 4. A published report is never edited: a newer report replaces it.
+Reports published through `trusted_status_auto` must have `valid_until`; an open-ended closure needs `moderator_review`. The maximum duration is a tuning value set in Phase 4. A published report is never edited: a newer report replaces it. Where several cover the same feature, the one made last (`created_at`) wins ([snapshot-format.md](../snapshot-format.md#statusjson)).
 
 ### Rollback
 

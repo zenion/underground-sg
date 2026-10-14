@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/map/defs.schema.json",
+  "title": "MapDefs",
+  "description": "Shared definitions for the map data model: the HEAD tables' vocabulary (db/schema.sql) and GeoJSON geometry in WGS84. Used by the public snapshot files (docs/snapshot-format.md) and the change-set diff (docs/diff-format.md). uuid, sha256, dateTime and anchorKind are the capture bundle's definitions, so each has one type across the formats. Not a file: the other schemas reference these with $ref.",
+  "$defs": {
+    "position": {
+      "title": "Position",
+      "description": "[longitude, latitude] in WGS84 (EPSG:4326), with at most 7 decimals (about 1 cm). No altitude: height is levels.elevation_m. Checked by the validator, not by this schema: the latitude is between -90 and 90, and the decimals.",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -180,
+        "maximum": 180
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "point": {
+      "title": "PointGeometry",
+      "description": "A GeoJSON Point.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Point"
+        },
+        "coordinates": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "required": ["type", "coordinates"],
+      "additionalProperties": false
+    },
+    "lineString": {
+      "title": "LineStringGeometry",
+      "description": "A GeoJSON LineString of 2 to 10000 positions.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "LineString"
+        },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/position"
+          },
+          "minItems": 2,
+          "maxItems": 10000
+        }
+      },
+      "required": ["type", "coordinates"],
+      "additionalProperties": false
+    },
+    "linearRing": {
+      "title": "LinearRing",
+      "description": "A closed ring of 4 to 10000 positions: the exterior ring of a polygon counterclockwise, holes clockwise (RFC 7946). Checked by the validator, not by this schema: the last position equals the first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/position"
+      },
+      "minItems": 4,
+      "maxItems": 10000
+    },
+    "polygon": {
+      "title": "PolygonGeometry",
+      "description": "A GeoJSON Polygon: an exterior ring, then up to 99 holes.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "Polygon"
+        },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/linearRing"
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": ["type", "coordinates"],
+      "additionalProperties": false
+    },
+    "multiPolygon": {
+      "title": "MultiPolygonGeometry",
+      "description": "A GeoJSON MultiPolygon of 1 to 100 polygons, each an exterior ring then up to 99 holes.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "MultiPolygon"
+        },
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/linearRing"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "minItems": 1,
+          "maxItems": 100
+        }
+      },
+      "required": ["type", "coordinates"],
+      "additionalProperties": false
+    },
+    "uuid": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+    },
+    "sha256": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/sha256"
+    },
+    "dateTime": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/dateTime"
+    },
+    "ordinal": {
+      "title": "Ordinal",
+      "description": "Display band of a level for the level switcher: 0 street, -1 the first basement band, and so on (levels.ordinal, a smallint). Several levels may share a band; it says nothing exact about height, and routing never infers a connection from equal ordinals.",
+      "type": "integer",
+      "minimum": -32768,
+      "maximum": 32767
+    },
+    "smallint": {
+      "title": "Smallint",
+      "description": "An integer within the range of a PostgreSQL smallint.",
+      "type": "integer",
+      "minimum": -32768,
+      "maximum": 32767
+    },
+    "osmId": {
+      "title": "OsmId",
+      "description": "An OpenStreetMap node or way id (a bigint; below 2^53, so exact as a JSON number).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "openingHours": {
+      "title": "OpeningHours",
+      "description": "Opening hours in OpenStreetMap opening_hours syntax, evaluated in Asia/Singapore time, for example \"Mo-Su 06:00-24:00\".",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "venueKind": {
+      "title": "VenueKind",
+      "description": "Kind of venue: the venue_kind values in db/schema.sql.",
+      "type": "string",
+      "enum": ["mall", "mrt_station", "link", "office", "hotel", "other"]
+    },
+    "spaceKind": {
+      "title": "SpaceKind",
+      "description": "Kind of space: the space_kind values in db/schema.sql. fare_zone is an MRT paid area.",
+      "type": "string",
+      "enum": ["walkway", "concourse", "plaza", "shop", "toilet", "fare_zone", "other"]
+    },
+    "nodeKind": {
+      "title": "NodeKind",
+      "description": "Kind of node: the node_kind values in db/schema.sql. escalator, lift, stairs, travelator and ramp nodes are landings: one per end, or one per lift stop, grouped by connector_id.",
+      "type": "string",
+      "enum": [
+        "junction",
+        "exit",
+        "entrance",
+        "escalator",
+        "lift",
+        "stairs",
+        "fare_gate",
+        "door",
+        "travelator",
+        "ramp"
+      ]
+    },
+    "edgeKind": {
+      "title": "EdgeKind",
+      "description": "Kind of edge: the edge_kind values in db/schema.sql. escalator, stairs, lift, ramp and travelator edges are vertical connectors between landings; street is an outdoor link mapped between indoor nodes where OpenStreetMap has none.",
+      "type": "string",
+      "enum": ["walk", "escalator", "stairs", "lift", "ramp", "travelator", "street"]
+    },
+    "edgeAccess": {
+      "title": "EdgeAccess",
+      "description": "Who may use an edge: the edge_access values in db/schema.sql. Routing avoids paid_fare_zone (MRT paid areas) and customers_only edges by default.",
+      "type": "string",
+      "enum": ["public", "paid_fare_zone", "customers_only"]
+    },
+    "poiCategory": {
+      "title": "PoiCategory",
+      "description": "Category of a point of interest: the poi_category values in db/schema.sql.",
+      "type": "string",
+      "enum": ["shop", "food", "toilet", "atm", "info", "nursing_room", "other"]
+    },
+    "streetPriorSource": {
+      "title": "StreetPriorSource",
+      "description": "Where an anchor's street prior came from: the street_prior_source values in db/schema.sql.",
+      "type": "string",
+      "enum": ["lta_exit", "gnss", "imagery", "onemap"]
+    },
+    "anchorKind": {
+      "$ref": "../capture-bundle/anchors.schema.json#/$defs/kind"
+    }
+  }
+}

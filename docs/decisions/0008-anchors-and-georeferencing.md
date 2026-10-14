@@ -1,6 +1,6 @@
 # 0008: Anchors, alignment and georeferencing
 
-Status: accepted · 2026-10-12
+Status: accepted · 2026-10-12 · amended 2026-10-15
 
 ## Decision
 
@@ -70,6 +70,8 @@ OneMap search returns address and building points, not door positions. Prior sou
 `prior_source` and `prior_sigma_m` are NULL unless `surveyed_geom` is set. Every connected group needs at least two widely spaced street priors before it can be published.
 
 `anchors` is a HEAD table ([0004](0004-storage-and-versioning.md)). New anchors and street priors enter it only through an approved change set, as diff entries with `feature_type` `anchor`. Before approval the adjustment works from the bundles' anchor observations and the prior candidates (LTA exits, GNSS fixes); it never writes to `anchors` directly.
+
+An anchor that a capture starts or ends on (`captures.start_anchor_id`, `captures.end_anchor_id`) is never removed from HEAD: every later network adjustment needs it, and removing it would drop that segment's constraint. Diffs never remove one, approval sends a change set that does to `needs_rebase` ([diff-format.md](../diff-format.md#approval)), and the foreign keys have no `ON DELETE` action, so the database refuses it too. Anchors are private, so one whose door or sign is gone does no harm on the public map; how to retire such an anchor (a flag, or leaving it out of the solve) is decided when it first happens.
 
 ### Structure-from-motion deferred
 

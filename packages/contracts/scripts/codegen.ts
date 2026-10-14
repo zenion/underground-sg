@@ -1,6 +1,7 @@
-// Code generation from the JSON Schemas: TypeScript types (json-schema-to-typescript) and Swift
-// Codable types (quicktype). `scripts/gen.ts` writes the output into the package; the tests
-// generate into a temporary directory and compare, so stale generated code fails locally too.
+// Code generation from the JSON Schemas: TypeScript types (json-schema-to-typescript) for every
+// document, and Swift Codable types (quicktype) for the documents that opt in, which are the
+// capture bundle's. `scripts/gen.ts` writes the output into the package; the tests generate into
+// a temporary directory and compare, so stale generated code fails locally too.
 //
 // The output must be identical on Windows and Linux: inputs come from a fixed list (never from
 // directory listing order), schemas are read from disk only (`$id`s are never fetched), line
@@ -11,22 +12,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile, type JSONSchema } from "json-schema-to-typescript";
 import { InputData, JSONSchemaInput, JSONSchemaStore, quicktype } from "quicktype-core";
+import { CAPTURE_BUNDLE_SCHEMA_FILES } from "../src/capture-bundle.ts";
+import { CHANGE_SET_DIFF_SCHEMA_FILE } from "../src/diff.ts";
 import {
-  CAPTURE_BUNDLE_SCHEMA_BASE_URL,
-  CAPTURE_BUNDLE_SCHEMA_FILES,
-} from "../src/capture-bundle.ts";
-import {
-  ALL_CAPTURE_BUNDLE_SCHEMA_FILES,
-  readCaptureBundleSchema,
-  readCaptureBundleSchemaText,
+  ALL_SCHEMA_FILES,
+  readSchema,
+  readSchemaText,
   type SchemaObject,
 } from "../src/schema-files.ts";
+import { SCHEMA_BASE_URL } from "../src/schema-ids.ts";
+import { SNAPSHOT_SCHEMA_FILES } from "../src/snapshot.ts";
 
 /** The package directory (packages/contracts). */
 export const PACKAGE_DIR = fileURLToPath(new URL("..", import.meta.url));
 
 /** Output files, relative to the package directory, with / separators. */
-export const GENERATED_TS_FILE = "src/generated/capture-bundle.ts";
+export const GENERATED_TS_FILE = "src/generated/contracts.ts";
 export const GENERATED_SWIFT_FILE = "generated/swift/CaptureBundle.swift";
 
 /** Directories that hold only generated files; anything else in them is deleted. */
@@ -38,12 +39,70 @@ export interface GeneratedFile {
   content: string;
 }
 
+/** A document the generator writes types for. */
+export interface SchemaDocument {
+  /** The document's name in its group, for example manifest.json or indoor.json. */
+  readonly name: string;
+  /** Its schema's path under schemas/. */
+  readonly schema: string;
+  /**
+   * Whether quicktype writes Swift types for it into CaptureBundle.swift. Only documents that
+   * Swift code writes or reads opt in; the others get TypeScript types only.
+   */
+  readonly swift: boolean;
+}
+
+/** A family of documents: one type map in the TypeScript output, keyed by document name. */
+export interface DocumentGroup {
+  /** The group's key in `ContractDocuments`. */
+  readonly key: string;
+  /** The title of its type map, which becomes the TypeScript interface's name. */
+  readonly title: string;
+  readonly description: string;
+  readonly documents: readonly SchemaDocument[];
+}
+
+/** Every document, by group. The order is fixed so the output is too. */
+export const DOCUMENT_GROUPS: readonly DocumentGroup[] = [
+  {
+    key: "capture-bundle",
+    title: "CaptureBundleDocuments",
+    description:
+      "The type of each JSON file in a capture bundle, keyed by its path in the bundle directory; for a .jsonl file, the type of one line. A type map only: no file has this shape.",
+    documents: Object.entries(CAPTURE_BUNDLE_SCHEMA_FILES).map(([name, file]) => ({
+      name,
+      schema: `capture-bundle/${file}`,
+      swift: true,
+    })),
+  },
+  {
+    key: "snapshot",
+    title: "SnapshotDocuments",
+    description:
+      "The type of each public map file (docs/snapshot-format.md), keyed by its file name. A type map only: no file has this shape.",
+    documents: Object.entries(SNAPSHOT_SCHEMA_FILES).map(([name, file]) => ({
+      name,
+      schema: `snapshot/${file}`,
+      swift: false,
+    })),
+  },
+  {
+    key: "diff",
+    title: "DiffDocuments",
+    description:
+      "The type of a change set's diff, change_sets.diff (docs/diff-format.md). A type map only: no file has this shape.",
+    documents: [
+      { name: "change_sets.diff", schema: `diff/${CHANGE_SET_DIFF_SCHEMA_FILE}`, swift: false },
+    ],
+  },
+];
+
 /** Maps a schema `$id` (or a URL relative to one) to a schema file in this package. */
 function schemaFileForUrl(url: string): string | undefined {
   const withoutFragment = url.split("#")[0] ?? "";
-  if (!withoutFragment.startsWith(CAPTURE_BUNDLE_SCHEMA_BASE_URL)) return undefined;
-  const file = withoutFragment.slice(CAPTURE_BUNDLE_SCHEMA_BASE_URL.length);
-  return ALL_CAPTURE_BUNDLE_SCHEMA_FILES.includes(file) ? file : undefined;
+  if (!withoutFragment.startsWith(SCHEMA_BASE_URL)) return undefined;
+  const file = withoutFragment.slice(SCHEMA_BASE_URL.length);
+  return ALL_SCHEMA_FILES.includes(file) ? file : undefined;
 }
 
 function requireSchemaFileForUrl(url: string): string {
@@ -56,36 +115,52 @@ function normalise(text: string): string {
   return `${text.replace(/\r\n?/g, "\n").trimEnd()}\n`;
 }
 
-const HEADER_LINES = [
+const TS_HEADER_LINES = [
+  "Generated by packages/contracts/scripts/gen.ts from packages/contracts/schemas/.",
+  "Do not edit: change the schemas (after their docs in docs/) and run `pnpm gen`.",
+];
+
+// The Swift output covers only the capture bundle's documents, so the header names their folder.
+const SWIFT_HEADER_LINES = [
   "Generated by packages/contracts/scripts/gen.ts from packages/contracts/schemas/capture-bundle/.",
   "Do not edit: change the schemas (after docs/capture-bundle.md) and run `pnpm gen`.",
 ];
 
 /**
- * TypeScript: one file for all capture bundle types, so each shared type is declared once. It is
- * compiled from an in-memory root schema whose properties are the bundle's JSON files.
+ * TypeScript: one file for every document's types, so each shared type (such as `Uuid`) is
+ * declared once. It is compiled from an in-memory root schema whose properties are the groups'
+ * type maps.
  */
 async function generateTypeScript(): Promise<string> {
   const root = {
-    $id: `${CAPTURE_BUNDLE_SCHEMA_BASE_URL}capture-bundle-documents`,
-    title: "CaptureBundleDocuments",
+    $id: `${SCHEMA_BASE_URL}contract-documents`,
+    title: "ContractDocuments",
     description:
-      "The type of each JSON file in a capture bundle, keyed by its path in the bundle directory; for a .jsonl file, the type of one line. A type map only: no file has this shape.",
+      "Every document type in @usg/contracts, by group and document name. A type map only: no file has this shape.",
     type: "object",
     properties: Object.fromEntries(
-      Object.entries(CAPTURE_BUNDLE_SCHEMA_FILES).map(([bundlePath, schemaFile]) => [
-        bundlePath,
-        { $ref: schemaFile },
+      DOCUMENT_GROUPS.map((group) => [
+        group.key,
+        {
+          title: group.title,
+          description: group.description,
+          type: "object",
+          properties: Object.fromEntries(
+            group.documents.map((document) => [document.name, { $ref: document.schema }]),
+          ),
+          required: group.documents.map((document) => document.name),
+          additionalProperties: false,
+        },
       ]),
     ),
-    required: Object.keys(CAPTURE_BUNDLE_SCHEMA_FILES),
+    required: DOCUMENT_GROUPS.map((group) => group.key),
     additionalProperties: false,
   };
 
-  const ts = await compile(root as JSONSchema, "CaptureBundleDocuments", {
-    bannerComment: HEADER_LINES.map((line) => `// ${line}`).join("\n"),
+  const ts = await compile(root as JSONSchema, "ContractDocuments", {
+    bannerComment: TS_HEADER_LINES.map((line) => `// ${line}`).join("\n"),
     // Relative $refs resolve against the $id base, and the resolver below reads the files.
-    cwd: CAPTURE_BUNDLE_SCHEMA_BASE_URL,
+    cwd: SCHEMA_BASE_URL,
     $refOptions: {
       resolve: {
         file: false,
@@ -93,8 +168,7 @@ async function generateTypeScript(): Promise<string> {
         contracts: {
           order: 1,
           canRead: (file: { url: string }) => schemaFileForUrl(file.url) !== undefined,
-          read: (file: { url: string }) =>
-            readCaptureBundleSchemaText(requireSchemaFileForUrl(file.url)),
+          read: (file: { url: string }) => readSchemaText(requireSchemaFileForUrl(file.url)),
         },
       },
     },
@@ -134,17 +208,22 @@ function swiftView(value: unknown): unknown {
 /** Serves this package's schema files to quicktype by `$id`; nothing is fetched. */
 class PackageSchemaStore extends JSONSchemaStore {
   async fetch(address: string): Promise<SchemaObject | undefined> {
-    return swiftView(readCaptureBundleSchema(requireSchemaFileForUrl(address))) as SchemaObject;
+    return swiftView(readSchema(requireSchemaFileForUrl(address))) as SchemaObject;
   }
 }
+
+/** The documents that get Swift types, in group order. */
+export const SWIFT_DOCUMENTS: readonly SchemaDocument[] = DOCUMENT_GROUPS.flatMap((group) =>
+  group.documents.filter((document) => document.swift),
+);
 
 /** Swift: one file of Codable types for the Swift capture module. */
 async function generateSwift(): Promise<string> {
   const schemaInput = new JSONSchemaInput(new PackageSchemaStore());
-  for (const schemaFile of Object.values(CAPTURE_BUNDLE_SCHEMA_FILES)) {
+  for (const document of SWIFT_DOCUMENTS) {
     await schemaInput.addSource({
-      name: String(readCaptureBundleSchema(schemaFile)["title"]),
-      uris: [`${CAPTURE_BUNDLE_SCHEMA_BASE_URL}${schemaFile}`],
+      name: String(readSchema(document.schema)["title"]),
+      uris: [`${SCHEMA_BASE_URL}${document.schema}`],
     });
   }
   const inputData = new InputData();
@@ -176,7 +255,7 @@ async function generateSwift(): Promise<string> {
   if (lines[firstCode] !== "import Foundation") {
     throw new Error("Unexpected quicktype output: expected its header, then import Foundation");
   }
-  const header = HEADER_LINES.map((line) => `// ${line}`);
+  const header = SWIFT_HEADER_LINES.map((line) => `// ${line}`);
   return normalise([...header, "", ...lines.slice(firstCode)].join("\n"));
 }
 

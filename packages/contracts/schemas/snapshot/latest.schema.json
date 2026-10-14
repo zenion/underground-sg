@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/snapshot/latest.schema.json",
+  "title": "LatestPointer",
+  "description": "latest.json (docs/snapshot-format.md): the short-lived pointer to the current map version, at the root of the public files and outside every version. Written after the publish transaction commits. Checked by the validator, not by this schema: each file's path is snapshots/<snapshot_sha256>/ plus its own name, and snapshot_sha256 is the digest of the two files' sha256 lines.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "description": "Version of the snapshot format.",
+      "type": "integer",
+      "const": 1
+    },
+    "version": {
+      "description": "The map version (map_versions.id).",
+      "type": "integer",
+      "minimum": 1
+    },
+    "published_at": {
+      "description": "When the version was published (map_versions.published_at).",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/dateTime"
+        }
+      ]
+    },
+    "snapshot_sha256": {
+      "description": "The version's content hash (map_versions.snapshot_sha256), which names its directory.",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/sha256"
+        }
+      ]
+    },
+    "files": {
+      "$ref": "#/$defs/files"
+    },
+    "attribution": {
+      "description": "Attribution for the data in the version, for clients to show. 1 to 50 entries.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/attribution"
+      },
+      "minItems": 1,
+      "maxItems": 50
+    },
+    "demo": {
+      "description": "true when the published map is demonstration data, not a surveyed map: clients show a banner. Absent otherwise.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "version",
+    "published_at",
+    "snapshot_sha256",
+    "files",
+    "attribution"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "files": {
+      "title": "SnapshotFiles",
+      "description": "The version's files.",
+      "type": "object",
+      "properties": {
+        "indoor": {
+          "description": "indoor.json.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/file"
+            }
+          ]
+        },
+        "street": {
+          "description": "street.json.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/file"
+            }
+          ]
+        }
+      },
+      "required": ["indoor", "street"],
+      "additionalProperties": false
+    },
+    "file": {
+      "title": "SnapshotFile",
+      "description": "One file of a version: where it is and what it should hash to.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Path relative to latest.json (the root of the public files): snapshots/<snapshot_sha256>/indoor.json or street.json.",
+          "type": "string",
+          "pattern": "^snapshots/[0-9a-f]{64}/(indoor|street)\\.json$"
+        },
+        "bytes": {
+          "description": "Size in bytes of the JSON as decoded (after the brotli content encoding is removed).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "description": "SHA-256 of the JSON as decoded.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/sha256"
+            }
+          ]
+        }
+      },
+      "required": ["path", "bytes", "sha256"],
+      "additionalProperties": false
+    },
+    "attribution": {
+      "title": "Attribution",
+      "description": "One attribution, as plain text with a link.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "The attribution text, for example © OpenStreetMap contributors.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "url": {
+          "description": "Where the attribution links to: an https URL.",
+          "type": "string",
+          "pattern": "^https://[^\\s]+$",
+          "maxLength": 500
+        }
+      },
+      "required": ["text", "url"],
+      "additionalProperties": false
+    }
+  }
+}
