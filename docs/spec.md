@@ -310,7 +310,7 @@ TypeScript carries the clients and the backend. Go is used only for the localiza
 | Database | Postgres 18 + PostGIS 3.6 (`postgis/postgis:18-3.6`) | Spatial queries, graph storage, versioning |
 | Migrations | dbmate, plain SQL in `db/migrations/` | `db/schema.sql` stays the draft until the Phase 1 migration task turns it into the first migration |
 | Object storage | S3 API only. Local: RustFS (SeaweedFS as fallback). Later private storage: S3 ap-southeast-1. Public: Cloudflare R2/Pages | MinIO community edition is archived; R2 cannot be pinned to Singapore, so nothing private goes there |
-| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict; Go only in `services/localization` with its own go.mod | One toolchain across apps, services and packages |
+| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict, Biome for lint and format; Go only in `services/localization` with its own go.mod | One toolchain across apps, services and packages |
 | CI | GitHub Actions: lint, typecheck, tests, contracts codegen check; a macOS runner job for the Swift module | macOS runners are free for public repos |
 | iOS builds | EAS Build (Free plan to start) and/or `eas build --local` on GitHub macOS runners; Xcode Cloud as an option. Dev client + Metro on Windows for JS changes | No Mac needed |
 | Base data | OneMap raster tiles; OpenStreetMap street graph; LTA's MRT Station Exit data | Authoritative Singapore base map, an open pedestrian network, open exit positions |

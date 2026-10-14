@@ -57,6 +57,7 @@ Create directories as work starts. Don't scaffold empty ones.
 - Geometry is stored in WGS84 (EPSG:4326). Do metric work in SVY21 (EPSG:3414); never measure in degrees.
 - `ordinal` is the level switcher's display band: 0 = street, -1 = first basement band, and so on; several levels of one venue may share a band. Physical height is `levels.elevation_m`. Venue-signed names ("B2") live in `levels.name`. Routing never infers a connection from equal ordinals.
 - Units are metres and seconds; routing cost is time in seconds. Times are `timestamptz`, displayed in Asia/Singapore; opening hours are evaluated in Asia/Singapore time.
+- TypeScript extends `tsconfig.base.json`: strict, erasable syntax only (no enums, namespaces or parameter properties) and `.ts` extensions in relative imports, so Node runs `.ts` files directly. Workspace packages export their TypeScript source; shared tool versions come from the `catalog:` in `pnpm-workspace.yaml`. Biome lints and formats; Vitest tests. Run `pnpm check` before committing.
 - `packages/contracts` is the source of truth for every file format and API. CI regenerates the types and fails on a diff.
 - Capture bundles follow `docs/capture-bundle.md`. Change that doc first, then `packages/contracts`, then the Swift module and the validator, and bump `schema_version`.
 - Routing cost and penalties live in `packages/routing/routing-config.json` (`docs/decisions/0003-routing.md`).
@@ -64,6 +65,7 @@ Create directories as work starts. Don't scaffold empty ones.
 
 ## Environment
 
+- Node 24 LTS (move to 26 once it is LTS on 2026-10-28) and pnpm 12, pinned in `package.json`. pnpm holds back packages published less than a day ago; don't add `minimumReleaseAgeExclude` entries to get around it, pin an older version instead.
 - The owner's machine is Windows. Keep the repo on the Windows filesystem and run Node, pnpm and Expo natively on Windows (Metro in WSL needs mirrored networking or `--tunnel`). Docker Desktop with the WSL2 backend runs PostGIS (`postgis/postgis:18-3.6`) and RustFS as the local S3.
 - No Mac. iOS builds run on EAS Build or on GitHub macOS runners; JS changes reach the phone through the dev client and Metro. Escape hatch: a rented cloud Mac for occasional Xcode, Simulator or Instruments days.
 - Capture device: iPhone 17 Pro Max on current iOS; avoid iOS 26.4-26.6.0 (LiDAR drift regression). The owner creates the Apple Developer Program membership and the Expo account when the Swift spike starts.

@@ -29,8 +29,9 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 
 ### Repo and data
 
-- [ ] Monorepo scaffold per `CLAUDE.md` (repo root): pnpm workspaces + Turborepo, TypeScript strict, Vitest, lint and format (tools chosen in this task), `.editorconfig`, `.gitattributes`, GitHub Actions CI running lint, typecheck and tests
+- [x] Monorepo scaffold per `CLAUDE.md` (repo root): pnpm workspaces + Turborepo, TypeScript strict, Vitest, lint and format (Biome), `.editorconfig`, `.gitattributes`, GitHub Actions CI running lint, typecheck and tests on Ubuntu and Windows
   - Done when: a fresh clone installs and passes lint, typecheck and tests on Windows-native Node, and in CI once the GitHub repo exists
+  - Checked with throwaway packages (TypeScript 7, `.ts` imports across packages, Vitest 5, Node running `.ts` directly); CI first runs when the repo is pushed
 - [ ] `docker-compose.yml` with `postgis/postgis:18-3.6` and RustFS (SeaweedFS as the fallback; MinIO community edition is archived), plus a migrate script that runs dbmate
   - Done when: `docker compose up` followed by the migrate script gives an empty, valid database on Docker Desktop (WSL2 backend), and the local buckets exist
 - [ ] Turn `db/schema.sql` (draft v1) into the first dbmate migration in `db/migrations/`. From then on, schema changes are new migrations

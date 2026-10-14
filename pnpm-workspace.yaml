@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+  - services/*
+
+# Shared tool versions. Workspace packages depend on these as "catalog:" so every
+# package uses the same TypeScript, Vitest and Node types.
+catalog:
+  "@types/node": 24.19.2
+  typescript: 7.0.2
+  vitest: 5.0.4

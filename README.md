@@ -2,7 +2,7 @@
 
 Find your way through downtown Singapore's underground links and malls: see where you are, and get a route between two street-level points that stays underground.
 
-Status: planning. The stack was decided on 2026-10-12; nothing is built yet. The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
+Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded; no apps or services are built yet. The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
 
 ## Docs
 
@@ -22,6 +22,20 @@ Status: planning. The stack was decided on 2026-10-12; nothing is built yet. The
 2. The server checks privacy again, aligns the scan to the street map using the anchors, and puts the changes up for review.
 3. Approved changes are published as a new, immutable map version.
 4. The public webapp shows that version over the OneMap street map and routes through it. Locating you from a single photo comes in Phase 4.
+
+## Development
+
+You need Node 24 LTS, pnpm 12 and Docker Desktop (WSL2 backend on Windows). The repo pins pnpm through `packageManager` in `package.json`.
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm check
+```
+
+`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes.
 
 Map data © OneMap / Singapore Land Authority and © OpenStreetMap contributors.
 

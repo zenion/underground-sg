@@ -15,7 +15,7 @@ The server side is TypeScript on Node. The one exception is the localization ser
 | Contracts (`packages/contracts`) | JSON Schema 2020-12 files are the source of truth for every file format and API |
 | Migrations | dbmate, plain SQL in `db/migrations/` |
 | Database | Postgres 18 + PostGIS 3.6 (`postgis/postgis:18-3.6`) |
-| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict |
+| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict, Biome for lint and format (chosen in the scaffold task: one fast tool, no plugin stack to keep in step) |
 
 Python is allowed in two places only:
 
