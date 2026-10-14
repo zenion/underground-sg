@@ -1,0 +1,33 @@
+{
+  "name": "@usg/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "JSON Schema 2020-12 contracts for Underground SG file formats, with generated TypeScript and Swift types and the capture bundle validator",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bundle-validator": "./src/bundle-validator/index.ts",
+    "./schemas/*": "./schemas/*"
+  },
+  "bin": {
+    "validate-bundle": "./src/bundle-validator/cli.ts"
+  },
+  "scripts": {
+    "gen": "node scripts/gen.ts",
+    "typecheck": "tsc && tsc -p tsconfig.neutral.json",
+    "test": "vitest run",
+    "validate-bundle": "node src/bundle-validator/cli.ts"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "fast-check": "4.10.2",
+    "json-schema-to-typescript": "16.0.0",
+    "quicktype-core": "26.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

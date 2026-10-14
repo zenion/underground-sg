@@ -35,7 +35,7 @@ pnpm install
 pnpm check
 ```
 
-`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes.
+`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md).
 
 Map data © OneMap / Singapore Land Authority and © OpenStreetMap contributors.
 

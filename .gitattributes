@@ -35,3 +35,8 @@
 # Collapsed in GitHub PR views, but keep local diffs readable: lockfile changes are
 # supply-chain changes and get reviewed.
 pnpm-lock.yaml linguist-generated=true
+
+# Generated from the JSON Schemas by `pnpm gen` (packages/contracts/scripts/gen.ts): collapsed
+# in GitHub PR views; CI regenerates them and fails on a diff.
+packages/contracts/src/generated/** linguist-generated=true
+packages/contracts/generated/** linguist-generated=true

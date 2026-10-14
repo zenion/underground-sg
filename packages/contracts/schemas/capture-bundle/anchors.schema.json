@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/anchors.schema.json",
+  "title": "CaptureAnchors",
+  "description": "anchors.json of a capture bundle, schema_version 1 (docs/capture-bundle.md): the segment's start and end anchor. Written by the mapper app's TypeScript side. An anchor is a physical feature (a door threshold, a fare-gate line or a permanent sign), not the phone's pose at a tap. Checked by the validator, not by this schema: exactly one start and one end anchor, facing is a horizontal unit vector (y = 0), and each photo is a keyframe in the bundle.",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/anchor"
+  },
+  "minItems": 2,
+  "maxItems": 2,
+  "$defs": {
+    "anchor": {
+      "title": "CaptureAnchor",
+      "description": "The start or end anchor of a segment.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/role"
+        },
+        "anchor_id": {
+          "description": "The existing anchor's UUID, or null if the anchor is new.",
+          "anyOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "name": {
+          "description": "The anchor's name as used on site, for example \"Funan B2 UPL door\".",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "ordinal": {
+          "description": "Display band of the anchor's level: 0 street, -1 first basement band, and so on. Processing sets anchors.level_id. Within the range of a smallint, the type of levels.ordinal and anchors.ordinal in db/schema.sql.",
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "point": {
+          "description": "[x, y, z] in the ARKit world: the floor point, or the image anchor's origin.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/vec3"
+            }
+          ]
+        },
+        "facing": {
+          "description": "Horizontal unit vector (y = 0) in the ARKit world: the direction the door or sign faces. Processing turns it into anchors.facing_deg. The validator checks that it is horizontal and of unit length.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/vec3"
+            }
+          ]
+        },
+        "transform": {
+          "description": "The image anchor's transform for an image anchor, otherwise the device pose at the tap.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/transform"
+            }
+          ]
+        },
+        "registration": {
+          "$ref": "#/$defs/registration"
+        },
+        "photo": {
+          "description": "The keyframe used as the anchor's reference photo. Blurred like every keyframe; it becomes the anchor's private photo_uri and is never public.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/keyframePath"
+            }
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "anchor_id",
+        "kind",
+        "name",
+        "ordinal",
+        "point",
+        "facing",
+        "transform",
+        "registration",
+        "photo"
+      ],
+      "additionalProperties": false
+    },
+    "role": {
+      "title": "AnchorRole",
+      "description": "Whether the anchor starts or ends the segment. A bundle has exactly one of each.",
+      "type": "string",
+      "enum": ["start", "end"]
+    },
+    "kind": {
+      "title": "AnchorKind",
+      "description": "floor_point: an ARKit raycast to the floor at a door threshold or fare-gate line, plus the facing direction. image_anchor: an ARImageAnchor on a permanent planar sign, which gives a repeatable 6-DoF pose. Same values as anchor_kind in db/schema.sql.",
+      "type": "string",
+      "enum": ["floor_point", "image_anchor"]
+    },
+    "registration": {
+      "title": "Registration",
+      "description": "How this session's frame was tied to earlier observations of the anchor. world_map: ARWorldMap relocalization at the anchor. continuous_session: one ARKit session across consecutive segments. image_anchor: the sign was recognised. none: a new anchor, or nothing tied it. A new value is a schema_version bump.",
+      "type": "string",
+      "enum": ["world_map", "continuous_session", "image_anchor", "none"]
+    }
+  }
+}

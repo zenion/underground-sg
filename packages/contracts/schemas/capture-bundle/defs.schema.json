@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/defs.schema.json",
+  "title": "CaptureBundleDefs",
+  "description": "Shared definitions for the capture bundle schemas, schema_version 1 (docs/capture-bundle.md). Not a bundle file: the other schemas reference these with $ref.",
+  "$defs": {
+    "uuid": {
+      "title": "Uuid",
+      "description": "A UUID in its canonical lowercase form (RFC 9562), for example 8f9585da-8554-4b8a-ba4e-0f390ccd3802. Swift's UUID.uuidString is uppercase: lowercase it before writing.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "sha256": {
+      "title": "Sha256",
+      "description": "A SHA-256 digest as 64 lowercase hex digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "dateTime": {
+      "title": "DateTime",
+      "description": "Wall-clock time as an RFC 3339 (ISO 8601) date-time in Singapore time, for example 2026-10-20T10:32:01+08:00. The offset is +08:00, or Z (UTC); a time with any other offset, or none, is invalid.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|\\+08:00)$"
+    },
+    "sessionTime": {
+      "title": "SessionTime",
+      "description": "Seconds since the ARKit session started, on one monotonic clock (ARKit, Core Motion and Core Location timestamps are converted to it). Samples from before the session started are not written. Within each JSONL file, t only increases; the validator checks this.",
+      "type": "number",
+      "minimum": 0
+    },
+    "frameIndex": {
+      "title": "FrameIndex",
+      "description": "A frame index. File names use it zero-padded to six digits (frame 58 is keyframes/000058.jpg), so it is at most 999999. Within each JSONL file, frame only increases; the validator checks this.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999
+    },
+    "vec3": {
+      "title": "Vec3",
+      "description": "[x, y, z] in metres in the ARKit world frame of the session: right-handed, y up (gravity-aligned), origin where tracking started.",
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "transform": {
+      "title": "Transform",
+      "description": "A column-major 4x4 matrix as 16 numbers: the pose of the camera (or anchor) in the ARKit world frame, as ARKit reports it. The translation is elements 12, 13 and 14.",
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 16,
+      "maxItems": 16
+    },
+    "imageSize": {
+      "title": "ImageSize",
+      "description": "[width, height] in pixels, in the camera sensor's native landscape orientation (width at least height; the validator checks this).",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "keyframePath": {
+      "title": "KeyframePath",
+      "description": "Path of a keyframe JPEG relative to the bundle directory: keyframes/ plus the six-digit frame name.",
+      "type": "string",
+      "pattern": "^keyframes/[0-9]{6}\\.jpg$"
+    },
+    "bundlePath": {
+      "title": "BundlePath",
+      "description": "Path of a bundle file relative to the bundle directory, using / as the separator. Only the files of the bundle layout are allowed; manifest.json does not list itself.",
+      "type": "string",
+      "pattern": "^(anchors\\.json|tags\\.json|poses\\.jsonl|refined_keyframes\\.jsonl|imu\\.jsonl|gnss\\.jsonl|privacy/blur\\.jsonl|mesh/scene\\.ply|preview/floorplan\\.geojson|keyframes/[0-9]{6}\\.jpg|(depth|confidence)/[0-9]{6}\\.png)$"
+    }
+  }
+}

@@ -56,7 +56,7 @@ The map is maplibre-gl-js with terra-draw in an Expo DOM component (a WebView): 
 
 ### Upload
 
-1. Native `packBundle` packs the bundle directory as an uncompressed tar split into 16 MB part files, then deletes the raw files so the bundle is not stored twice.
+1. Native `packBundle` packs the bundle directory as an uncompressed tar split into 16 MiB (16,777,216-byte) part files, then deletes the raw files so the bundle is not stored twice.
 2. The API creates an S3 multipart upload and returns presigned part URLs.
 3. While the app is in the foreground, JavaScript enqueues every part at once with expo-file-system's `File.createUploadTask` (a background session).
 4. The server completes the upload using `ListParts`.

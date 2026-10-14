@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/gnss-line.schema.json",
+  "title": "GnssLine",
+  "description": "One line of the optional gnss.jsonl in a capture bundle, schema_version 1 (docs/capture-bundle.md): a phone GNSS fix recorded at a street-facing anchor, used as a street prior. GNSS fixes are part of the contributor's trajectory, which is personal data. Checked by the validator, not by this schema: t only increases.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "$ref": "defs.schema.json#/$defs/sessionTime"
+    },
+    "lat": {
+      "description": "Latitude in WGS84 degrees.",
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "lon": {
+      "description": "Longitude in WGS84 degrees.",
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    },
+    "h_accuracy_m": {
+      "description": "Core Location's horizontal accuracy in metres. Fixes with a negative (invalid) accuracy are not written.",
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": ["t", "lat", "lon", "h_accuracy_m"],
+  "additionalProperties": false
+}

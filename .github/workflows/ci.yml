@@ -35,6 +35,10 @@ jobs:
         with:
           cache: true
           require-lockfile: true
+      # Generated code must match the schemas in packages/contracts: regenerate it and fail on
+      # any difference. --intent-to-add makes new, uncommitted generated files show up too.
+      - run: pnpm gen
+      - run: git add --intent-to-add --all && git diff --exit-code
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

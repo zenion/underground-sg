@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/refined-keyframe-line.schema.json",
+  "title": "RefinedKeyframeLine",
+  "description": "One line of the optional refined_keyframes.jsonl in a capture bundle, schema_version 1 (docs/capture-bundle.md): a keyframe's transform re-read at session end from the ARAnchor the Swift capture module added at that keyframe. Where a line exists, it is a better estimate of the keyframe pose than the one in poses.jsonl. Checked by the validator, not by this schema: frame only increases and is a keyframe in poses.jsonl.",
+  "type": "object",
+  "properties": {
+    "frame": {
+      "$ref": "defs.schema.json#/$defs/frameIndex"
+    },
+    "transform": {
+      "description": "The refined camera pose, with the same convention as poses.jsonl.",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/transform"
+        }
+      ]
+    }
+  },
+  "required": ["frame", "transform"],
+  "additionalProperties": false
+}

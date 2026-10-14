@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/imu-line.schema.json",
+  "title": "ImuLine",
+  "description": "One line of the optional imu.jsonl in a capture bundle, schema_version 1 (docs/capture-bundle.md): one IMU sample, written by the Swift capture module. Both vectors are in the device frame (Core Motion axes: x to the right of the screen, y towards the top of the device, z out of the screen), not the camera frame. Checked by the validator, not by this schema: t only increases.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "$ref": "defs.schema.json#/$defs/sessionTime"
+    },
+    "accel": {
+      "description": "Raw accelerometer reading in m/s^2, gravity included, converted from g (1 g = 9.80665 m/s^2).",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/vec3"
+        }
+      ]
+    },
+    "gyro": {
+      "description": "Rotation rate in rad/s.",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/vec3"
+        }
+      ]
+    }
+  },
+  "required": ["t", "accel", "gyro"],
+  "additionalProperties": false
+}

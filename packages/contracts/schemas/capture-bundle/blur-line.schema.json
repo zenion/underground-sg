@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/capture-bundle/blur-line.schema.json",
+  "title": "BlurLine",
+  "description": "One line of privacy/blur.jsonl in a capture bundle, schema_version 1 (docs/capture-bundle.md): one line per keyframe, including keyframes with no boxes. The Swift capture module's writeBlurredJPEG writes the line in the same step as the JPEG. Checked by the validator, not by this schema: frame only increases, there is one line per keyframe, boxes lie inside the image, and the face and screen counts match the manifest.",
+  "type": "object",
+  "properties": {
+    "frame": {
+      "$ref": "defs.schema.json#/$defs/frameIndex"
+    },
+    "boxes": {
+      "description": "Every region obscured in this keyframe; at most 1000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/box"
+      },
+      "maxItems": 1000
+    }
+  },
+  "required": ["frame", "boxes"],
+  "additionalProperties": false,
+  "$defs": {
+    "box": {
+      "title": "BlurBox",
+      "description": "The padded region that was actually obscured (not the raw detection), in keyframe pixel coordinates: manifest.image_size, native landscape orientation, origin top left, y down.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "description": "Left edge in pixels.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "description": "Top edge in pixels.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "w": {
+          "description": "Width in pixels.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "h": {
+          "description": "Height in pixels.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "$ref": "#/$defs/boxKind"
+        }
+      },
+      "required": ["x", "y", "w", "h", "kind"],
+      "additionalProperties": false
+    },
+    "boxKind": {
+      "title": "BoxKind",
+      "description": "What the box obscures. face: a face (VNDetectFaceRectanglesRequest). person_head: the head region of a detected person (VNDetectHumanRectanglesRequest), a backstop for faces the face detector misses. screen: a personal device or a display showing people.",
+      "type": "string",
+      "enum": ["face", "person_head", "screen"]
+    }
+  }
+}

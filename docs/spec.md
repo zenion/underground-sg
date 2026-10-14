@@ -118,7 +118,7 @@ Capture guidelines:
 - Zig-zag through wide halls. LiDAR is useful to about 5 m, so one pass down the middle gives a strip, not the hall.
 - Public walkways only. Never scan back-of-house, service or security areas.
 
-What each capture records: RGB keyframes (already blurred), LiDAR depth and confidence maps, ARKit camera poses plus keyframe transforms re-read at the end of the session, IMU data, the ARKit scene mesh with per-face classification, the anchors and tags, per-frame blur boxes, and GNSS fixes at street exits. The bundle is packed as an uncompressed tar and uploaded in 16 MB parts. Layout and fields: [capture-bundle.md](capture-bundle.md) (`schema_version` 1).
+What each capture records: RGB keyframes (already blurred), LiDAR depth and confidence maps, ARKit camera poses plus keyframe transforms re-read at the end of the session, IMU data, the ARKit scene mesh with per-face classification, the anchors and tags, per-frame blur boxes, and GNSS fixes at street exits. The bundle is packed as an uncompressed tar and uploaded in 16 MiB parts. Layout and fields: [capture-bundle.md](capture-bundle.md) (`schema_version` 1).
 
 Privacy on the device: faces, the head region of every detected person, and screens (personal devices, plus any display showing people) are blurred irreversibly in Swift: every keyframe through one write path before it is written, and photos taken outside a capture before they are stored or uploaded. Unblurred frames never leave the phone and never reach JavaScript. An on-device privacy self-test must pass. The screen detector is a permissively licensed Core ML model chosen in the Phase 1 spike ([ADR 0005](decisions/0005-privacy-by-design.md)).
 
