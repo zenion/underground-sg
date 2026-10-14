@@ -1,0 +1,18 @@
+packages:
+  - apps/*
+  - packages/*
+  - services/*
+
+# Shared tool versions. Workspace packages depend on these as "catalog:" so every
+# package uses the same TypeScript, Vitest and Node types.
+catalog:
+  "@types/node": 26.6.5
+  typescript: 7.0.2
+  vitest: 5.0.4
+
+# Supply chain: refuse versions published less than a day ago (strict, so pnpm fails
+# instead of falling back and writing minimumReleaseAgeExclude entries), and refuse a
+# version whose publish trust is weaker than earlier versions of the same package.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade

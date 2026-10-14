@@ -301,7 +301,7 @@ TypeScript carries the clients and the backend. Go is used only for the localiza
 | Native capture | One local Expo module in Swift, `apps/mapper/modules/capture-native` (Expo Modules API): ARKit session and RealityKit view, keyframe selection, Apple Vision blur, bundle writer, floor-triangle export, `packBundle` | Only native code can read LiDAR, and no maintained library exposes scene reconstruction with depth and pose export |
 | Mapper map | maplibre-gl-js + terra-draw in an Expo DOM component; `@maplibre/maplibre-react-native` v11 as the fallback for read-only views | Same renderer and style as the webapp, with polygon editing |
 | Webapp | Vite + React SPA with MapLibre GL JS v6, `apps/web`, static build on Cloudflare; moderation UI as an authenticated route | The public map is static files routed on the client; no server rendering needed |
-| API | Node 24 LTS (Node 26 once LTS), Fastify 5, Kysely with raw SQL for geometry, `services/api` | One language with the clients and the shared packages |
+| API | Node 26 (the latest release; the owner tracks the newest Node, not only LTS), Fastify 5, Kysely with raw SQL for geometry, `services/api` | One language with the clients and the shared packages |
 | Jobs | Postgres-backed job queue, no Redis (pg-boss or graphile-worker, chosen in the Phase 1 job-queue task) | One fewer service to run |
 | Processing | TypeScript workers in separate processes, `services/processing`; onnxruntime-node for the privacy re-check; a containerised Python step (COLMAP 4.x / pycolmap) only if Phase 2 data needs it | Heavy work stays out of the API process; no GPU for the MVP |
 | Localization (Phase 4) | Go service, `services/localization`: onnxruntime_go, MegaLoc, (RaCo-)ALIKED + LightGlue, PoseLib via a cgo shim; built in a Linux container | Node runs ONNX inference on the main thread and would need a copy of each model per worker thread |
@@ -310,7 +310,7 @@ TypeScript carries the clients and the backend. Go is used only for the localiza
 | Database | Postgres 18 + PostGIS 3.6 (`postgis/postgis:18-3.6`) | Spatial queries, graph storage, versioning |
 | Migrations | dbmate, plain SQL in `db/migrations/` | `db/schema.sql` stays the draft until the Phase 1 migration task turns it into the first migration |
 | Object storage | S3 API only. Local: RustFS (SeaweedFS as fallback). Later private storage: S3 ap-southeast-1. Public: Cloudflare R2/Pages | MinIO community edition is archived; R2 cannot be pinned to Singapore, so nothing private goes there |
-| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict; Go only in `services/localization` with its own go.mod | One toolchain across apps, services and packages |
+| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict, Biome for lint and format; Go only in `services/localization` with its own go.mod | One toolchain across apps, services and packages |
 | CI | GitHub Actions: lint, typecheck, tests, contracts codegen check; a macOS runner job for the Swift module | macOS runners are free for public repos |
 | iOS builds | EAS Build (Free plan to start) and/or `eas build --local` on GitHub macOS runners; Xcode Cloud as an option. Dev client + Metro on Windows for JS changes | No Mac needed |
 | Base data | OneMap raster tiles; OpenStreetMap street graph; LTA's MRT Station Exit data | Authoritative Singapore base map, an open pedestrian network, open exit positions |

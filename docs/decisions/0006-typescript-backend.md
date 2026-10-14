@@ -8,14 +8,14 @@ The server side is TypeScript on Node. The one exception is the localization ser
 
 | Component | Choice |
 | --- | --- |
-| API (`services/api`) | Node 24 LTS (Node 26 once it is LTS), Fastify 5, Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in) |
+| API (`services/api`) | Node 26 (the latest release; the owner tracks the newest Node rather than only LTS), Fastify 5, Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in) |
 | Jobs | A Postgres-backed job queue, no Redis: pg-boss or graphile-worker, chosen in the Phase 1 job-queue task |
 | Processing (`services/processing`) | TypeScript workers in separate processes, never in the API process. ONNX Runtime (onnxruntime-node) for the privacy re-check |
 | Localization (`services/localization`, Phase 4) | Go with its own `go.mod`: onnxruntime_go, PoseLib through a cgo shim, built in a Linux container ([0002](0002-photo-localization.md)) |
 | Contracts (`packages/contracts`) | JSON Schema 2020-12 files are the source of truth for every file format and API |
 | Migrations | dbmate, plain SQL in `db/migrations/` |
 | Database | Postgres 18 + PostGIS 3.6 (`postgis/postgis:18-3.6`) |
-| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict |
+| Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict, Biome for lint and format (chosen in the scaffold task: one fast tool, no plugin stack to keep in step) |
 
 Python is allowed in two places only:
 

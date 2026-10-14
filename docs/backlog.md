@@ -8,14 +8,16 @@ Test fixtures: the repo will be public. Fixtures in git are synthetic, recorded 
 
 ## Phase 1: Groundwork
 
-Gate: one venue gives written permission to scan. The code tasks don't wait for the gate, but nothing inside a venue is scanned before it.
+Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's landlord gave permission.** Nothing inside any other venue is scanned before that venue says yes too.
 
 ### Owner tasks
 
 - [ ] [Owner] Site walk of the City Hall cluster: confirm the boundary and list every public level on the pedestrian network (basements, the street-level floor, link bridges and the vertical connectors between them), every exit and every link
   - Also note each link's and exit's opening hours, where MRT paid areas start (fare-gate lines), back-of-house and service areas next to public walkways (for `restricted_zones`), and when shops open
   - Choose the height datum: a reference street-level floor that `levels.elevation_m` is measured from. Record it in [spec.md](spec.md)
-- [ ] [Owner] Permission request to Funan's landlord for the B2 UPL (first ask), then Raffles City and CityLink. Ask whether the permission also covers publishing photos; if it doesn't, landmark photos stay out of the MVP
+- [x] [Owner] Permission request to Funan's landlord for the B2 UPL (granted 2026-10-15). Keep the letter out of the repo; the seed script records only a reference to it in `venues.permission`
+- [ ] [Owner] Record the scope of Funan's permission: which areas, any conditions (times, notice, escort), and whether it covers publishing photos; if it doesn't, landmark photos stay out of the MVP
+- [ ] [Owner] Permission requests to Raffles City and CityLink, asking the same photo question
 - [ ] [Owner] Ask the MRT operator and LTA about scanning the City Hall and Esplanade station concourses
 - [ ] [Owner] Register a OneMap API account (needed for the search API; tiles need no token) and check the terms for tiles and attribution. Email SLA about overlaying the map on OneMap tiles and about tile caching or offline packs, which need SLA's written permission first
 - [ ] [Owner] Decide the map data licence: ODbL or not, now with the option of shipping the OSM-derived street graph as a separate ODbL file, `street.json` (see [0003](decisions/0003-routing.md)). The separate-file approach needs legal review
@@ -27,8 +29,9 @@ Gate: one venue gives written permission to scan. The code tasks don't wait for 
 
 ### Repo and data
 
-- [ ] Monorepo scaffold per `CLAUDE.md` (repo root): pnpm workspaces + Turborepo, TypeScript strict, Vitest, lint and format (tools chosen in this task), `.editorconfig`, `.gitattributes`, GitHub Actions CI running lint, typecheck and tests
+- [x] Monorepo scaffold per `CLAUDE.md` (repo root): pnpm workspaces + Turborepo, TypeScript strict, Vitest, lint and format (Biome), `.editorconfig`, `.gitattributes`, GitHub Actions CI running lint, typecheck and tests on Ubuntu and Windows
   - Done when: a fresh clone installs and passes lint, typecheck and tests on Windows-native Node, and in CI once the GitHub repo exists
+  - Checked with throwaway packages (TypeScript 7, `.ts` imports across packages, Vitest 5, Node running `.ts` directly); CI first runs when the repo is pushed
 - [ ] `docker-compose.yml` with `postgis/postgis:18-3.6` and RustFS (SeaweedFS as the fallback; MinIO community edition is archived), plus a migrate script that runs dbmate
   - Done when: `docker compose up` followed by the migrate script gives an empty, valid database on Docker Desktop (WSL2 backend), and the local buckets exist
 - [ ] Turn `db/schema.sql` (draft v1) into the first dbmate migration in `db/migrations/`. From then on, schema changes are new migrations
@@ -41,7 +44,7 @@ Gate: one venue gives written permission to scan. The code tasks don't wait for 
 
 ### API skeleton (`services/api`)
 
-- [ ] Fastify 5 app on Node 24 LTS: health check, config from `.env` (git-ignored; commit an example file), Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in), route schemas that reference `packages/contracts`, OpenAPI emitted by @fastify/swagger
+- [ ] Fastify 5 app on Node 26: health check, config from `.env` (git-ignored; commit an example file), Kysely with raw SQL for geometry (`ST_AsGeoJSON` out, `ST_GeomFromGeoJSON` in), route schemas that reference `packages/contracts`, OpenAPI emitted by @fastify/swagger
   - Done when: the health check reaches PostGIS and RustFS, and the tests run against the compose stack
 - [ ] Database rule tests (run against the compose PostGIS, with synthetic fixtures at real City Hall coordinates). Each rule gets a passing and a refused case:
   - `nodes.ordinal` and `anchors.ordinal` stay in step with `levels.ordinal`; `UNIQUE (venue_id, name)` allows two levels in one band; stairs and escalators are never `step_free`
@@ -200,6 +203,7 @@ Gate: routes verified on foot.
 Gate: public beta goes live.
 
 - Localization (`services/localization`, Go): onnxruntime_go on CPU, MegaLoc retrieval, (RaCo-)ALIKED + LightGlue (LightGlue-ONNX exports), PoseLib through a cgo shim, built in a Linux container. A model allow-list in CI. The index is built per published version from approved captures only
+- Models over about 50 MB are fetched at build time with a pinned checksum, never committed (GitHub rejects files over 100 MB)
 - `POST /locate` with the privacy-path checklist and its no-temp-file, no-body-logging test; rate limits and a bounded queue. CPU benchmark on Funan data: 3 s is measured and reported, not a gate; a GPU only with the owner's approval
 - An owner-only draft index on the server for testing a photo locate against the draft in mapper mode
 - Contributor sign-up: email one-time codes plus passkeys (Better Auth is the likely library; confirm then), trust tiers, shared drafts (a server-side `drafts` table) and external TestFlight

@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Keeps the SHA-pinned actions in .github/workflows current. npm packages are not
+  # listed: Dependabot can't read pnpm 12's lockfile yet, so CI runs pnpm audit instead.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
