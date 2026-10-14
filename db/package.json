@@ -1,0 +1,25 @@
+{
+  "name": "@usg/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PostGIS schema for Underground SG: dbmate migrations, the generated schema.sql snapshot and the database rule tests",
+  "scripts": {
+    "migrate": "node scripts/dbmate.ts up",
+    "status": "node scripts/dbmate.ts status",
+    "new": "node scripts/dbmate.ts new",
+    "rollback": "node scripts/dbmate.ts rollback",
+    "dump": "node scripts/dump.ts",
+    "typecheck": "tsc",
+    "test": "vitest run --project unit",
+    "test:db": "vitest run --project db"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "8.23.1",
+    "dbmate": "2.36.0",
+    "pg": "8.23.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

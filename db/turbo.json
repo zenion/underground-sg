@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docker-compose.yml",
+        "$TURBO_ROOT$/.env.example",
+        "$TURBO_ROOT$/.github/workflows/ci.yml"
+      ]
+    }
+  }
+}
