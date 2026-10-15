@@ -29,4 +29,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     output: "single",
   },
   plugins: ["expo-router"],
+  extra: {
+    ...config.extra,
+    // The owner's EAS project (`eas init --id`). Not a secret: it identifies the project for EAS
+    // Build and Update, and the slug above must match the project's slug on expo.dev.
+    eas: { projectId: "9b77d53f-ffc5-47f7-8291-34d12a32c739" },
+  },
 });
