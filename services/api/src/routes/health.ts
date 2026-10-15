@@ -1,6 +1,8 @@
 // GET /health: whether the API reaches PostGIS and the object store, with the versions it runs
 // with (HealthResponse in @usg/contracts). A failed check reports only a problem code; the details
 // go to the log, so the response never carries a connection string, a credential or an endpoint.
+// The versions go only to a request from this machine: through a tunnel or from the LAN they would
+// tell anyone what to attack, and no client needs them.
 
 import {
   type HealthDatabase,
@@ -9,7 +11,7 @@ import {
   type HealthStorage,
   SNAPSHOT_SCHEMA_VERSION,
 } from "@usg/contracts";
-import type { FastifyBaseLogger, FastifyInstance } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance, FastifyRequest } from "fastify";
 import { type Kysely, sql } from "kysely";
 import packageJson from "../../package.json" with { type: "json" };
 import { responseSchema } from "../contract-schemas.ts";
@@ -161,6 +163,43 @@ export async function checkStorage(
   return { ok: problem === null, problem, server: server ?? null, buckets };
 }
 
+/** Headers a proxy or a tunnel adds (ngrok adds X-Forwarded-For and X-Forwarded-Proto). */
+const FORWARDED = [
+  "forwarded",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+];
+
+function loopbackAddress(address: string | undefined): boolean {
+  if (address === undefined) return false;
+  const bare = address.toLowerCase().replace(/^::ffff:/, "");
+  return bare === "::1" || /^127(\.\d{1,3}){3}$/.test(bare);
+}
+
+/**
+ * Whether a request came from this machine itself: from a loopback address, and not forwarded by
+ * a proxy or tunnel on it (whose requests also come from loopback; trustProxy is off, so the
+ * socket's address is the proxy's).
+ */
+export function fromThisMachine(request: Pick<FastifyRequest, "headers" | "socket">): boolean {
+  return (
+    loopbackAddress(request.socket.remoteAddress) &&
+    FORWARDED.every((name) => request.headers[name] === undefined)
+  );
+}
+
+/** The response without the versions: for a request from another machine. */
+export function withoutVersions(body: HealthResponse): HealthResponse {
+  return {
+    ...body,
+    api: { ...body.api, node: null },
+    database: { ...body.database, postgres: null, postgis: null, migration: null },
+    storage: { ...body.storage, server: null },
+  };
+}
+
 export function healthRoutes(
   app: FastifyInstance,
   deps: { db: Kysely<Database>; storage: Storage },
@@ -171,7 +210,7 @@ export function healthRoutes(
       schema: {
         summary: "Whether the API reaches PostGIS and the object store",
         description:
-          "200 when every check passes, 503 otherwise, with the same body. Never carries credentials, connection strings or bucket names.",
+          "200 when every check passes, 503 otherwise, with the same body. Never carries credentials, connection strings or bucket names. The versions of Node, PostgreSQL, PostGIS, the migrations and the object store are null unless the request comes from the machine the API runs on, not through a proxy or tunnel.",
         tags: ["health"],
         response: { 200: responseSchema("GET /health"), 503: responseSchema("GET /health") },
       },
@@ -193,7 +232,9 @@ export function healthRoutes(
         storage,
       };
       reply.header("Cache-Control", "no-store");
-      return reply.code(ok ? 200 : 503).send(body);
+      return reply
+        .code(ok ? 200 : 503)
+        .send(fromThisMachine(request) ? body : withoutVersions(body));
     },
   );
 }

@@ -1,20 +1,23 @@
 // The app without the stack: the public files from an in-memory bucket, the glyphs from
-// @usg/map-style, OpenAPI, CORS, the response contracts, /health with nothing reachable, and what
-// a failing route sends (nothing about the cause). The database and RustFS are exercised in
-// test/stack/.
+// @usg/map-style, OpenAPI, CORS, the response contracts, /health with nothing reachable and whom it
+// gives the versions, and what a failing route sends (nothing about the cause). The database and
+// RustFS are exercised in test/stack/.
 
 import { readFileSync } from "node:fs";
+import type { Socket } from "node:net";
 import { join } from "node:path";
 import { brotliCompressSync, gzipSync } from "node:zlib";
+import type { HealthResponse } from "@usg/contracts";
 import { validateApiDocument } from "@usg/contracts/validators";
 import { FONT_STACK, GLYPH_RANGES } from "@usg/map-style";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { buildApp } from "../../src/app.ts";
+import { buildApp, isPublicDataPath } from "../../src/app.ts";
 import { contractSerializerCompiler, responseSchema } from "../../src/contract-schemas.ts";
 import { createDatabase } from "../../src/database.ts";
 import { installErrorHandler } from "../../src/error-handler.ts";
 import { mapStyleGlyphsDir } from "../../src/glyphs.ts";
+import { fromThisMachine, withoutVersions } from "../../src/routes/health.ts";
 import {
   createMemoryStorage,
   type MemoryObjectStore,
@@ -130,7 +133,7 @@ describe("GET /public/*", () => {
     const origin = { origin: "http://localhost:5173" };
     for (const headers of [{ ...origin, "accept-encoding": "br" }, origin]) {
       const response = await app.inject({ url: `/public/${INDOOR}`, headers });
-      expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+      expect(response.headers["access-control-allow-origin"]).toBe("*");
       expect(response.headers["vary"]).toBe("Origin, Accept-Encoding");
     }
     const first = await app.inject({
@@ -257,6 +260,81 @@ describe("GET /health with nothing reachable", () => {
     expect(response.body).not.toContain("hunter2");
     expect(response.body).not.toContain("127.0.0.1");
     expect(response.headers["cache-control"]).toBe("no-store");
+  });
+
+  test("the versions go only to a request from this machine", async () => {
+    const local = (await app.inject({ url: "/health" })).json();
+    expect(local.api.node).toBe(process.version);
+    for (const request of [
+      // Through ngrok: from loopback, forwarded.
+      { headers: { "x-forwarded-for": "203.0.113.7", "x-forwarded-proto": "https" } },
+      { headers: { forwarded: "for=203.0.113.7;proto=https" } },
+      // From the LAN (API_HOST=0.0.0.0).
+      { remoteAddress: "192.168.1.30" },
+    ]) {
+      const response = await app.inject({ url: "/health", ...request });
+      const body = response.json();
+      expect(validateApiDocument("GET /health", body)).toEqual({ valid: true, problems: [] });
+      expect(body.api).toEqual({ version: "0.0.0", node: null, snapshot_schema_version: 1 });
+      expect(body.database).toMatchObject({ postgres: null, postgis: null, migration: null });
+      expect(body.storage.server).toBeNull();
+      expect(response.body).not.toContain(process.version);
+    }
+  });
+});
+
+describe("whose request /health answers with the versions", () => {
+  const request = (remoteAddress: string | undefined, headers: Record<string, string> = {}) => ({
+    socket: { remoteAddress } as Socket,
+    headers,
+  });
+
+  test.each(["127.0.0.1", "127.5.6.7", "::1", "::ffff:127.0.0.1"])("from %s: yes", (address) => {
+    expect(fromThisMachine(request(address))).toBe(true);
+  });
+
+  test.each([
+    ["192.168.1.30", {}],
+    ["::ffff:10.0.0.2", {}],
+    [undefined, {}],
+    ["127.0.0.1", { "x-forwarded-for": "203.0.113.7" }],
+    ["127.0.0.1", { "x-forwarded-host": "example.ngrok.app" }],
+    ["127.0.0.1", { "x-forwarded-proto": "https" }],
+    ["::1", { forwarded: "for=203.0.113.7" }],
+    ["127.0.0.1", { "x-real-ip": "203.0.113.7" }],
+  ])("from %s with %o: no", (address, headers) => {
+    expect(fromThisMachine(request(address, headers))).toBe(false);
+  });
+
+  test("withoutVersions nulls exactly the versions", () => {
+    const body: HealthResponse = {
+      status: "ok",
+      api: { version: "0.0.0", node: "v26.12.0", snapshot_schema_version: 1 },
+      database: {
+        ok: true,
+        problem: null,
+        postgres: "18.6 (Debian 18.6-1.pgdg13+2)",
+        postgis: "3.6.4",
+        migration: "20261015005543",
+      },
+      storage: {
+        ok: true,
+        problem: null,
+        server: "1.0.1",
+        buckets: { bundles: true, exports: true, public: true },
+      },
+    };
+    expect(withoutVersions(body)).toEqual({
+      status: "ok",
+      api: { version: "0.0.0", node: null, snapshot_schema_version: 1 },
+      database: { ok: true, problem: null, postgres: null, postgis: null, migration: null },
+      storage: {
+        ok: true,
+        problem: null,
+        server: null,
+        buckets: { bundles: true, exports: true, public: true },
+      },
+    });
   });
 });
 
@@ -427,23 +505,62 @@ describe("a route that fails sends nothing about the cause", () => {
 });
 
 describe("CORS", () => {
-  test("an allowed origin may read the responses", async () => {
-    const response = await app.inject({
-      url: "/public/latest.json",
-      headers: { origin: "http://localhost:5173" },
-    });
-    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:5173");
+  test("public data (the public files and the glyphs): any origin, no credentials", async () => {
+    for (const url of [
+      "/public/latest.json",
+      `/public/${INDOOR}`,
+      "/public/status.json",
+      `/glyphs/${encodeURIComponent(FONT_STACK)}/0-255.pbf`,
+    ]) {
+      for (const origin of [
+        "http://localhost:5173",
+        "https://abc123-xennion-8081.exp.direct",
+        "http://evil.example",
+        "null",
+      ]) {
+        const response = await app.inject({ url, headers: { origin } });
+        expect(response.headers["access-control-allow-origin"], `${url} ${origin}`).toBe("*");
+        expect(response.headers["access-control-allow-credentials"]).toBeUndefined();
+        expect(response.headers["access-control-expose-headers"]).toBe(
+          "Content-Encoding, Cache-Control, ETag",
+        );
+      }
+    }
   });
 
-  test("another origin gets no CORS headers", async () => {
+  test("a preflight for public data from any origin allows only GET and HEAD", async () => {
     const response = await app.inject({
+      method: "OPTIONS",
       url: "/public/latest.json",
-      headers: { origin: "http://evil.example" },
+      headers: {
+        origin: "https://abc123-xennion-8081.exp.direct",
+        "access-control-request-method": "GET",
+      },
     });
-    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe("*");
+    expect(response.headers["access-control-allow-methods"]).toBe("GET, HEAD");
+    expect(response.headers["access-control-allow-credentials"]).toBeUndefined();
   });
 
-  test("a preflight allows only GET and HEAD", async () => {
+  test("everything else: a listed origin may read the responses", async () => {
+    for (const url of ["/map/latest", "/health", "/openapi.json"]) {
+      const response = await app.inject({ url, headers: { origin: "http://localhost:5173" } });
+      expect(response.headers["access-control-allow-origin"], url).toBe("http://localhost:5173");
+      expect(response.headers["vary"], url).toContain("Origin");
+    }
+  });
+
+  test("everything else: another origin gets no CORS headers", async () => {
+    for (const url of ["/map/latest", "/health", "/openapi.json", "/publicity", "/glyphs"]) {
+      for (const origin of ["http://evil.example", "https://abc123-xennion-8081.exp.direct"]) {
+        const response = await app.inject({ url, headers: { origin } });
+        expect(response.headers["access-control-allow-origin"], `${url} ${origin}`).toBeUndefined();
+      }
+    }
+  });
+
+  test("a preflight for anything else allows only GET and HEAD, for listed origins", async () => {
     const response = await app.inject({
       method: "OPTIONS",
       url: "/map/latest",
@@ -451,6 +568,24 @@ describe("CORS", () => {
     });
     expect(response.statusCode).toBe(204);
     expect(response.headers["access-control-allow-methods"]).toBe("GET, HEAD");
+    const other = await app.inject({
+      method: "OPTIONS",
+      url: "/map/latest",
+      headers: { origin: "http://evil.example", "access-control-request-method": "GET" },
+    });
+    expect(other.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  test("isPublicDataPath: the public files and glyphs, decoded, at a path boundary", () => {
+    expect(isPublicDataPath("/public/latest.json")).toBe(true);
+    expect(isPublicDataPath("/public/latest.json?x=1")).toBe(true);
+    expect(isPublicDataPath("/%70ublic/latest.json")).toBe(true);
+    expect(isPublicDataPath("/glyphs/Noto%20Sans%20Regular/0-255.pbf")).toBe(true);
+    expect(isPublicDataPath("/public")).toBe(false);
+    expect(isPublicDataPath("/publicity/x")).toBe(false);
+    expect(isPublicDataPath("/map/latest")).toBe(false);
+    expect(isPublicDataPath("/health")).toBe(false);
+    expect(isPublicDataPath("/")).toBe(false);
   });
 });
 

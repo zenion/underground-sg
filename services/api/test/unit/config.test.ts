@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { describe, expect, test } from "vitest";
 import {
@@ -32,6 +33,14 @@ describe("loadConfig", () => {
     expect(config.host).toBe("127.0.0.1");
     expect(config.port).toBe(DEFAULT_PORT);
     expect(config.corsOrigins).toEqual([...DEFAULT_CORS_ORIGINS]);
+  });
+
+  test("API_WEB_DIST: unset or empty serves no page; a path is made absolute", () => {
+    expect(loadConfig(example).webDist).toBeUndefined();
+    expect(loadConfig({ ...example, API_WEB_DIST: " " }).webDist).toBeUndefined();
+    const dist = loadConfig({ ...example, API_WEB_DIST: "apps/web/dist" }).webDist;
+    expect(dist).toBe(resolve("apps/web/dist"));
+    expect(isAbsolute(String(dist))).toBe(true);
   });
 
   test(".env.example's API port stays below Windows' dynamic port range", () => {
@@ -83,7 +92,8 @@ describe("loadConfig", () => {
 
 describe("loadStackConfig", () => {
   test("reads only the database, S3 and bucket settings, which the CLIs need", () => {
-    const { API_HOST, API_PORT, API_CORS_ORIGINS, API_PUBLIC_FILES_URL, ...rest } = example;
+    const { API_HOST, API_PORT, API_CORS_ORIGINS, API_PUBLIC_FILES_URL, API_WEB_DIST, ...rest } =
+      example;
     expect(loadStackConfig(rest)).toEqual({
       databaseUrl: example["DATABASE_URL"],
       s3: {

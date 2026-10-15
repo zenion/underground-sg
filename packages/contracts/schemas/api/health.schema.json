@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/api/health.schema.json",
   "title": "HealthResponse",
-  "description": "GET /health (services/api/README.md): whether the API reaches PostGIS and the object store, and the versions it runs with. The status code is 200 when every check passes and 503 otherwise, with this body either way. It never carries credentials, connection strings, endpoints, bucket names or the services' own error messages: a failed check gives only a problem code, and the API logs the details.",
+  "description": "GET /health (services/api/README.md): whether the API reaches PostGIS and the object store, and the versions it runs with, which go only to a request from the machine the API runs on (not through a proxy or tunnel): for any other request they are null. The status code is 200 when every check passes and 503 otherwise, with this body either way. It never carries credentials, connection strings, endpoints, bucket names or the services' own error messages: a failed check gives only a problem code, and the API logs the details.",
   "type": "object",
   "properties": {
     "status": {
@@ -41,10 +41,17 @@
           "maxLength": 50
         },
         "node": {
-          "description": "The Node.js version, for example v26.12.0.",
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 50
+          "description": "The Node.js version, for example v26.12.0; null for a request from another machine.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "snapshot_schema_version": {
           "description": "The snapshot format version the API builds and serves (docs/snapshot-format.md).",
@@ -57,7 +64,7 @@
     },
     "database": {
       "title": "HealthDatabase",
-      "description": "PostGIS. The versions are null when the check could not read them.",
+      "description": "PostGIS. The versions are null when the check could not read them, and for a request from another machine.",
       "type": "object",
       "properties": {
         "ok": {
@@ -102,7 +109,7 @@
           ]
         },
         "migration": {
-          "description": "The newest dbmate migration applied (its 14-digit version), or null when none is.",
+          "description": "The newest dbmate migration applied (its 14-digit version), or null when none is (and for a request from another machine).",
           "anyOf": [
             {
               "type": "string",
@@ -138,7 +145,7 @@
           ]
         },
         "server": {
-          "description": "The object store's version, when its health endpoint reports one (RustFS does); null otherwise.",
+          "description": "The object store's version, when its health endpoint reports one (RustFS does); null otherwise, and for a request from another machine.",
           "anyOf": [
             {
               "type": "string",

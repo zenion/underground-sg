@@ -1,6 +1,6 @@
 # 0002: Photo-based localization for public users
 
-Status: accepted · 2026-10-12 · amended 2026-10-12
+Status: accepted · 2026-10-12 · amended 2026-10-12, 2026-10-15
 
 ## Decision
 
@@ -52,6 +52,7 @@ Every item holds before launch ([0005](0005-privacy-by-design.md)):
 
 - Read the body into memory under a size cap. Never use multipart parsing that spills to disk.
 - No proxy request buffering to disk.
+- No TLS-terminating third-party proxy or request inspector on the path of a query photo or feature payload (development tunnels included, such as `pnpm dev:phone`'s ngrok; [0009](0009-hosting-and-budget.md#remote-access-during-phases-13)).
 - No request-body capture in APM or crash reporting.
 - Core dumps off.
 - Never log IP together with position.

@@ -18,3 +18,19 @@ catalog:
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade
+
+# semver 6.3.1, which @babel/core and its helpers ask for (^6.3.1) under Expo and React Native,
+# was published without provenance after 7.x had it, so trustPolicy refuses it, and 6.3.0 has
+# the CVE-2022-25883 ReDoS. semver 7 keeps the 6.x API those packages use.
+overrides:
+  "semver@6": 7.8.5
+
+# pnpm audit (CI, Linux) ignores exactly these advisories, approved by the owner on 2026-10-16.
+# Both are high, have no patched version, and sit in Expo's build tooling, which never ships in
+# the app: node-forge via @expo/cli (RSA PKCS#1 v1.5 signature verification) and braces via
+# Metro (stack exhaustion from deeply nested patterns, which only our own config supplies).
+# Remove each entry as soon as a fixed version reaches Expo SDK 57/58 (backlog task).
+auditConfig:
+  ignoreGhsas:
+    - GHSA-86w9-cpqp-85rv
+    - GHSA-vfj7-8cjw-p6xm

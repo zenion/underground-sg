@@ -82,7 +82,7 @@ Distribution: through Phase 3 the owner is the only mapper, so development build
 Device and accounts:
 
 - The capture device is an iPhone 17 Pro Max. Keep iOS current but avoid iOS 26.4–26.6.0, which had a reported LiDAR world-tracking drift regression. Every segment records `os_version` and `device_model`.
-- The owner creates the Apple Developer Program membership (US$99/yr) and an Expo account when the Swift spike starts.
+- The owner creates the Apple Developer Program membership (US$99/yr) when the Swift spike starts. The free Expo account comes first (amended 2026-10-15): since 2026-09-03 Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account, and the mapper shell runs in Expo Go until the first development build.
 
 ### Escape hatch
 

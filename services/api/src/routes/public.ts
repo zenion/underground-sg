@@ -56,7 +56,7 @@ async function beforeDeadline<T>(
 }
 
 /** Adds a header to Vary, keeping what is there (CORS's Origin). */
-function addVary(reply: FastifyReply, header: string): void {
+export function addVary(reply: FastifyReply, header: string): void {
   const current = reply.getHeader("vary");
   const values = (Array.isArray(current) ? current.join(",") : String(current ?? ""))
     .split(",")
@@ -78,7 +78,7 @@ function notFound(reply: FastifyReply): FastifyReply {
 }
 
 /** Whether If-None-Match names the entity tag (weak comparison, RFC 9110 section 13.1.2). */
-function matches(ifNoneMatch: string | undefined, etag: string | undefined): boolean {
+export function etagMatches(ifNoneMatch: string | undefined, etag: string | undefined): boolean {
   if (ifNoneMatch === undefined || etag === undefined) return false;
   const strip = (tag: string) => tag.trim().replace(/^W\//, "");
   const wanted = strip(etag);
@@ -169,7 +169,7 @@ export function publicRoutes(
         if (meta.lastModified !== undefined) {
           reply.header("Last-Modified", meta.lastModified.toUTCString());
         }
-        if (matches(request.headers["if-none-match"], meta.etag)) {
+        if (etagMatches(request.headers["if-none-match"], meta.etag)) {
           discard();
           return reply.code(304).send();
         }

@@ -1,6 +1,6 @@
 // GET /health against the real stack: PostGIS (this file's scratch database) and RustFS (the
-// buckets `pnpm buckets` creates). Each failure gives its problem code, and no response ever
-// carries a password, a key, an endpoint or a bucket name.
+// buckets `pnpm buckets` creates). Each failure gives its problem code, no response ever carries
+// a password, a key, an endpoint or a bucket name, and the versions go only to this machine.
 
 import { readdirSync } from "node:fs";
 import { useDatabase } from "@usg/db/test/harness";
@@ -27,7 +27,12 @@ afterEach(async () => {
 });
 
 async function health(
-  options: { databaseUrl?: string; s3?: Partial<S3Config>; buckets?: Partial<BucketNames> } = {},
+  options: {
+    databaseUrl?: string;
+    s3?: Partial<S3Config>;
+    buckets?: Partial<BucketNames>;
+    headers?: Record<string, string>;
+  } = {},
 ) {
   const kysely = createDatabase(options.databaseUrl ?? db.url.href, { maxConnections: 2 });
   const storage = createS3Storage(
@@ -40,7 +45,7 @@ async function health(
     await kysely.destroy();
     storage.close();
   });
-  const response = await app.inject({ url: "/health" });
+  const response = await app.inject({ url: "/health", headers: options.headers ?? {} });
   return { response, body: response.json() };
 }
 
@@ -73,6 +78,23 @@ describe("GET /health", () => {
     expect(body.database.postgis).toMatch(/^3\.6\./);
     expect(body.storage.server).toEqual(expect.any(String));
     expectNothingLeaked(response.body);
+  });
+
+  test("through a tunnel: the same checks, without the versions", async () => {
+    // ngrok forwards from loopback and adds X-Forwarded-For.
+    const { response, body } = await health({ headers: { "x-forwarded-for": "203.0.113.7" } });
+    expect(response.statusCode).toBe(200);
+    expect(body).toEqual({
+      status: "ok",
+      api: { version: "0.0.0", node: null, snapshot_schema_version: 1 },
+      database: { ok: true, problem: null, postgres: null, postgis: null, migration: null },
+      storage: {
+        ok: true,
+        problem: null,
+        server: null,
+        buckets: { bundles: true, exports: true, public: true },
+      },
+    });
   });
 
   test("a missing bucket: 503, missing_bucket, and which role it is", async () => {

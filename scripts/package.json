@@ -3,18 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Scripts for the local Docker stack in docker-compose.yml, and the root .env loader and stack error messages the services share",
+  "description": "Scripts for the local Docker stack in docker-compose.yml and for testing on the phone (pnpm dev:phone), and the root .env loader and stack error messages the services share",
   "exports": {
     "./env": "./env.ts",
     "./errors": "./errors.ts"
   },
   "scripts": {
     "buckets": "node buckets.ts",
-    "typecheck": "tsc"
+    "dev:phone": "node dev-phone.ts",
+    "typecheck": "tsc",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1150.0",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "toqr": "0.1.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }
