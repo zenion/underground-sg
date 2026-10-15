@@ -171,7 +171,7 @@ Each uploaded segment runs through these steps in TypeScript workers: separate p
 3. **Trajectory clean-up:** drop frames with limited tracking, split the trajectory at relocalization jumps, and use the keyframe transforms ARKit refined at the end of the session where present.
 4. **Align and georeference:** one network adjustment per connected group of segments, worked in SVY21. Each segment constrains the relative position and heading of its two anchors; street-facing anchors are absolute priors (LTA exit positions, GNSS fixes, imagery); level elevations are soft height priors. ARKit is gravity-aligned and metric, so only x, y, z and yaw are solved. Each segment's correction is spread along its walk and applied to its ARKit mesh. Each segment's transform and the residuals at its two anchors go to `segment_alignments`. A connected group needs at least two widely spaced street priors before it can be published. Details: [ADR 0008](decisions/0008-anchors-and-georeferencing.md).
 5. **Extract:** assign levels from floor heights, trace walkable area as polygons, derive centrelines as graph edges from the corrected walk path, and turn tags into nodes and points of interest. Anything inside a restricted zone is clipped out.
-6. **Diff:** conflate against HEAD (match by kind, level and proximity or topology), so existing features keep their IDs and only genuinely new features get new ones. The result is a change set that records the version it was based on. Format: `docs/diff-format.md`, to be written in Phase 1.
+6. **Diff:** conflate against HEAD (match by kind, level and proximity or topology), so existing features keep their IDs and only genuinely new features get new ones. The result is a change set that records the version it was based on. Format: [diff-format.md](diff-format.md).
 
 After approval, the localization index for the new published version is built from approved captures only (Phase 4; which service builds it is decided then, see [ADR 0002](decisions/0002-photo-localization.md)).
 
@@ -179,7 +179,7 @@ Server-side structure-from-motion is deferred. ARKit poses, anchor registration 
 
 ## Data model
 
-The map is a graph of nodes and edges laid over level polygons, versioned as a whole. It is stored in PostGIS and kept close enough to Apple's IMDF that it can be exported to that format later. The draft schema is [`db/schema.sql`](../db/schema.sql) (draft v1); the Phase 1 migration task turns it into the first dbmate migration in `db/migrations/`. Every HEAD table (venues, levels, spaces, nodes, edges, anchors, POIs) has a `rev` number, bumped on each approved change.
+The map is a graph of nodes and edges laid over level polygons, versioned as a whole. It is stored in PostGIS and kept close enough to Apple's IMDF that it can be exported to that format later. The schema is defined by the dbmate migrations in `db/migrations/`, starting from the draft v1; [`db/schema.sql`](../db/schema.sql) is a generated snapshot of the result. Every HEAD table (venues, levels, spaces, nodes, edges, anchors, POIs) has a `rev` number, bumped on each approved change.
 
 | Entity | Key fields | Notes |
 | --- | --- | --- |
@@ -206,7 +206,7 @@ A single-row `map_head` table points at the current version and is locked during
 
 **Cluster height datum.** A reference street-level floor, chosen on the Phase 1 site walk. Not chosen yet; record it here when it is.
 
-**Published files.** Each version publishes two files under an immutable, content-addressed path: `indoor.json` (venues, levels, spaces, nodes, edges, POIs and street connectors, as IMDF-like GeoJSON features) and `street.json` (the OSM-derived street graph, under ODbL). Two short-lived files sit outside versions: `latest.json` points at the current version, and `status.json` holds the status overlay. Format: `docs/snapshot-format.md`, to be written in Phase 1, with JSON Schemas in `packages/contracts`. Background: [ADR 0004](decisions/0004-storage-and-versioning.md).
+**Published files.** Each version publishes two files under an immutable, content-addressed path: `indoor.json` (venues, levels, spaces, nodes, edges, POIs and street connectors, as IMDF-like GeoJSON features) and `street.json` (the OSM-derived street graph, under ODbL). Two short-lived files sit outside versions: `latest.json` points at the current version, and `status.json` holds the status overlay. A version's files live under `snapshots/<snapshot_sha256>/`, named by a hash of their content. Format: [snapshot-format.md](snapshot-format.md), with JSON Schemas in `packages/contracts`. Background: [ADR 0004](decisions/0004-storage-and-versioning.md).
 
 ## Crowdsourcing and moderation
 
@@ -234,7 +234,7 @@ Trust tiers:
 
 Automated gates run on every path, including the two that skip human review: the privacy re-check, the restricted-zone check (clipping, and no feature overlapping a zone's interior), alignment residual checks, and at least two street priors per connected group. Their result is recorded in the audit trail, and the database refuses to publish until they pass. A failed gate, or a capture with an open privacy flag, blocks publishing on every path; the owner or a moderator clears a privacy flag explicitly. Moderators also reject anything showing restricted or back-of-house areas, even when the capture is good. Every moderation action is written to an append-only audit trail.
 
-"Published" means a decision of `approved` (through `moderator_review`) or `auto_published` (through `owner_mapper` or `trusted_status_auto`). Seed data (venues and levels from the site walk) and the imported OSM street graph are written by the owner's scripts rather than through change sets, and reach the public files only inside a version that publishes a change set.
+"Published" means a decision of `approved` (through `moderator_review`) or `auto_published` (through `owner_mapper` or `trusted_status_auto`). Seed data (venues and levels from the site walk) and the imported OSM street graph are written by the owner's scripts rather than through change sets, and reach the public files only inside a version that publishes a change set. A change set may modify a venue or level, such as a level's measured height, but only the seed script adds or removes them; once a row exists, the seed script writes only its permission reference, so re-running it never undoes an approved change.
 
 Status overlay: status edits never create a map version. Active status reports build `status.json`, keyed by stable feature IDs with a start and an end time, so rolling back a structural version does not undo an unrelated "lift down" report. Reports published through `trusted_status_auto` must have an end time; an open-ended closure needs moderator review. The maximum duration is a tuning value set in Phase 4. The overlay arrives in Phase 4.
 
@@ -308,8 +308,8 @@ TypeScript carries the clients and the backend. Go is used only for the localiza
 | Contracts | `packages/contracts`: JSON Schema 2020-12 files for the capture bundle, snapshot files, diff format, status overlay and routing config. TS types, Ajv validation, Swift Codable types (quicktype), Fastify route schemas and OpenAPI come from them | The Swift writer, the validator, the API and the clients read one definition; CI fails on a codegen diff |
 | Shared TS packages | `packages/routing`, `packages/map-style`, `packages/floorplan`, `packages/contracts` | One copy each, used by the webapp, the mapper app and processing |
 | Database | Postgres 18 + PostGIS 3.6 (`postgis/postgis:18-3.6`) | Spatial queries, graph storage, versioning |
-| Migrations | dbmate, plain SQL in `db/migrations/` | `db/schema.sql` stays the draft until the Phase 1 migration task turns it into the first migration |
-| Object storage | S3 API only. Local: RustFS (SeaweedFS as fallback). Later private storage: S3 ap-southeast-1. Public: Cloudflare R2/Pages | MinIO community edition is archived; R2 cannot be pinned to Singapore, so nothing private goes there |
+| Migrations | dbmate, plain SQL in `db/migrations/` | `db/schema.sql` is a generated snapshot of the migrated schema; CI regenerates it and fails on a diff |
+| Object storage | S3 API only. Local: RustFS (SeaweedFS as fallback), with separate buckets for raw bundles, private exports and public files. Later private storage: S3 ap-southeast-1. Public: Cloudflare R2/Pages | MinIO community edition is archived; R2 cannot be pinned to Singapore, so nothing private goes there |
 | Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict, Biome for lint and format; Go only in `services/localization` with its own go.mod | One toolchain across apps, services and packages |
 | CI | GitHub Actions: lint, typecheck, tests, contracts codegen check; a macOS runner job for the Swift module | macOS runners are free for public repos |
 | iOS builds | EAS Build (Free plan to start) and/or `eas build --local` on GitHub macOS runners; Xcode Cloud as an option. Dev client + Metro on Windows for JS changes | No Mac needed |

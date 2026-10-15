@@ -9,7 +9,7 @@ import type {
   NodeTagKind,
   PoiTagKind,
   Registration,
-} from "./generated/capture-bundle.ts";
+} from "./generated/contracts.ts";
 
 /** The capture bundle format version this package describes (`manifest.schema_version`). */
 export const SCHEMA_VERSION = 1;

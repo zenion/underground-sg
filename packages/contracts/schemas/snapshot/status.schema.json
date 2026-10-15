@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/snapshot/status.schema.json",
+  "title": "StatusOverlay",
+  "description": "status.json (docs/snapshot-format.md): the short-lived status overlay, at the root of the public files and never part of a version. Built from the status reports whose change set is published and whose validity window covers generated_at: for each feature, the newest such report. Clients ignore entries for features the loaded version doesn't have, and entries whose valid_until has passed. Checked by the validator, not by this schema: at most one entry per feature_type and feature_id, and valid_until later than valid_from.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "description": "Version of the snapshot format.",
+      "type": "integer",
+      "const": 1
+    },
+    "generated_at": {
+      "description": "When the overlay was built.",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/dateTime"
+        }
+      ]
+    },
+    "entries": {
+      "description": "One entry per feature with an active report. At most 10000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      },
+      "maxItems": 10000
+    }
+  },
+  "required": ["schema_version", "generated_at", "entries"],
+  "additionalProperties": false,
+  "$defs": {
+    "entry": {
+      "title": "StatusEntry",
+      "description": "The active status of one node or edge, from a published status report.",
+      "type": "object",
+      "properties": {
+        "feature_type": {
+          "$ref": "#/$defs/featureType"
+        },
+        "feature_id": {
+          "description": "The node's or edge's id in indoor.json.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "is_open": {
+          "description": "false: closed (exit shut, lift down). true: open, ending an earlier closure before its valid_until.",
+          "type": "boolean"
+        },
+        "note": {
+          "description": "A short public note, for example \"Lift under maintenance\", or null. Shown to everyone.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "valid_from": {
+          "description": "When the status starts.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/dateTime"
+            }
+          ]
+        },
+        "valid_until": {
+          "description": "When the status ends, or null for until replaced.",
+          "anyOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/dateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["feature_type", "feature_id", "is_open", "note", "valid_from", "valid_until"],
+      "additionalProperties": false
+    },
+    "featureType": {
+      "title": "StatusFeatureType",
+      "description": "What a status report is about: the feature_type values of status_reports in db/schema.sql.",
+      "type": "string",
+      "enum": ["node", "edge"]
+    }
+  }
+}

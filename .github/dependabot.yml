@@ -6,3 +6,22 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Keeps the digest-pinned images in docker-compose.yml current. For PostGIS only digest
+  # refreshes of the same tag arrive (PostgreSQL 18 minor releases, image rebuilds): copy
+  # the new digest into CI's "Database (postgis)" service container in the same PR (a
+  # @usg/db unit test fails until the two match). Tag changes are ignored. Dependabot reads
+  # the whole tag 18-3.6 as one version number, so it would offer 19-3.6 (PostgreSQL 19) or
+  # 18-3.7 (a PostGIS release) as ordinary updates, and neither is: a PostgreSQL major
+  # starts an empty data directory in the usg_postgis-data volume, and a PostGIS release
+  # needs ALTER EXTENSION ... UPDATE. Change the tag by hand, with an amendment to decision
+  # 0009 and an upgrade plan for the volume (pg_upgrade, or dump and restore).
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: postgis/postgis
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch

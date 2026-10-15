@@ -2,6 +2,8 @@ packages:
   - apps/*
   - packages/*
   - services/*
+  - db
+  - scripts
 
 # Shared tool versions. Workspace packages depend on these as "catalog:" so every
 # package uses the same TypeScript, Vitest and Node types.

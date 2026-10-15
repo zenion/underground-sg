@@ -3,7 +3,16 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { GENERATED_DIRS, generate, PACKAGE_DIR, writeGenerated } from "../scripts/codegen.ts";
+import {
+  DOCUMENT_GROUPS,
+  GENERATED_DIRS,
+  GENERATED_SWIFT_FILE,
+  generate,
+  PACKAGE_DIR,
+  SWIFT_DOCUMENTS,
+  writeGenerated,
+} from "../scripts/codegen.ts";
+import { ALL_SCHEMA_FILES } from "./schemas.ts";
 
 // quicktype and Prettier take a few seconds on a cold start.
 const TIMEOUT_MS = 60_000;
@@ -50,6 +59,42 @@ describe("generated code", () => {
   );
 });
 
+describe("which documents get which output", () => {
+  test("every schema except a defs file is a document of exactly one group", () => {
+    const documents = DOCUMENT_GROUPS.flatMap((group) => group.documents.map((d) => d.schema));
+    expect(new Set(documents).size).toBe(documents.length);
+    expect([...documents].sort()).toEqual(
+      ALL_SCHEMA_FILES.filter((file) => !file.endsWith("/defs.schema.json")).sort(),
+    );
+  });
+
+  test("only the capture bundle's documents get Swift types", () => {
+    expect(SWIFT_DOCUMENTS.map((d) => d.schema)).toEqual(
+      DOCUMENT_GROUPS.flatMap((g) => g.documents)
+        .map((d) => d.schema)
+        .filter((schema) => schema.startsWith("capture-bundle/")),
+    );
+  });
+
+  test(
+    "CaptureBundle.swift has no snapshot or diff types",
+    async () => {
+      const swift = (await generate()).find((file) => file.path === GENERATED_SWIFT_FILE);
+      for (const name of [
+        "IndoorSnapshot",
+        "LatestPointer",
+        "StatusOverlay",
+        "ChangeSetDiff",
+        "VenueRow",
+      ]) {
+        expect(swift?.content).not.toContain(name);
+      }
+      expect(swift?.content).toContain("struct CaptureManifest");
+    },
+    TIMEOUT_MS,
+  );
+});
+
 describe("the package entry point", () => {
   // Environment neutrality itself (no Node globals or node: imports) is checked by the
   // typecheck: `tsc -p tsconfig.neutral.json` compiles the . entry with no Node types. This test
@@ -76,6 +121,7 @@ describe("the package entry point", () => {
     expect(seen.size).toBeGreaterThan(1);
     for (const file of seen) {
       expect(file, "the . entry reaches the bundle validator").not.toContain("bundle-validator");
+      expect(file, "the . entry reaches the Ajv validators").not.toContain("validators");
       expect(file, "the . entry reaches the schema files (node:fs)").not.toContain("schema-files");
     }
   });
@@ -103,6 +149,12 @@ describe("package exports", () => {
 
   test("the . entry is src/index.ts", () => {
     expect(require.resolve("@usg/contracts")).toBe(join(PACKAGE_DIR, "src", "index.ts"));
+  });
+
+  test("the validators entry is src/validators.ts", () => {
+    expect(require.resolve("@usg/contracts/validators")).toBe(
+      join(PACKAGE_DIR, "src", "validators.ts"),
+    );
   });
 
   test("the bundle-validator entry is src/bundle-validator/index.ts", () => {

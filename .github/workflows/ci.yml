@@ -49,3 +49,44 @@ jobs:
       # (dependabot/dependabot-core#15904), so Dependabot alerts miss npm packages. Audit here.
       - if: runner.os == 'Linux'
         run: pnpm audit --audit-level high
+
+  db:
+    # Branch protection requires the two check names above; add this one there to require it.
+    name: Database (postgis)
+    # Linux only: Windows runners can't run Linux service containers.
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      # The service container below. pnpm migrate creates the usg database.
+      DATABASE_URL: postgres://usg:usg-ci@localhost:5432/usg?sslmode=disable
+    services:
+      postgis:
+        # The same pinned image as docker-compose.yml (db/test/unit/stack.test.ts checks).
+        image: postgis/postgis:18-3.6@sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677
+        env:
+          POSTGRES_USER: usg
+          POSTGRES_PASSWORD: usg-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U usg -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+        with:
+          cache: true
+          require-lockfile: true
+      - run: pnpm migrate
+      - run: pnpm test:db
+      # db/schema.sql must match the migrations: regenerate it and fail on any difference.
+      # pg_dump runs inside the service container, so it matches the server's version.
+      - run: pnpm db dump
+        env:
+          PG_CONTAINER: ${{ job.services.postgis.id }}
+      - run: git diff --exit-code db/schema.sql

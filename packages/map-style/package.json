@@ -1,0 +1,24 @@
+{
+  "name": "@usg/map-style",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The MapLibre style shared by the Underground SG webapp and mapper app: OneMap raster tiles, the indoor and street layers, the level filter, attribution and glyphs",
+  "exports": {
+    ".": "./src/index.ts",
+    "./glyphs/*": "./glyphs/*"
+  },
+  "scripts": {
+    "typecheck": "tsc && tsc -p tsconfig.neutral.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@maplibre/maplibre-gl-style-spec": "26.4.4",
+    "@usg/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

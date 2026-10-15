@@ -1,6 +1,6 @@
 # 0009: Hosting on the owner's PC first, a small Singapore server in Phase 4
 
-Status: accepted · 2026-10-12
+Status: accepted · 2026-10-12 · amended 2026-10-15
 
 ## Decision
 
@@ -8,7 +8,8 @@ The budget is as low as possible. No cloud server until Phase 4; only public fil
 
 ### Phases 1–3: the owner's PC
 
-- PostGIS (`postgis/postgis:18-3.6`), the local S3 stand-in (RustFS, with SeaweedFS as the fallback), the API and the processing workers all run on the owner's Windows PC, under Docker Desktop with the WSL2 backend.
+- PostGIS (`postgis/postgis:18-3.6`), the local S3 stand-in (RustFS, with SeaweedFS as the fallback), the API and the processing workers all run on the owner's Windows PC, under Docker Desktop with the WSL2 backend. PostGIS and RustFS are defined in `docker-compose.yml`, with their ports bound to 127.0.0.1; the multipart-upload task (Phase 2) opens RustFS's S3 port to the LAN for the phone. The root key pair in `.env.example` is public, so before that port leaves 127.0.0.1 the root credentials in `.env` are replaced with generated ones, and the API gets a non-root access key limited to the bundles bucket.
+- RustFS holds three buckets, named in `.env.example`: raw capture bundles (private), the private full exports (private), and the public files (`indoor.json` and `street.json` per version, `latest.json`, `status.json`). Keeping public files in a bucket of their own means a public-read rule or a sync to R2 can never reach private data; in Phase 4 the private buckets move to S3 in ap-southeast-1 and the public one is R2.
 - The phone uploads over home Wi-Fi on the LAN.
 - Raw bundles hold trajectories, which are personal data ([0005](0005-privacy-by-design.md)), so the PostGIS and RustFS data on the PC sit on an encrypted disk (BitLocker, for example).
 - Raw bundles, the private full exports and a database dump are backed up to an external drive or a cheap S3 bucket in ap-southeast-1, encrypted at rest either way.
