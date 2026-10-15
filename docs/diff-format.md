@@ -71,10 +71,10 @@ Each row holds the table's columns in `db/schema.sql` order, except `id` and `re
     "base_rev": 3,
     "before": { "level_id": "20000000-0000-0000-0000-000000000001", "kind": "junction", "name": null,
       "street_name": null, "connector_id": null, "elevation_m": null,
-      "geom": { "type": "Point", "coordinates": [103.8502, 1.2915] } },
+      "geom": { "type": "Point", "coordinates": [103.8504, 1.2916] } },
     "after": { "level_id": "20000000-0000-0000-0000-000000000001", "kind": "junction", "name": null,
       "street_name": null, "connector_id": null, "elevation_m": null,
-      "geom": { "type": "Point", "coordinates": [103.85021, 1.29152] } } },
+      "geom": { "type": "Point", "coordinates": [103.85041, 1.29162] } } },
   { "op": "remove", "feature_type": "poi", "id": "60000000-0000-0000-0000-000000000001",
     "base_rev": 1,
     "before": { "space_id": "30000000-0000-0000-0000-000000000002",
@@ -91,7 +91,7 @@ Each row holds the table's columns in `db/schema.sql` order, except `id` and `re
     "base_rev": null, "before": null,
     "after": { "node_id": "40000000-0000-0000-0000-000000000004", "kind": "floor_point",
       "name": "North Bridge Road exit B threshold", "level_id": null, "facing_deg": 352.5,
-      "surveyed_geom": { "type": "Point", "coordinates": [103.8506, 1.2928] },
+      "surveyed_geom": { "type": "Point", "coordinates": [103.8506, 1.2916] },
       "prior_source": "lta_exit", "prior_sigma_m": 3,
       "photo_uri": "anchor-photos/80000000-0000-0000-0000-000000000001.jpg" } }
 ]

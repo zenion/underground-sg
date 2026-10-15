@@ -17,7 +17,9 @@
     "test:db": "turbo run test:db",
     "migrate": "pnpm --filter @usg/db migrate",
     "db": "pnpm --filter @usg/db run",
-    "buckets": "pnpm --filter @usg/scripts buckets"
+    "buckets": "pnpm --filter @usg/scripts buckets",
+    "web": "pnpm --filter @usg/web dev",
+    "web:fixtures": "pnpm --filter @usg/web dev:fixtures"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

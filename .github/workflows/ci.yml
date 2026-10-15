@@ -42,6 +42,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # The webapp's static build (apps/web/dist): about a second, uncached, on the owner's PC.
+      - run: pnpm build
       # pnpm 12 writes a two-document lockfile that GitHub's dependency graph can't read yet
       # (dependabot/dependabot-core#15904), so Dependabot alerts miss npm packages. Audit here.
       - if: runner.os == 'Linux'

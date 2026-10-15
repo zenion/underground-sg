@@ -37,7 +37,16 @@ pnpm install
 pnpm check
 ```
 
-`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md).
+`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm build` builds what has a build (the webapp's static files, in `apps/web/dist`). `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md).
+
+### Webapp
+
+```bash
+pnpm web            # http://localhost:5173, with /public, /api and /map proxied to the API (API_PORT, 28000)
+pnpm web:fixtures   # the same page with a built-in demo map, no API needed
+```
+
+Add `--host` (`pnpm web:fixtures --host`) to open the page from a phone on the same Wi-Fi, at the Wi-Fi adapter's `Network:` address Vite prints. Windows Defender Firewall blocks the phone on a Public network profile, and may not ask first: [apps/web/README.md](apps/web/README.md#on-a-phone-over-home-wi-fi) says how to let it through, and has the other details: settings, the fixture scenarios and building.
 
 ### Local stack
 
