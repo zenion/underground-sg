@@ -4,11 +4,21 @@
   "private": true,
   "type": "module",
   "description": "PostGIS schema for Underground SG: dbmate migrations, the generated schema.sql snapshot and the database rule tests",
+  "exports": {
+    "./demo": "./src/demo.ts",
+    "./local": "./src/local.ts",
+    "./seed": "./src/seed.ts",
+    "./seed/core-venues": "./seed/core-venues.ts",
+    "./test/global-setup": "./test/db/global-setup.ts",
+    "./test/harness": "./test/db/harness.ts",
+    "./test/fixtures": "./test/db/fixtures.ts"
+  },
   "scripts": {
     "migrate": "node scripts/dbmate.ts up",
     "status": "node scripts/dbmate.ts status",
     "new": "node scripts/dbmate.ts new",
     "rollback": "node scripts/dbmate.ts rollback",
+    "seed": "node scripts/seed.ts",
     "dump": "node scripts/dump.ts",
     "typecheck": "tsc",
     "test": "vitest run --project unit",
@@ -17,9 +27,13 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/pg": "8.23.1",
-    "dbmate": "2.36.0",
-    "pg": "8.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@usg/scripts": "workspace:*",
+    "dbmate": "2.36.0",
+    "pg": "8.23.1",
+    "pg-connection-string": "2.14.1"
   }
 }

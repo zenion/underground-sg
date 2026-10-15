@@ -1,5 +1,6 @@
-// The examples in docs/snapshot-format.md and docs/diff-format.md: every JSON block tagged with a
-// file name (```json latest.json) is valid, so the docs and the schemas can't drift apart.
+// The examples in docs/snapshot-format.md, docs/diff-format.md and docs/head-export-format.md: every
+// JSON block tagged with a file name (```json latest.json) is valid, so the docs and the schemas
+// can't drift apart.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
@@ -7,6 +8,7 @@ import { checkLatestPointer, checkStatusOverlay } from "../src/index.ts";
 import {
   snapshotValidator,
   validateChangeSetDiff,
+  validateHeadExport,
   validateSnapshotFile,
 } from "../src/validators.ts";
 import * as examples from "./map-examples.ts";
@@ -21,6 +23,7 @@ function taggedBlocks(doc: string): [string, unknown][] {
 
 const snapshotDoc = taggedBlocks("snapshot-format.md");
 const diffDoc = taggedBlocks("diff-format.md");
+const exportDoc = taggedBlocks("head-export-format.md");
 
 describe("docs/snapshot-format.md", () => {
   test("has an example of each file", () => {
@@ -66,5 +69,13 @@ describe("docs/diff-format.md", () => {
     const [, document] = diffDoc[0] ?? [];
     expect(document).toEqual(examples.diff);
     expect(validateChangeSetDiff(document, "structural")).toEqual({ valid: true, problems: [] });
+  });
+});
+
+describe("docs/head-export-format.md", () => {
+  test("its example is valid", () => {
+    expect(exportDoc.map(([name]) => name)).toEqual(["head-export.json"]);
+    const [, document] = exportDoc[0] ?? [];
+    expect(validateHeadExport(document)).toEqual({ valid: true, problems: [] });
   });
 });

@@ -3,8 +3,10 @@
 // webapp import it. Node-only code, such as the bundle validator and the Ajv validators for the
 // map files, gets its own export.
 
+export * from "./api.ts";
 export * from "./capture-bundle.ts";
 export * from "./diff.ts";
+export * from "./export.ts";
 export type * from "./generated/contracts.ts";
 export * from "./map.ts";
 export * from "./schema-ids.ts";

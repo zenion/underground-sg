@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/api/error.schema.json",
+  "title": "ErrorResponse",
+  "description": "The body of every 4xx and 5xx response from services/api (services/api/README.md): Fastify's error shape. The message is for people and never carries credentials, connection strings or private data.",
+  "type": "object",
+  "properties": {
+    "statusCode": {
+      "description": "The HTTP status code.",
+      "type": "integer",
+      "minimum": 400,
+      "maximum": 599
+    },
+    "code": {
+      "description": "A stable error code, when there is one (Fastify's own codes start with FST_).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "error": {
+      "description": "The status code's reason phrase, for example Not Found.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "message": {
+      "description": "What went wrong.",
+      "type": "string",
+      "maxLength": 1000
+    }
+  },
+  "required": ["statusCode", "error", "message"],
+  "additionalProperties": false
+}

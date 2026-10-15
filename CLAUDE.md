@@ -16,7 +16,7 @@ apps/
     modules/capture-native/  local Expo module in Swift: ARKit, keyframes, Vision blur, bundle writer, packBundle
   web/                       Vite + React + MapLibre GL JS v6 public webapp; moderation UI as an authenticated route
 services/
-  api/                       Node, Fastify 5, Kysely: ingest, map snapshots, moderation
+  api/                       Node, Fastify 5, Kysely: ingest, map snapshots, moderation; publish CLI (`pnpm map`), local demo (`pnpm demo`)
   processing/                TS workers in separate processes: validate, privacy re-check, align, extract, diff
   localization/              Go service, Phase 4 (own go.mod): retrieval, feature matching, pose solve
 packages/
@@ -24,14 +24,15 @@ packages/
   routing/                   cost model + router, used by web and mapper (no port)
   map-style/                 one MapLibre style shared by web and mapper
   floorplan/                 floor triangles to walkable polygon; runs in Hermes and in processing
-db/                          @usg/db: migrations, schema snapshot, dbmate wrapper, database rule tests
+db/                          @usg/db: migrations, schema snapshot, dbmate wrapper, seed script, database rule tests
   migrations/                dbmate, plain SQL: the schema is defined here
+  seed/                      the seed script's dataset (`pnpm db seed`): core venues; levels after the site walk
   schema.sql                 generated snapshot of the migrated schema (`pnpm db dump`); never edit by hand
 scripts/                     @usg/scripts: scripts for the local stack (`pnpm buckets`)
 docker-compose.yml           local stack: PostGIS and RustFS; settings in .env (copy .env.example)
 docs/
   spec.md, backlog.md, capture-bundle.md, decisions/, reviews/
-  snapshot-format.md, diff-format.md
+  snapshot-format.md, diff-format.md, head-export-format.md
 ```
 
 Create directories as work starts. Don't scaffold empty ones.

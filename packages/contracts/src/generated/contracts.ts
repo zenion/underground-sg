@@ -241,6 +241,11 @@ export type StreetPriorSource = "lta_exit" | "gnss" | "imagery" | "onemap";
  * @maxItems 10000
  */
 export type ChangeSetDiff = DiffEntry[];
+/**
+ * Why a check failed: unreachable (nothing answered), timeout (no answer in time), access_denied (the credentials were refused), not_migrated (the database is missing, or has no migrations or no PostGIS), missing_bucket (a bucket does not exist), error (anything else; the API logs it).
+ */
+export type HealthProblem =
+  "unreachable" | "timeout" | "access_denied" | "not_migrated" | "missing_bucket" | "error";
 
 /**
  * Every document type in @usg/contracts, by group and document name. A type map only: no file has this shape.
@@ -249,6 +254,8 @@ export interface ContractDocuments {
   "capture-bundle": CaptureBundleDocuments;
   snapshot: SnapshotDocuments;
   diff: DiffDocuments;
+  api: ApiDocuments;
+  export: ExportDocuments;
 }
 /**
  * The type of each JSON file in a capture bundle, keyed by its path in the bundle directory; for a .jsonl file, the type of one line. A type map only: no file has this shape.
@@ -1784,4 +1791,366 @@ export interface AnchorRemove {
    * Always null for a remove.
    */
   after: null;
+}
+/**
+ * The type of each services/api response body (services/api/README.md), keyed by the route it answers; error is the body of every 4xx and 5xx response. A type map only: no file has this shape.
+ */
+export interface ApiDocuments {
+  "GET /health": HealthResponse;
+  "GET /map/latest": MapLatestResponse;
+  error: ErrorResponse;
+}
+/**
+ * GET /health (services/api/README.md): whether the API reaches PostGIS and the object store, and the versions it runs with. The status code is 200 when every check passes and 503 otherwise, with this body either way. It never carries credentials, connection strings, endpoints, bucket names or the services' own error messages: a failed check gives only a problem code, and the API logs the details.
+ */
+export interface HealthResponse {
+  /**
+   * ok when every check passes; unavailable otherwise.
+   */
+  status: "ok" | "unavailable";
+  api: HealthApi;
+  database: HealthDatabase;
+  storage: HealthStorage;
+}
+/**
+ * The API process.
+ */
+export interface HealthApi {
+  /**
+   * The version of services/api (its package.json).
+   */
+  version: string;
+  /**
+   * The Node.js version, for example v26.12.0.
+   */
+  node: string;
+  /**
+   * The snapshot format version the API builds and serves (docs/snapshot-format.md).
+   */
+  snapshot_schema_version: number;
+}
+/**
+ * PostGIS. The versions are null when the check could not read them.
+ */
+export interface HealthDatabase {
+  /**
+   * true when a query ran, the migrations are applied and PostGIS is installed.
+   */
+  ok: boolean;
+  /**
+   * Why the check failed, or null when it passed.
+   */
+  problem: HealthProblem | null;
+  /**
+   * The server's PostgreSQL version (server_version), for example 18.0.
+   */
+  postgres: string | null;
+  /**
+   * The version of the PostGIS extension installed in the database (pg_extension), for example 3.6.0.
+   */
+  postgis: string | null;
+  /**
+   * The newest dbmate migration applied (its 14-digit version), or null when none is.
+   */
+  migration: string | null;
+}
+/**
+ * The S3 object store: RustFS on the owner's PC.
+ */
+export interface HealthStorage {
+  /**
+   * true when every bucket exists and answers.
+   */
+  ok: boolean;
+  /**
+   * Why the check failed, or null when it passed.
+   */
+  problem: HealthProblem | null;
+  /**
+   * The object store's version, when its health endpoint reports one (RustFS does); null otherwise.
+   */
+  server: string | null;
+  buckets: HealthBuckets;
+}
+/**
+ * Each bucket by its role, true when it exists and answers. The names stay in the API's configuration.
+ */
+export interface HealthBuckets {
+  /**
+   * Raw capture bundles (private).
+   */
+  bundles: boolean;
+  /**
+   * Private full exports of HEAD, for rollback.
+   */
+  exports: boolean;
+  /**
+   * The public map files.
+   */
+  public: boolean;
+}
+/**
+ * GET /map/latest (services/api/README.md): the map version map_head points at, with the URLs of its files, for the owner's tools on the LAN (the mapper app and the change-set preview). Public clients read latest.json instead, which can lag map_head until the reconcile job runs (docs/snapshot-format.md). Before the first publish the route answers 404 with an ErrorResponse. Holds nothing private: no publisher, private export key or note.
+ */
+export interface MapLatestResponse {
+  /**
+   * The map version (map_versions.id).
+   */
+  version: number;
+  /**
+   * When the version was published (map_versions.published_at), in Singapore time.
+   */
+  published_at: DateTime;
+  /**
+   * The version's content hash (map_versions.snapshot_sha256), which names its directory.
+   */
+  snapshot_sha256: Sha256;
+  /**
+   * For a rollback, the version it restored (map_versions.restores); null otherwise.
+   */
+  restores: number | null;
+  files: MapLatestFiles;
+  /**
+   * true when the map is the demonstration data of pnpm demo (the database holds the demo), as latest.json's demo says; absent otherwise.
+   */
+  demo?: true;
+}
+/**
+ * The version's files.
+ */
+export interface MapLatestFiles {
+  /**
+   * indoor.json.
+   */
+  indoor: MapLatestFile;
+  /**
+   * street.json.
+   */
+  street: MapLatestFile;
+}
+/**
+ * One file of the version: its path under the root of the public files, and a URL to fetch it from.
+ */
+export interface MapLatestFile {
+  /**
+   * Path relative to the root of the public files: snapshots/<snapshot_sha256>/indoor.json or street.json.
+   */
+  path: string;
+  /**
+   * Where to fetch it: the path under API_PUBLIC_FILES_URL when that is set, otherwise under this API's GET /public/.
+   */
+  url: string;
+}
+/**
+ * The body of every 4xx and 5xx response from services/api (services/api/README.md): Fastify's error shape. The message is for people and never carries credentials, connection strings or private data.
+ */
+export interface ErrorResponse {
+  /**
+   * The HTTP status code.
+   */
+  statusCode: number;
+  /**
+   * A stable error code, when there is one (Fastify's own codes start with FST_).
+   */
+  code?: string;
+  /**
+   * The status code's reason phrase, for example Not Found.
+   */
+  error: string;
+  /**
+   * What went wrong.
+   */
+  message: string;
+}
+/**
+ * The type of the private full export of HEAD (docs/head-export-format.md), keyed by its name. A type map only: no file has this shape.
+ */
+export interface ExportDocuments {
+  "head-export.json": HeadExport;
+}
+/**
+ * The private full export of HEAD for one map version (docs/head-export-format.md): every row of every HEAD table, anchors and private columns included, in the diff format's row format with its id and rev. Rollback restores HEAD from it. Private: stored in the exports bucket, never public. Checked by the writer, not by this schema: each table's entries are sorted by id, ids are unique, and the coordinate rules of map/defs.schema.json.
+ */
+export interface HeadExport {
+  /**
+   * Version of the export format.
+   */
+  schema_version: 1;
+  /**
+   * The map version the export belongs to (map_versions.id).
+   */
+  version: number;
+  /**
+   * When the version was published (map_versions.published_at), in Singapore time.
+   */
+  published_at: DateTime;
+  /**
+   * The version's public files (map_versions.snapshot_sha256), for cross-checking.
+   */
+  snapshot_sha256: Sha256;
+  /**
+   * Every row of venues, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  venues: HeadVenue[];
+  /**
+   * Every row of levels, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  levels: HeadLevel[];
+  /**
+   * Every row of spaces, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  spaces: HeadSpace[];
+  /**
+   * Every row of nodes, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  nodes: HeadNode[];
+  /**
+   * Every row of edges, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  edges: HeadEdge[];
+  /**
+   * Every row of pois, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  pois: HeadPoi[];
+  /**
+   * Every row of anchors, sorted by id. At most 1000000.
+   *
+   * @maxItems 1000000
+   */
+  anchors: HeadAnchor[];
+}
+/**
+ * One row of venues in HEAD, with its id and rev.
+ */
+export interface HeadVenue {
+  /**
+   * venues.id.
+   */
+  id: Uuid;
+  /**
+   * venues.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * venues.permission: the reference to the written permission to scan, or null. Written only by the seed script; no diff carries it.
+   */
+  permission: string | null;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: VenueRow;
+}
+/**
+ * One row of levels in HEAD, with its id and rev.
+ */
+export interface HeadLevel {
+  /**
+   * levels.id.
+   */
+  id: Uuid;
+  /**
+   * levels.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: LevelRow;
+}
+/**
+ * One row of spaces in HEAD, with its id and rev.
+ */
+export interface HeadSpace {
+  /**
+   * spaces.id.
+   */
+  id: Uuid;
+  /**
+   * spaces.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: SpaceRow;
+}
+/**
+ * One row of nodes in HEAD, with its id and rev.
+ */
+export interface HeadNode {
+  /**
+   * nodes.id.
+   */
+  id: Uuid;
+  /**
+   * nodes.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: NodeRow;
+}
+/**
+ * One row of edges in HEAD, with its id and rev.
+ */
+export interface HeadEdge {
+  /**
+   * edges.id.
+   */
+  id: Uuid;
+  /**
+   * edges.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: EdgeRow;
+}
+/**
+ * One row of pois in HEAD, with its id and rev.
+ */
+export interface HeadPoi {
+  /**
+   * pois.id.
+   */
+  id: Uuid;
+  /**
+   * pois.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: PoiRow;
+}
+/**
+ * One row of anchors in HEAD, with its id and rev.
+ */
+export interface HeadAnchor {
+  /**
+   * anchors.id.
+   */
+  id: Uuid;
+  /**
+   * anchors.rev: bumped by each approved change that touched the row.
+   */
+  rev: number;
+  /**
+   * The row's columns in the diff format (docs/diff-format.md).
+   */
+  row: AnchorRow;
 }

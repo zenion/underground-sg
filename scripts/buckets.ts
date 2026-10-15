@@ -9,6 +9,7 @@ import {
   S3ServiceException,
 } from "@aws-sdk/client-s3";
 import { loadRootEnv, required } from "./env.ts";
+import { unreachableMessage } from "./errors.ts";
 
 /** Each bucket's variable and what it holds (docs/decisions/0004 and 0009). */
 const BUCKETS = [
@@ -32,15 +33,6 @@ const client = new S3Client({
     secretAccessKey: required("S3_SECRET_ACCESS_KEY"),
   },
 });
-
-/** True when nothing answered at the endpoint: the error, or one it wraps, is ECONNREFUSED. */
-function connectionRefused(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const { code, errors, cause } = error as { code?: unknown; errors?: unknown; cause?: unknown };
-  if (code === "ECONNREFUSED") return true;
-  if (Array.isArray(errors) && errors.some(connectionRefused)) return true;
-  return connectionRefused(cause);
-}
 
 async function exists(bucket: string): Promise<boolean> {
   try {
@@ -74,10 +66,11 @@ try {
   }
 } catch (error) {
   // The SDK's own error is a nested AggregateError that names neither the endpoint nor the fix.
-  if (!connectionRefused(error)) throw error;
-  console.error(
-    `Nothing is listening on ${endpoint}. Start the local stack with \`docker compose up -d --wait\`.`,
-  );
+  const message = unreachableMessage(error, [
+    { name: "RustFS", variable: "S3_ENDPOINT", url: endpoint },
+  ]);
+  if (message === undefined) throw error;
+  console.error(message);
   process.exitCode = 1;
 } finally {
   client.destroy();

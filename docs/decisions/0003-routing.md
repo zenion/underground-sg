@@ -1,6 +1,6 @@
 # 0003: Own routing graph, OSM street graph plus indoor graph, routed on the client
 
-Status: accepted · 2026-10-12 · amended 2026-10-12
+Status: accepted · 2026-10-12 · amended 2026-10-15
 
 ## Decision
 
@@ -17,7 +17,7 @@ Route over one network: our indoor graph joined to an OpenStreetMap street graph
 | --- | --- | --- |
 | Indoor | `nodes` and `edges` | `indoor.json` |
 | Street | `street_nodes` and `street_edges`, keyed by OSM node ID | `street.json` (ODbL) |
-| Joins | `street_connectors`: each exit or entrance node to the nearest street vertex, computed in SVY21 and rebuilt in every publish | `indoor.json` |
+| Joins | `street_connectors`: each exit or entrance node to the nearest street vertex within 100 m, computed in SVY21 and rebuilt in every publish | `indoor.json` |
 
 - The OSM import filters out ways with `tunnel=yes`, `indoor=*`, a negative `level` or `layer`, and ways inside venue footprints, because OSM already maps some underground links. `covered` comes from `covered=yes` plus tunnel, building and roof heuristics. The import is re-runnable and idempotent.
 - File layout and versioning: [0004](0004-storage-and-versioning.md).
@@ -78,3 +78,4 @@ Background and sources: [stack review](../reviews/2026-10-12-stack-review.md), s
 - Mapping has to record landings with their `connector_id`, link and exit opening hours, and paid-area boundaries. The site walk collects opening hours and paid-area boundaries first.
 - Phase 3 field tests verify routes on foot, including paid-area avoidance, opening hours and step-free mode.
 - OSM attribution stays visible on every map view.
+- A street connector joins an exit or entrance only to a street vertex within 100 m (2026-10-15, a tuning value; [snapshot-format.md](../snapshot-format.md#indoorjson)). An exit with no vertex that close has no connector, so routes can't start or end there until the street graph covers it: better than a connector drawn through buildings when the graph near it is missing. Revisit with the OSM import, or split street edges at the nearest point instead, if real exits sit further than that from every vertex.

@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/generated"]
+    "includes": ["**", "!**/generated", "!services/api/test/fixtures/snapshot"]
   },
   "formatter": {
     "enabled": true,
