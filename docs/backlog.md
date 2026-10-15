@@ -31,7 +31,8 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 - [ ] [Owner] Decide how the supply-chain checks treat the Expo toolchain, which `apps/mapper` brought in:
   - `trustPolicy: no-downgrade`: Expo SDK 58 moved to trusted publishing on 2026-09-29, and SDK 57 patches published since then have no provenance, so pnpm refuses them. `apps/mapper` is pinned to the last SDK 57 patches before that date (`expo` 57.0.26, `expo-router` 57.0.24 and so on) and `expo-doctor` reports patch mismatches. Exact-version `trustPolicyExclude` entries would allow the newer patches
   - `semver@6` is overridden to 7.8.5 in `pnpm-workspace.yaml`: 6.3.1 (wanted by `@babel/core`) fails the same trust check, and 6.3.0 has CVE-2022-25883
-  - CI's `pnpm audit --audit-level high` fails on two advisories with no patched version, both in build tooling that never ships in the app: `node-forge` (GHSA-86w9-cpqp-85rv, through `@expo/cli`) and `braces` (GHSA-vfj7-8cjw-p6xm, through Metro). Until this is decided the Linux CI job is red, so decide before merging `apps/mapper`. Options: `auditConfig.ignoreGhsas` for those two in `pnpm-workspace.yaml`, with a note to revisit when a patch appears (narrowest), or `--ignore-unfixable` in `ci.yml` (which also hides future unfixable advisories)
+  - Decided 2026-10-16: CI's `pnpm audit --audit-level high` ignores exactly two advisories with no patched version, both in build tooling that never ships in the app: `node-forge` (GHSA-86w9-cpqp-85rv, through `@expo/cli`) and `braces` (GHSA-vfj7-8cjw-p6xm, through Metro). They are listed under `auditConfig.ignoreGhsas` in `pnpm-workspace.yaml`; future advisories still fail CI
+- [ ] Remove each ignored advisory from `auditConfig.ignoreGhsas` once a fixed `node-forge` or `braces` reaches the Expo SDK in use (check with `pnpm audit` after each Expo upgrade)
 
 ### Repo and data
 
