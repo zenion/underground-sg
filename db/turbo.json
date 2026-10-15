@@ -2,6 +2,9 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/errors.ts"]
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",

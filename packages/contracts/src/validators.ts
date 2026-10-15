@@ -1,19 +1,25 @@
-// @usg/contracts/validators: validates the public map files (docs/snapshot-format.md) and
-// change-set diffs (docs/diff-format.md): the schema, then the checks the schema can't express.
-// Node only: it uses Ajv and node:crypto, so it is kept out of the environment-neutral `.` entry.
-// The snapshot builder validates what it writes, and processing and the API validate every diff.
+// @usg/contracts/validators: validates the public map files (docs/snapshot-format.md),
+// change-set diffs (docs/diff-format.md), the private full export (docs/head-export-format.md) and
+// the API's response bodies: the schema, then the checks the schema can't express. Node only: it uses Ajv, node:crypto and node:fs, so it is kept out of
+// the environment-neutral `.` entry. The snapshot builder validates what it writes, processing and
+// the API validate every diff, and the API checks its responses.
 
 import { createHash } from "node:crypto";
 import type { ValidateFunction } from "ajv/dist/2020.js";
+import { API_SCHEMA_BASE_URL, API_SCHEMA_FILES, type ApiDocumentName } from "./api.ts";
 import { createAjv, describeSchemaError } from "./bundle-validator/schemas.ts";
 import { CHANGE_SET_DIFF_SCHEMA_FILE, checkChangeSetDiff, DIFF_SCHEMA_BASE_URL } from "./diff.ts";
+import { checkHeadExport, EXPORT_SCHEMA_BASE_URL, HEAD_EXPORT_SCHEMA_FILE } from "./export.ts";
 import type {
   ChangeSetDiff,
+  HeadExport,
   IndoorSnapshot,
   LatestPointer,
   StatusOverlay,
   StreetSnapshot,
 } from "./generated/contracts.ts";
+import { readSchema } from "./schema-files.ts";
+import { SCHEMA_BASE_URL } from "./schema-ids.ts";
 import {
   checkIndoorSnapshot,
   checkLatestPointer,
@@ -58,6 +64,86 @@ export function snapshotValidator(file: SnapshotFileName): ValidateFunction {
 /** The compiled schema validator for `change_sets.diff`. */
 export function changeSetDiffValidator(): ValidateFunction {
   return validatorForId(`${DIFF_SCHEMA_BASE_URL}${CHANGE_SET_DIFF_SCHEMA_FILE}`);
+}
+
+/** The compiled schema validator for the private full export of HEAD. */
+export function headExportValidator(): ValidateFunction {
+  return validatorForId(`${EXPORT_SCHEMA_BASE_URL}${HEAD_EXPORT_SCHEMA_FILE}`);
+}
+
+/** The compiled schema validator for an API response body. */
+export function apiValidator(name: ApiDocumentName): ValidateFunction {
+  return validatorForId(`${API_SCHEMA_BASE_URL}${API_SCHEMA_FILES[name]}`);
+}
+
+/** Validates an API response body against its schema. */
+export function validateApiDocument(name: ApiDocumentName, document: unknown): ValidationResult {
+  const validate = apiValidator(name);
+  return result(validate(document) ? [] : schemaProblems(validate));
+}
+
+export { createAjv, describeSchemaError };
+
+/** JSON Schema keywords whose values are data, not schemas: inlining leaves them as they are. */
+const DATA_KEYWORDS = new Set(["const", "enum", "required"]);
+
+/**
+ * A schema file with every `$ref` replaced by what it points at, and `$schema`, `$id` and `$defs`
+ * dropped: one self-contained schema, for tools that can't resolve this package's `$id`s, such as
+ * Fastify route schemas and the OpenAPI document @fastify/swagger builds from them. `path` is the
+ * file's path under `schemas/` (for example `api/health.schema.json`). Validation keeps using the
+ * files themselves (`apiValidator` and the rest); the inlined schema accepts the same documents.
+ */
+export function inlineSchema(path: string): Record<string, unknown> {
+  return inlineValue(readSchema(path), `${SCHEMA_BASE_URL}${path}`, []) as Record<string, unknown>;
+}
+
+function inlineValue(value: unknown, base: string, refs: readonly string[]): unknown {
+  if (Array.isArray(value)) return value.map((item) => inlineValue(item, base, refs));
+  if (value === null || typeof value !== "object") return value;
+  const schema = value as Record<string, unknown>;
+  const ref = schema["$ref"];
+  if (typeof ref === "string") {
+    const target = new URL(ref, base);
+    if (refs.includes(target.href)) throw new Error(`Recursive $ref ${target.href}`);
+    const file = `${target.origin}${target.pathname}`;
+    if (!file.startsWith(SCHEMA_BASE_URL)) throw new Error(`$ref outside this package: ${ref}`);
+    const resolved = resolvePointer(readSchema(file.slice(SCHEMA_BASE_URL.length)), target.hash);
+    return inlineValue(resolved, file, [...refs, target.href]);
+  }
+  const inlined: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(schema)) {
+    if (key === "$schema" || key === "$id" || key === "$defs") continue;
+    if (DATA_KEYWORDS.has(key)) {
+      inlined[key] = child;
+    } else if (key === "properties") {
+      inlined[key] = Object.fromEntries(
+        Object.entries(child as Record<string, unknown>).map(([name, property]) => [
+          name,
+          inlineValue(property, base, refs),
+        ]),
+      );
+    } else {
+      inlined[key] = inlineValue(child, base, refs);
+    }
+  }
+  return inlined;
+}
+
+/** The part of a schema a URL fragment (`#/$defs/uuid`, or empty for the whole) points at. */
+function resolvePointer(schema: Record<string, unknown>, fragment: string): unknown {
+  const pointer = decodeURIComponent(fragment.replace(/^#/, ""));
+  if (pointer === "") return schema;
+  if (!pointer.startsWith("/")) throw new Error(`Unsupported $ref fragment #${pointer}`);
+  let current: unknown = schema;
+  for (const token of pointer.slice(1).split("/")) {
+    const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
+    if (current === null || typeof current !== "object" || !Object.hasOwn(current, key)) {
+      throw new Error(`$ref fragment #${pointer} points at nothing`);
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
 }
 
 function result(problems: readonly string[]): ValidationResult {
@@ -123,6 +209,13 @@ export function validateChangeSetDiff(
   const validate = changeSetDiffValidator();
   if (!validate(document)) return result(schemaProblems(validate));
   return result(checkChangeSetDiff(document as ChangeSetDiff, track));
+}
+
+/** Validates a private full export of HEAD, parsed: its schema, then `checkHeadExport`. */
+export function validateHeadExport(document: unknown): ValidationResult {
+  const validate = headExportValidator();
+  if (!validate(document)) return result(schemaProblems(validate));
+  return result(checkHeadExport(document as HeadExport));
 }
 
 /**

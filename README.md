@@ -2,7 +2,7 @@
 
 Find your way through downtown Singapore's underground links and malls: see where you are, and get a route between two street-level points that stays underground.
 
-Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded; no apps or services are built yet. The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
+Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded, with the contracts, the database schema and the API skeleton (`services/api`, with the publish transaction and a local demo map); the apps are not built yet. The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
 
 ## Docs
 
@@ -13,9 +13,11 @@ Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffol
 | [docs/capture-bundle.md](docs/capture-bundle.md) | Format of a capture upload, shared by the mapper app and the server |
 | [docs/snapshot-format.md](docs/snapshot-format.md) | The public map files: `latest.json`, each version's `indoor.json` and `street.json`, and the `status.json` overlay |
 | [docs/diff-format.md](docs/diff-format.md) | A change set's diff, and how approval applies it to the map |
+| [docs/head-export-format.md](docs/head-export-format.md) | The private full export of the map that each version keeps for rollback |
 | [docs/decisions/](docs/decisions/) | Why the key choices were made |
 | [docs/reviews/](docs/reviews/) | Background research behind the decisions, such as the 2026-10-12 stack review |
 | [db/](db/) | The PostGIS schema: dbmate migrations, a generated `schema.sql` snapshot and the database rule tests |
+| [services/api/](services/api/) | The API (Fastify): health, map metadata and the local stand-in for the public files; the publish CLI (`pnpm map`) and the local demo (`pnpm demo`) |
 | [CLAUDE.md](CLAUDE.md) | Working context for Claude Code |
 
 ## How it works
@@ -53,7 +55,11 @@ pnpm test:db
 
 - `pnpm migrate` runs dbmate: it creates the `usg` database on first run and applies the migrations in `db/migrations/`.
 - `pnpm buckets` creates the local buckets, if missing: `usg-bundles` for raw capture bundles and `usg-exports` for the full exports that rollback restores from (both private), and `usg-public` for the public map files (Cloudflare R2 in production).
-- `pnpm test:db` runs the database rule tests against the stack. Each test file gets its own throwaway database (`usg_scratch_*`), so the `usg` database is never touched. `pnpm check` doesn't run them; CI does, in its `Database (postgis)` job.
+- `pnpm api` runs the API on http://127.0.0.1:28000 (`/health`, `/map/latest`, `/public/...`, `/glyphs/...`, `/openapi.json`); see [services/api/README.md](services/api/README.md) for its settings and for opening it to the phone on the LAN (`API_HOST=0.0.0.0`, and allow Node through the Windows firewall on private networks only).
+- `pnpm demo` publishes a made-up demo map (names start with `Demo:`, `latest.json` says `"demo": true`) to the local stack through the real publish path, so the API, the webapp and the mapper app have something to show; `pnpm demo --reset` wipes it again by recreating the local database. Both work only on a stack on this machine that holds nothing but the demo. Details in [services/api/README.md](services/api/README.md#the-demo).
+- `pnpm map gates <change-set-id>`, `pnpm map publish <change-set-id>...` and `pnpm map reconcile` run the automated gates, the publish transaction and the `latest.json` repair ([services/api/README.md](services/api/README.md#publishing)). Nothing publishes over HTTP.
+- `pnpm db seed` loads the core venues into HEAD (`db/seed/core-venues.ts`; levels and footprints wait for the site walk). Safe to run again; see [db/README.md](db/README.md#seed-script).
+- `pnpm test:db` runs the database rule tests and the API's stack tests against the stack. Each test file gets its own throwaway database (`usg_scratch_*`), and the API's tests their own buckets (`usg-test-*`), so the `usg` database and the buckets above are never touched. `pnpm check` doesn't run them; CI does, in its `Database (postgis)` job.
 - The RustFS console is at http://localhost:29001/rustfs/console/; sign in with `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
 - The data lives in the Docker volumes `usg_postgis-data` and `usg_rustfs-data`, inside Docker Desktop's disk image, so encrypt the drive that image is on before real captures arrive ([0009](docs/decisions/0009-hosting-and-budget.md)). `docker compose down` keeps the volumes; `docker compose down -v` deletes them.
 

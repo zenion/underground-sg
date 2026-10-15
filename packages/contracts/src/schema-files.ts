@@ -3,8 +3,10 @@
 // Not part of the environment-neutral `.` entry.
 
 import { readFileSync } from "node:fs";
+import { API_SCHEMA_FILES } from "./api.ts";
 import { CAPTURE_BUNDLE_DEFS_SCHEMA_FILE, CAPTURE_BUNDLE_SCHEMA_FILES } from "./capture-bundle.ts";
 import { CHANGE_SET_DIFF_SCHEMA_FILE } from "./diff.ts";
+import { HEAD_EXPORT_SCHEMA_FILE } from "./export.ts";
 import { MAP_DEFS_SCHEMA_FILE } from "./map.ts";
 import { SNAPSHOT_SCHEMA_FILES } from "./snapshot.ts";
 
@@ -22,14 +24,16 @@ export const ALL_CAPTURE_BUNDLE_SCHEMA_FILES: readonly string[] = [
 
 /**
  * Every schema file, as its path under `schemas/` (which is also its `$id` after
- * `SCHEMA_BASE_URL`): the capture bundle's, the shared map definitions, the snapshot files' and
- * the change-set diff's.
+ * `SCHEMA_BASE_URL`): the capture bundle's, the shared map definitions, the snapshot files', the
+ * change-set diff's, the API's and the private full export's.
  */
 export const ALL_SCHEMA_FILES: readonly string[] = [
   ...ALL_CAPTURE_BUNDLE_SCHEMA_FILES.map((file) => `capture-bundle/${file}`),
   `map/${MAP_DEFS_SCHEMA_FILE}`,
   ...Object.values(SNAPSHOT_SCHEMA_FILES).map((file) => `snapshot/${file}`),
   `diff/${CHANGE_SET_DIFF_SCHEMA_FILE}`,
+  ...Object.values(API_SCHEMA_FILES).map((file) => `api/${file}`),
+  `export/${HEAD_EXPORT_SCHEMA_FILE}`,
 ];
 
 export type SchemaObject = Record<string, unknown>;

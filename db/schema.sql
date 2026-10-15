@@ -896,7 +896,7 @@ ALTER TABLE ONLY public.levels
 --
 
 ALTER TABLE ONLY public.levels
-    ADD CONSTRAINT levels_venue_id_name_key UNIQUE (venue_id, name);
+    ADD CONSTRAINT levels_venue_id_name_key UNIQUE (venue_id, name) DEFERRABLE;
 
 --
 -- Name: map_head map_head_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1567,4 +1567,5 @@ ALTER TABLE ONLY public.street_edges
 
 INSERT INTO public.schema_migrations (version) VALUES
     ('20261014210350'),
-    ('20261014225324');
+    ('20261014225324'),
+    ('20261015005543');

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/api/map-latest.schema.json",
+  "title": "MapLatestResponse",
+  "description": "GET /map/latest (services/api/README.md): the map version map_head points at, with the URLs of its files, for the owner's tools on the LAN (the mapper app and the change-set preview). Public clients read latest.json instead, which can lag map_head until the reconcile job runs (docs/snapshot-format.md). Before the first publish the route answers 404 with an ErrorResponse. Holds nothing private: no publisher, private export key or note.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "description": "The map version (map_versions.id).",
+      "type": "integer",
+      "minimum": 1
+    },
+    "published_at": {
+      "description": "When the version was published (map_versions.published_at), in Singapore time.",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/dateTime"
+        }
+      ]
+    },
+    "snapshot_sha256": {
+      "description": "The version's content hash (map_versions.snapshot_sha256), which names its directory.",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/sha256"
+        }
+      ]
+    },
+    "restores": {
+      "description": "For a rollback, the version it restored (map_versions.restores); null otherwise.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "files": {
+      "$ref": "#/$defs/files"
+    },
+    "demo": {
+      "description": "true when the map is the demonstration data of pnpm demo (the database holds the demo), as latest.json's demo says; absent otherwise.",
+      "const": true
+    }
+  },
+  "required": ["version", "published_at", "snapshot_sha256", "restores", "files"],
+  "additionalProperties": false,
+  "$defs": {
+    "files": {
+      "title": "MapLatestFiles",
+      "description": "The version's files.",
+      "type": "object",
+      "properties": {
+        "indoor": {
+          "description": "indoor.json.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/file"
+            }
+          ]
+        },
+        "street": {
+          "description": "street.json.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/file"
+            }
+          ]
+        }
+      },
+      "required": ["indoor", "street"],
+      "additionalProperties": false
+    },
+    "file": {
+      "title": "MapLatestFile",
+      "description": "One file of the version: its path under the root of the public files, and a URL to fetch it from.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Path relative to the root of the public files: snapshots/<snapshot_sha256>/indoor.json or street.json.",
+          "type": "string",
+          "pattern": "^snapshots/[0-9a-f]{64}/(indoor|street)\\.json$"
+        },
+        "url": {
+          "description": "Where to fetch it: the path under API_PUBLIC_FILES_URL when that is set, otherwise under this API's GET /public/.",
+          "type": "string",
+          "pattern": "^https?://[^\\s]+$",
+          "maxLength": 2000
+        }
+      },
+      "required": ["path", "url"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -22,13 +22,15 @@ For a structural change set (status edits are below):
 
 1. Lock `map_head` with `SELECT ... FOR UPDATE`, so approvals are serialised.
 2. Run the rebase check of [diff-format.md](../diff-format.md#approval): the diff still validates, every touched feature still has the `rev` the diff was based on, every row it references still exists, no remove would cascade or remove an anchor a capture uses, and a rollback has not undone the change set's base version (see [Rollback](#rollback)). If any of these fails, the decision becomes `needs_rebase` and nothing is applied.
-3. Apply the diff and bump revs.
-4. Rebuild `street_connectors` for every exit and entrance (in SVY21; one per node, keyed by `node_id`), then build the public files from HEAD inside the transaction.
+3. Apply the diff and bump revs, under a savepoint. If the database refuses an entry (a unique, foreign-key or check constraint), or HEAD would then hold a feature overlapping a restricted zone that it didn't before (the zones as they are now, every line as the public files draw it), the change set is rolled back to the savepoint and goes to `needs_rebase` too.
+4. Rebuild `street_connectors` for every exit and entrance (in SVY21; one per node, keyed by `node_id`). Check the whole of HEAD against the restricted zones, street connectors included, and refuse the publish if anything overlaps one (a zone drawn over a published feature, say). Then build the public files from HEAD inside the transaction.
 5. Upload them to a content-addressed, immutable key, before commit.
-6. Write the private full export, under a key of its own for the version. Never derive it from `snapshot_sha256`: two versions can share their public files while their private rows (anchors) differ.
+6. Write the private full export, under a key of its own for the version (`head/<version>/<uuid>.json` in the exports bucket; format in [head-export-format.md](../head-export-format.md)). Never derive it from `snapshot_sha256`: two versions can share their public files while their private rows (anchors) differ.
 7. Insert the `map_versions` row (`snapshot_uri`, `snapshot_sha256`, `private_export_uri`), mark the change sets published with its `map_version_id`, and point `map_head` at it. `map_head` cannot be deleted and only moves forward.
 8. Commit.
-9. Update the short-TTL `latest.json` pointer. If that update fails, a reconcile job repairs it.
+9. Update the short-TTL `latest.json` pointer, holding `map_head` `FOR SHARE` and only while it still names this version, so the pointer never moves back (a newer publish writes its own). If that update fails, a reconcile job repairs it, under the same lock.
+
+The automated gates run before step 1, in a transaction of their own, so their `gates_passed` or `gates_failed` record stands whatever the publish does. The record names the diff (its SHA-256) and the captures it checked, and the publish refuses a change set whose diff or captures have changed since; the restricted zones are checked again in step 3, since HEAD and the zones may have moved on. In Phase 1 the publish runs as a CLI (`pnpm map`), in a process of its own, and publishes only through `owner_mapper`; it may carry several change sets, applied oldest first, and one that needs a rebase doesn't stop the others ([diff-format.md](../diff-format.md#approval)). Implementation and order in detail: [services/api/README.md](../../services/api/README.md#publishing).
 
 ### ID stability
 
@@ -66,7 +68,7 @@ Reports published through `trusted_status_auto` must have `valid_until`; an open
 
 ### Rollback
 
-- Rollback restores HEAD from the chosen version's private full export, not from the public files, and publishes the result as a new version (`map_versions.restores`).
+- Rollback restores HEAD from the chosen version's private full export ([head-export-format.md](../head-export-format.md)), not from the public files, and publishes the result as a new version (`map_versions.restores`). Not built yet.
 - Structural change sets published by the versions the rollback undoes (after the restored version) become `rolled_back`. Status change sets are unaffected.
 - Restored rows keep their revs from the export, so a rev can repeat. Approval therefore returns `needs_rebase` for any change set whose `base_version_id` a rollback undid (after the restored version and before the rollback version), whenever it arrives, not only those pending at rollback time.
 - The private export covers all HEAD tables, including anchors. `restricted_zones` are not versioned; a restore that would delete a level or venue that has zones is refused.

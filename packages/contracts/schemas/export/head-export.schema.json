@@ -1,0 +1,330 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/export/head-export.schema.json",
+  "title": "HeadExport",
+  "description": "The private full export of HEAD for one map version (docs/head-export-format.md): every row of every HEAD table, anchors and private columns included, in the diff format's row format with its id and rev. Rollback restores HEAD from it. Private: stored in the exports bucket, never public. Checked by the writer, not by this schema: each table's entries are sorted by id, ids are unique, and the coordinate rules of map/defs.schema.json.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "description": "Version of the export format.",
+      "type": "integer",
+      "const": 1
+    },
+    "version": {
+      "description": "The map version the export belongs to (map_versions.id).",
+      "type": "integer",
+      "minimum": 1
+    },
+    "published_at": {
+      "description": "When the version was published (map_versions.published_at), in Singapore time.",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/dateTime"
+        }
+      ]
+    },
+    "snapshot_sha256": {
+      "description": "The version's public files (map_versions.snapshot_sha256), for cross-checking.",
+      "allOf": [
+        {
+          "$ref": "../map/defs.schema.json#/$defs/sha256"
+        }
+      ]
+    },
+    "venues": {
+      "description": "Every row of venues, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/venue"
+      },
+      "maxItems": 1000000
+    },
+    "levels": {
+      "description": "Every row of levels, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/level"
+      },
+      "maxItems": 1000000
+    },
+    "spaces": {
+      "description": "Every row of spaces, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/space"
+      },
+      "maxItems": 1000000
+    },
+    "nodes": {
+      "description": "Every row of nodes, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "maxItems": 1000000
+    },
+    "edges": {
+      "description": "Every row of edges, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      },
+      "maxItems": 1000000
+    },
+    "pois": {
+      "description": "Every row of pois, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/poi"
+      },
+      "maxItems": 1000000
+    },
+    "anchors": {
+      "description": "Every row of anchors, sorted by id. At most 1000000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/anchor"
+      },
+      "maxItems": 1000000
+    }
+  },
+  "required": [
+    "schema_version",
+    "version",
+    "published_at",
+    "snapshot_sha256",
+    "venues",
+    "levels",
+    "spaces",
+    "nodes",
+    "edges",
+    "pois",
+    "anchors"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "venue": {
+      "title": "HeadVenue",
+      "description": "One row of venues in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "venues.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "venues.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "permission": {
+          "description": "venues.permission: the reference to the written permission to scan, or null. Written only by the seed script; no diff carries it.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/venueRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "permission", "row"],
+      "additionalProperties": false
+    },
+    "level": {
+      "title": "HeadLevel",
+      "description": "One row of levels in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "levels.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "levels.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/levelRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "row"],
+      "additionalProperties": false
+    },
+    "space": {
+      "title": "HeadSpace",
+      "description": "One row of spaces in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "spaces.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "spaces.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/spaceRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "row"],
+      "additionalProperties": false
+    },
+    "node": {
+      "title": "HeadNode",
+      "description": "One row of nodes in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "nodes.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "nodes.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/nodeRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "row"],
+      "additionalProperties": false
+    },
+    "edge": {
+      "title": "HeadEdge",
+      "description": "One row of edges in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "edges.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "edges.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/edgeRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "row"],
+      "additionalProperties": false
+    },
+    "poi": {
+      "title": "HeadPoi",
+      "description": "One row of pois in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "pois.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "pois.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/poiRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "row"],
+      "additionalProperties": false
+    },
+    "anchor": {
+      "title": "HeadAnchor",
+      "description": "One row of anchors in HEAD, with its id and rev.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "anchors.id.",
+          "allOf": [
+            {
+              "$ref": "../map/defs.schema.json#/$defs/uuid"
+            }
+          ]
+        },
+        "rev": {
+          "description": "anchors.rev: bumped by each approved change that touched the row.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "description": "The row's columns in the diff format (docs/diff-format.md).",
+          "allOf": [
+            {
+              "$ref": "../diff/change-set-diff.schema.json#/$defs/anchorRow"
+            }
+          ]
+        }
+      },
+      "required": ["id", "rev", "row"],
+      "additionalProperties": false
+    }
+  }
+}

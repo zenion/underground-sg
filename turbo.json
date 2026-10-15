@@ -19,7 +19,7 @@
     "test:db": {
       "dependsOn": ["^build"],
       "cache": false,
-      "passThroughEnv": ["DATABASE_URL"]
+      "passThroughEnv": ["DATABASE_URL", "S3_*"]
     }
   }
 }

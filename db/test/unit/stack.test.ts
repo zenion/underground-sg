@@ -1,5 +1,6 @@
-// The settings that are written down in more than one place stay in step: the PostGIS image
-// in docker-compose.yml and in CI, and the values in .env.example.
+// The settings that are written down in more than one place stay in step: the PostGIS and
+// RustFS images in docker-compose.yml and in CI, CI's S3 key pair, and the values in
+// .env.example.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +30,22 @@ describe("the PostGIS image", () => {
     expect(images(compose, "postgis/postgis")[0]).toMatch(
       /^postgis\/postgis:18-3\.6@sha256:[0-9a-f]{64}$/,
     );
+  });
+});
+
+describe("the RustFS image", () => {
+  test("CI's service container runs the image docker-compose.yml runs, pinned by digest", () => {
+    const local = images(compose, "rustfs/rustfs");
+    expect(local).toHaveLength(1);
+    expect(local[0]).toMatch(/^rustfs\/rustfs:[0-9.]+@sha256:[0-9a-f]{64}$/);
+    expect(images(ci, "rustfs/rustfs")).toEqual(local);
+  });
+
+  test("CI's RustFS root user is the S3 key pair CI's jobs use", () => {
+    const value = (name: string) => new RegExp(`^\\s*${name}: (\\S+)$`, "m").exec(ci)?.[1];
+    expect(value("RUSTFS_ACCESS_KEY")).toBe(value("S3_ACCESS_KEY_ID"));
+    expect(value("RUSTFS_SECRET_KEY")).toBe(value("S3_SECRET_ACCESS_KEY"));
+    expect(value("S3_ACCESS_KEY_ID")).toEqual(expect.any(String));
   });
 });
 
