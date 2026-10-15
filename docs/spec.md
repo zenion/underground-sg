@@ -329,7 +329,7 @@ The budget is as low as possible. Details: [ADR 0009](decisions/0009-hosting-and
 | 4 | The smallest x86 Singapore server that runs the Node API and PostGIS (a target of about US$12–24 a month). Private bundles in S3 ap-southeast-1. Postgres backups with WAL archiving to S3, and a restore drill. Localization on CPU, on the same or a second small box |
 | All phases | The webapp and public map files on Cloudflare free tiers (Pages + R2) |
 
-A GPU is used only with the owner's explicit approval. Through Phase 3 the only subscription is the Apple Developer Program (US$99 a year); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates that membership, and an Expo account, when the Swift spike starts.
+A GPU is used only with the owner's explicit approval. Through Phase 3 the only subscription is the Apple Developer Program (US$99 a year); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates that membership when the Swift spike starts, and a free Expo account now: Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account.
 
 ## Privacy, legal and permissions
 

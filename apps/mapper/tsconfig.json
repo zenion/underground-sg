@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "preserve",
+    // React Native and the DOM component (the map runs in a WebView, so it has the DOM).
+    "jsx": "react-jsx",
+    "lib": ["es2024", "dom", "dom.iterable"],
+    // Resolve packages' React Native type entries, as Metro does.
+    "customConditions": ["react-native"]
+  },
+  "include": ["src", "test", "scripts", "app.config.ts", "vitest.config.mts"]
+}

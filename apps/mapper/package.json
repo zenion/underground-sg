@@ -1,0 +1,54 @@
+{
+  "name": "@usg/mapper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The mapper app: Expo (React Native) with Expo Router. Runs in Expo Go until the capture-native module needs a development build",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "node scripts/maplibre-worker.mts && expo start",
+    "web": "node scripts/maplibre-worker.mts && expo start --web",
+    "build": "node scripts/maplibre-worker.mts && expo export --platform ios --output-dir dist/ios",
+    "build:web": "node scripts/maplibre-worker.mts && expo export --platform web --output-dir dist/web",
+    "typecheck": "node scripts/maplibre-worker.mts && tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@expo/log-box": "57.0.4",
+    "@expo/metro-runtime": "57.0.16",
+    "@usg/floorplan": "workspace:*",
+    "expo": "57.0.26",
+    "expo-constants": "57.0.20",
+    "expo-dev-client": "57.0.19",
+    "expo-device": "57.0.2",
+    "expo-font": "57.0.4",
+    "expo-linking": "57.0.11",
+    "expo-router": "57.0.24",
+    "expo-symbols": "57.0.3",
+    "maplibre-gl": "6.14.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-screens": "4.26.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "0.21.4",
+    "react-native-worklets": "0.10.1",
+    "terra-draw": "1.37.0",
+    "terra-draw-maplibre-gl-adapter": "1.5.0"
+  },
+  "devDependencies": {
+    "@react-native/metro-config": "0.86.3",
+    "@types/react": "19.2.18",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "typescript"
+      ]
+    }
+  }
+}

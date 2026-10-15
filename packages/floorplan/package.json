@@ -1,0 +1,22 @@
+{
+  "name": "@usg/floorplan",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Floor triangles from the ARKit scene mesh to an approximate walkable outline and a coverage grid. Pure TypeScript with no dependencies, so it runs in Hermes on the phone and in processing",
+  "exports": {
+    ".": "./src/index.ts",
+    "./synthetic": "./src/synthetic.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc && tsc -p tsconfig.neutral.json",
+    "test": "vitest run --project unit",
+    "test:venue": "vitest run --project venue --silent=false",
+    "bench": "node scripts/bench.ts"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

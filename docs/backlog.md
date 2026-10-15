@@ -21,12 +21,17 @@ Gate: one venue gives written permission to scan. **Met on 2026-10-15: Funan's l
 - [ ] [Owner] Ask the MRT operator and LTA about scanning the City Hall and Esplanade station concourses
 - [ ] [Owner] Register a OneMap API account (needed for the search API; tiles need no token) and check the terms for tiles and attribution. Email SLA about overlaying the map on OneMap tiles and about tile caching or offline packs, which need SLA's written permission first
 - [ ] [Owner] Decide the map data licence: ODbL or not, now with the option of shipping the OSM-derived street graph as a separate ODbL file, `street.json` (see [0003](decisions/0003-routing.md)). The separate-file approach needs legal review
-- [ ] [Owner] Create the public GitHub repo, or approve Claude Code creating it. Check that `.env` files are git-ignored before the first push
-- [ ] [Owner] Once CI has run on GitHub, add the `Database (postgis)` check to `main`'s branch protection beside the two `Lint, typecheck and test` checks, if it should be required
-- [ ] [Owner] When the Swift spike starts: join the Apple Developer Program (US$99/yr) and create an Expo account
+- [x] [Owner] Create the public GitHub repo, or approve Claude Code creating it (github.com/zenion/underground-sg, 2026-10-15). Check that `.env` files are git-ignored before the first push
+- [ ] [Owner] Create a free Expo account now, and sign in to it in Expo Go on the iPhone and with `pnpm --filter @usg/mapper exec expo login` on the PC: since 2026-09-03 Expo Go on iOS opens a project only when both are signed in to the same account ([apps/mapper/README.md](../apps/mapper/README.md))
+- [x] [Owner] Once CI has run on GitHub, add the `Database (postgis)` check to `main`'s branch protection beside the two `Lint, typecheck and test` checks (done 2026-10-15, with the owner's approval to require CI)
+- [ ] [Owner] When the Swift spike starts: join the Apple Developer Program (US$99/yr)
 - [ ] [Owner] Before the first recorded bundle reaches the PC: turn on disk encryption (BitLocker, for example) for the drive that holds the Docker data (PostGIS, RustFS) and for the backup drive ([0009](decisions/0009-hosting-and-budget.md))
 - [ ] [Owner] Register the iPhone 17 Pro Max for development builds (`eas device:create`) and turn on Developer Mode on the phone
 - [ ] [Owner] Keep the iPhone on current iOS, avoiding iOS 26.4–26.6.0 (reported LiDAR world-tracking drift regression). Check before the spike and before each capture day
+- [ ] [Owner] Decide how the supply-chain checks treat the Expo toolchain, which `apps/mapper` brought in:
+  - `trustPolicy: no-downgrade`: Expo SDK 58 moved to trusted publishing on 2026-09-29, and SDK 57 patches published since then have no provenance, so pnpm refuses them. `apps/mapper` is pinned to the last SDK 57 patches before that date (`expo` 57.0.26, `expo-router` 57.0.24 and so on) and `expo-doctor` reports patch mismatches. Exact-version `trustPolicyExclude` entries would allow the newer patches
+  - `semver@6` is overridden to 7.8.5 in `pnpm-workspace.yaml`: 6.3.1 (wanted by `@babel/core`) fails the same trust check, and 6.3.0 has CVE-2022-25883
+  - CI's `pnpm audit --audit-level high` fails on two advisories with no patched version, both in build tooling that never ships in the app: `node-forge` (GHSA-86w9-cpqp-85rv, through `@expo/cli`) and `braces` (GHSA-vfj7-8cjw-p6xm, through Metro). Until this is decided the Linux CI job is red, so decide before merging `apps/mapper`. Options: `auditConfig.ignoreGhsas` for those two in `pnpm-workspace.yaml`, with a note to revisit when a patch appears (narrowest), or `--ignore-unfixable` in `ci.yml` (which also hides future unfixable advisories)
 
 ### Repo and data
 
@@ -111,6 +116,7 @@ Tasks:
 - [ ] Expo scaffold: SDK 57 (move to 58 once it is stable), TypeScript, New Architecture, expo-dev-client, Expo Router, `eas.json` with a development profile
   - Needs the [Owner] Apple Developer Program membership, Expo account and device registration
   - Done when: the dev client is installed on the iPhone and a TypeScript change reaches it by Fast Refresh from Metro on Windows
+  - Expo Go shell in place (2026-10-15): `apps/mapper` is SDK 57 with TypeScript, the New Architecture and Expo Router tabs (Map, Floor plan, Capture, About), and runs in the App Store's Expo Go (`pnpm mapper`). `expo-dev-client` is installed and `eas.json` has the `development` profile, but no development build exists yet. The bundle identifier `com.zenion.usg.mapper` is a placeholder to confirm before the first EAS build. `pnpm build` exports the iOS JavaScript in CI. See [apps/mapper/README.md](../apps/mapper/README.md)
 - [ ] `capture-native` module skeleton (`apps/mapper/modules/capture-native`): a local Expo module in Swift on the stable Expo Modules API, with `getCapabilities()` and a `<CaptureView>` showing the camera. Scene-aware from the start (no `keyWindow` or AppDelegate assumptions), no third-party pods, pure-maths Swift in SwiftPM targets without ARKit, UIKit or `import simd`, and `os.Logger` rather than `print`
   - Done when: `getCapabilities()` reports LiDAR on the iPhone 17 Pro Max, and the build-to-device loop time is measured (criterion 1)
 - [ ] macOS CI job (GitHub Actions, for `capture-native`): `expo prebuild`, an unsigned `xcodebuild build`, then `swift test` for the SwiftPM targets with fixture images
@@ -132,9 +138,14 @@ Tasks:
 - [ ] Bundle writer and `packBundle` (module): `mesh/scene.ply` (binary little-endian, vertices in the ARKit world frame read at session end, per-face `uchar classification`); bytes and sha256 for every file; `packBundle(dir, partBytes)` packs an uncompressed tar in 16 MiB parts (`UPLOAD_PART_BYTES` in `packages/contracts`) and deletes the raw files after packing
   - Done when: a bundle recorded on the phone and copied to the PC passes the validator CLI on Windows
 - [ ] Floor-triangle export (module): `floorTriangles` returns floor-classified mesh triangles as a zero-copy `ArrayBuffer` (a `Float32Array` in JS). Save a few recorded meshes as fixtures for `packages/floorplan`, following the fixture rule above: meshes recorded in a venue go in `.data/fixtures/`, never in git
+  - Save them in `.data/fixtures/floorplan/` as the bundle's `mesh/scene.ply` (`*.ply`, preferred: it keeps the heights and classifications), or else the raw `floorTriangles` result as little-endian float32 x,z pairs (`*.f32`, which loses the heights); `pnpm test:venue` picks up both (`packages/floorplan/README.md`)
+  - Record the floor-face count per m² of the first recorded mesh, before judging criterion 4: the preview's time grows with it (about 0.6 µs per triangle under `node --jitless`), and the synthetic meshes assume 75 and 790 per m²
+  - [Owner] Decide before this task: should `floorTriangles` return x,y,z (9 floats per triangle) instead of x,z? With x,z only, `packages/floorplan` can't drop floor seen on another level, such as the floor below over an atrium balustrade (Funan and Raffles City have atriums) or an escalator's far landing. With heights, it could keep a band of about ±0.5 m around the walked floor, taken from the start anchor's `floor_point` or the floor under the pose track
 - [ ] Floor-plan benchmark on the phone (`packages/floorplan` in Hermes): time the preview on a recorded mesh (criterion 4). If it takes more than about 2 s, move only the rasterise step into Swift behind the same signature
+  - The mapper's Floor plan tab already times it in Hermes in Expo Go on the synthetic corridors (`@usg/floorplan/synthetic`: about 25k, 106k and 1.1M triangles, the last as dense as a 5 cm voxel mesh), with each stage and the plan drawn. Record those numbers now; the recorded-mesh run waits for the floor-triangle export
 - [ ] Map in an Expo DOM component (`apps/mapper`): maplibre-gl-js and terra-draw with `packages/map-style`, drawing the floor-plan preview over OneMap tiles with attribution. The map is unmounted on the capture screen. `@maplibre/maplibre-react-native` v11 is the fallback for read-only views
   - Done when: a polygon can be drawn and edited on the phone and in desktop Chrome
+  - So far (2026-10-15): maplibre-gl 6.14 and terra-draw 1.37 in a DOM component over OneMap tiles with OneMap's attribution (`apps/mapper/src/map/`); polygons and points can be drawn, edited and deleted, the count lives in the native screen, and the map is unmounted whenever its tab isn't showing. Checked in a desktop Chromium browser with `pnpm --filter @usg/mapper web`, not yet on the phone. Still to do: `packages/map-style` in place of `src/map/style.ts`, and drawing the floor-plan preview on the map
 - [ ] Spike write-up (`docs/`): run the 3-minute throughput walk (criterion 2) and the capture → map → capture memory check (criterion 3), then write up all six criteria, the chosen keyframe rate, the chosen registration approach, and how much time blind native debugging cost (more than about a day a week means reconsidering a used Mac mini)
 
 ### Shared
@@ -152,8 +163,10 @@ Tasks:
   - `@usg/contracts/bundle-validator` and `validate-bundle` (see `packages/contracts/README.md`). The minimal bundle is generated in the tests; no recorded bundle exists yet, so the first real run is the `packBundle` task's Done-when
 - [x] Validator hardening (`packages/contracts`): size and count limits, reject absolute or `..` paths, stream-parse the PLY with limits, fuzz tests
   - Limits are in [capture-bundle.md](capture-bundle.md#ingest-and-validation); the fuzz tests use fast-check with a fixed seed
-- [ ] `packages/floorplan`: floor triangles → walkable polygon (occupancy grid of about 10 cm, morphological close, marching squares, simplify, GeoJSON). Pure JS, because Hermes has no WebAssembly
+- [x] `packages/floorplan`: floor triangles → walkable polygon (occupancy grid of about 10 cm, morphological close, marching squares, simplify, GeoJSON). Pure JS, because Hermes has no WebAssembly
   - Done when: tests pass on Windows against synthetic meshes in git, and against the recorded meshes when they are present
+  - Also gives the coverage grid and gap outlines for the coverage overlay. Recorded meshes go in `.data/fixtures/floorplan/` (`*.ply` or `*.f32`, see the package README) and run with `pnpm test:venue`; none exist yet. Node timings and a `--jitless` proxy for Hermes are in the README
+- [ ] Tune the floor-plan defaults (`packages/floorplan`: close radius, island, hole and polygon areas, simplification tolerance) on the recorded meshes with `pnpm test:venue`, once the floor-triangle export has saved some
 - [ ] `packages/routing` skeleton: `routing-config.json` with its schema in `packages/contracts` (values are tuned in Phase 3), and a graph built from `indoor.json` and `street.json`. Vertical connectors are edges between landing nodes, never inferred from equal ordinals. The router itself comes in Phase 3
   - Done when: tests build the graph from the snapshot builder's golden files
 
@@ -168,6 +181,7 @@ Gate: captured segments align end to end on the street map.
   - Done when: tests cover both the computable and the null case, on synthetic pose tracks in git (recorded tracks follow the fixture rule above)
 - [ ] GNSS at street-facing anchors: record fixes with their accuracy into `gnss.jsonl` (`t`, `lat`, `lon`, `h_accuracy_m`)
 - [ ] Coverage overlay (`apps/mapper`, `packages/floorplan`): show never-observed cells as gaps to re-walk, and label the preview as approximate
+  - `packages/floorplan` already gives the coverage grid and `traceCoverage` for the gap outlines; what remains is the map layer in `apps/mapper`
 - [ ] Draft store (expo-sqlite): accepted segments and draft features with their own client UUIDs, plus a `server_id` mapping filled in on sync
 - [ ] Draft editing (DOM-component map): stitch accepted segments, move nodes, retag, redraw outlines. Redraw is a first-class tool; the server extraction stays the authority
 - [ ] Sync refined results into the draft (`services/api`, `apps/mapper`): fetch the aligned segments and extracted features for the owner's captures, fill each draft feature's `server_id`, and show the refined version beside the field version
