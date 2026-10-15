@@ -5,7 +5,9 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Underground SG Mapper",
-  slug: "underground-sg-mapper",
+  slug: "underground-sg",
+  // The Expo account that owns the EAS project (the owner signs in as a member of it).
+  owner: "joshland",
   scheme: "usg-mapper",
   version: "0.1.0",
   orientation: "portrait",
