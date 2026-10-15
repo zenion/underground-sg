@@ -3,14 +3,25 @@ import { buildFloorplan } from "../src/index.ts";
 import { syntheticCorridorMesh, transform, uplCorridorMesh } from "../src/synthetic.ts";
 import { expectWellFormed, insideRing } from "./helpers.ts";
 
+// Exact element-wise equality. Vitest's toEqual walks a typed array value by value through its
+// generic deep-equality code, which takes several seconds on CI for the 636k floats of the
+// realistic mesh.
+function sameFloats(a: Float32Array, b: Float32Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!Object.is(a[i], b[i])) return false;
+  return true;
+}
+
 // The `./synthetic` entry: the meshes the tests use, and the mapper app's on-phone benchmark.
 describe("syntheticCorridorMesh", () => {
   test("is the same mesh for the same seed, and realistic is the benchmark mesh", () => {
     const a = syntheticCorridorMesh("small");
     const b = syntheticCorridorMesh("small");
-    expect(a.triangles).toEqual(b.triangles);
-    expect(syntheticCorridorMesh("small", 7).triangles).not.toEqual(a.triangles);
-    expect(syntheticCorridorMesh("realistic").triangles).toEqual(uplCorridorMesh().triangles);
+    expect(sameFloats(a.triangles, b.triangles)).toBe(true);
+    expect(sameFloats(syntheticCorridorMesh("small", 7).triangles, a.triangles)).toBe(false);
+    expect(
+      sameFloats(syntheticCorridorMesh("realistic").triangles, uplCorridorMesh().triangles),
+    ).toBe(true);
   });
 
   test("small has about 25k triangles and plans to one outline with every pillar as a hole", () => {
