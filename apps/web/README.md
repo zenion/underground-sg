@@ -71,6 +71,8 @@ pnpm --filter @usg/web exec vite preview --mode fixtures   # dist/ with the demo
 
 `dist/` holds `index.html`, hashed JavaScript and CSS in `assets/` (MapLibre in a chunk of its own, and its worker as a separate module file), and the glyphs under `glyphs/`. On 2026-10-15 the build was about 2.1 MB, 0.5 MB gzipped: the app with React 250 kB (78 kB gzipped), MapLibre 1.03 MB (275 kB) and its CSS 83 kB (10 kB), the worker 508 kB (143 kB), and the glyphs 268 kB, fetched one range at a time as labels need them.
 
+For testing on the iPhone, `pnpm dev:phone` builds this and the API serves `dist/` at its own https origin through one tunnel (`API_WEB_DIST`, with a Content-Security-Policy; [docs/phone-testing.md](../../docs/phone-testing.md)). The glyphs come from the API's `/glyphs` route there, which serves the same files.
+
 `VITE_PUBLIC_BASE` sets where the built page looks for the public map files: a path on the same origin (the default, `/public`) or an `https://` URL such as the R2 bucket's, which must then allow the page's origin through CORS. It is read at build time.
 
 ## How it works

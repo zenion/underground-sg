@@ -6,6 +6,7 @@ import { buildApp } from "./app.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import { createDatabase } from "./database.ts";
 import { createS3Storage } from "./storage.ts";
+import { loadWebDist, type WebDist, WebDistError } from "./web-dist.ts";
 
 loadRootEnv();
 let config: ReturnType<typeof loadConfig>;
@@ -17,6 +18,17 @@ try {
   process.exit(1);
 }
 
+let webDist: WebDist | undefined;
+if (config.webDist !== undefined) {
+  try {
+    webDist = loadWebDist(config.webDist);
+  } catch (error) {
+    if (!(error instanceof WebDistError)) throw error;
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+
 const db = createDatabase(config.databaseUrl);
 const storage = createS3Storage(config.s3, config.buckets);
 const app = await buildApp({
@@ -24,6 +36,7 @@ const app = await buildApp({
   storage,
   corsOrigins: config.corsOrigins,
   publicFilesUrl: config.publicFilesUrl,
+  webDist,
   logger: { level: process.env["LOG_LEVEL"] ?? "info" },
 });
 app.addHook("onClose", async () => {
@@ -49,6 +62,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 try {
   await app.listen({ host: config.host, port: config.port });
+  if (webDist !== undefined) {
+    app.log.info({ files: webDist.files.size + 1 }, "serving the webapp's build at /");
+  }
   if (!["127.0.0.1", "::1", "localhost"].includes(config.host)) {
     app.log.warn(
       { host: config.host },

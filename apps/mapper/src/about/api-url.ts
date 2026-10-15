@@ -19,7 +19,10 @@ export type ApiUrl =
   | { readonly url: string; readonly source: "EXPO_PUBLIC_API_URL" | "dev server" }
   | { readonly url: null; readonly problem: string };
 
-/** Hosts of Expo's tunnel (`expo start --tunnel`), which forwards only Metro's port. */
+/**
+ * Hosts of a tunnel to Metro, which forwards only Metro's port: Expo's (`expo start --tunnel`) or
+ * the random ngrok address `pnpm dev:phone` gives Metro.
+ */
 const TUNNEL_HOST = /\.exp\.direct$|\.ngrok(?:-free)?\.(?:io|app|dev)$/i;
 
 export function apiBaseUrl({ explicitUrl, port, hostUri }: ApiUrlInput): ApiUrl {

@@ -4,12 +4,14 @@ The mapper app ([ADR 0007](../../docs/decisions/0007-expo-mapper-app.md)): Expo 
 
 | Tab | What it does | In Expo Go |
 | --- | --- | --- |
-| Map | OneMap tiles around City Hall MRT, with polygon and point drawing: maplibre-gl v6 and terra-draw in an Expo DOM component (a WebView). The count of drawn features lives in the native screen. The map is mounted only while its tab is showing, so it is gone on the Capture screen (ADR 0007) | Yes (tiles need a connection) |
+| Map | The published map from the API over OneMap's street map, with the webapp's style (`@usg/map-style`), a level switcher and a demo badge, and polygon and point drawing on top: maplibre-gl v6 and terra-draw in an Expo DOM component (a WebView). The count of drawn features lives in the native screen. The map is mounted only while its tab is showing, so it is gone on the Capture screen (ADR 0007) | Yes (tiles and the published map need a connection) |
 | Floor plan | Runs `@usg/floorplan` on a synthetic corridor generated on the phone (about 25k, 106k or 1.1M triangles) and shows each stage's time and the plan. This is the Hermes measurement for spike criterion 4 | Yes |
 | Capture | Looks for the `CaptureNative` module and shows the device, whether LiDAR is expected on it, and whether the map is unmounted | Explains that capture needs a development build |
-| About | App and SDK versions, the JavaScript engine (Hermes check), the API base URL and whether `GET /health` answers | Yes (the API doesn't exist yet, so "not reachable" is expected) |
+| About | App and SDK versions, the JavaScript engine (Hermes check), the API base URL and whether `GET /health` answers | Yes |
 
 ## Run it on the iPhone with Expo Go (from Windows)
+
+The easiest way: `pnpm dev:phone` at the repo root starts the API and Metro (on loopback, `--localhost`) behind two endpoints of one ngrok agent, Metro's with its debugger refused at ngrok's edge, with `EXPO_PUBLIC_API_URL` and `EXPO_PACKAGER_PROXY_URL` set, so the phone needs neither the LAN nor a firewall rule ([docs/phone-testing.md](../../docs/phone-testing.md)). The rest of this section is the LAN route, and the once-only setup both need.
 
 Once:
 
@@ -35,19 +37,19 @@ Each time:
 3. The first time, Windows Firewall asks whether Node.js may use the network: allow it on **private** networks. If the home Wi-Fi is set as a public network in Windows, set it to private.
 4. Scan the QR code in the terminal with the iPhone's Camera app and open it in Expo Go. iOS asks Expo Go for **Local Network** access the first time: allow it.
 
-If the phone can't reach the PC on the LAN (the QR code opens but loading times out), try the LAN fixes first: the Wi-Fi set as a **private** network in Windows, the Windows Firewall rule for Node.js (`node.exe`) allowed on private networks, both devices on the same Wi-Fi and not a guest network, and Local Network access for Expo Go in the iPhone's Settings, Privacy & Security. Only then use Expo's tunnel:
+If the phone can't reach the PC on the LAN (the QR code opens but loading times out), try the LAN fixes first: the Wi-Fi set as a **private** network in Windows, the Windows Firewall rule for Node.js (`node.exe`) allowed on private networks, both devices on the same Wi-Fi and not a guest network, and Local Network access for Expo Go in the iPhone's Settings, Privacy & Security. Only then use Expo's tunnel, knowing what it exposes (below), or `pnpm dev:phone`:
 
 ```bash
 pnpm mapper --tunnel
 ```
 
-The first time, Expo CLI asks to install `@expo/ngrok` globally, and a yes runs `npm install -g @expo/ngrok@^4.1.0`: npm, outside the repo's pnpm checks (`minimumReleaseAge`, `trustPolicy`, no install scripts), with whatever versions of its dependencies npm resolves that day, plus ngrok's own closed-source agent binary. Say yes only knowingly. Installing a pinned version yourself first, which Expo CLI then finds, narrows that: `npm install -g @expo/ngrok@4.1.3` (published 2023-11-17, BSD-2-Clause, no install scripts), though its own dependencies (`got`, `uuid`, `yaml`) still come from caret ranges. Through a tunnel the app can't derive the API's address, so set `EXPO_PUBLIC_API_URL` (below). Metro inside WSL needs mirrored networking or `--tunnel` too; run it on Windows-native Node.
+The first time, Expo CLI asks to install `@expo/ngrok` globally, and a yes runs `npm install -g @expo/ngrok@^4.1.0`: npm, outside the repo's pnpm checks (`minimumReleaseAge`, `trustPolicy`, no install scripts), with whatever versions of its dependencies npm resolves that day, plus ngrok's own closed-source agent binary. Say yes only knowingly. Installing a pinned version yourself first, which Expo CLI then finds, narrows that: `npm install -g @expo/ngrok@4.1.3` (published 2023-11-17, BSD-2-Clause, no install scripts), though its own dependencies (`got`, `uuid`, `yaml`) still come from caret ranges. Through a tunnel the app can't derive the API's address, so set `EXPO_PUBLIC_API_URL` (below). Expo's tunnel forwards all of Metro to anyone with its `exp.direct` address, and every request through it reaches Metro from loopback, which Metro and Expo CLI trust as the PC: the debugger (which runs code in the app on the phone), opening files in the PC's editor and symbolication included, over plain HTTP. Keep the address to yourself and stop Metro when done; `pnpm dev:phone` doesn't use Expo's tunnel for these reasons ([ADR 0009](../../docs/decisions/0009-hosting-and-budget.md#remote-access-during-phases-13)). Expo CLI 57 on Windows doesn't find a global `@expo/ngrok` by itself (it runs `npm.cmd` without a shell, which Node refuses, and looks under `%LOCALAPPDATA%\npm`), so `pnpm mapper --tunnel` asks to install it again; npm's global folder (`npm root -g`) on `NODE_PATH` for that command works around it. Metro inside WSL needs mirrored networking or `--tunnel` too; run it on Windows-native Node.
 
 JavaScript changes reach the phone by Fast Refresh while Metro runs. Shake the phone for Expo Go's developer menu (reload, performance monitor).
 
 ### What to look at tomorrow
 
-- **Map:** pan and zoom, draw a polygon (tap the corners, then tap the first or last corner to finish), add a point, then Edit: tap a shape and drag a corner, a midpoint or the whole shape, and Delete. The count above the map follows. Switch to Capture and back: the map reloads and the shapes come back. This is the phone half of the backlog's Done-when for the map; desktop Chrome is below.
+- **Map:** the published map shows under the drawing tools ("DEMO DATA · Map version 1 · …" under the hint), with the level switcher above the attribution; with no map published it says so, and without the API it says it can't reach it, with Retry. Pan and zoom, draw a polygon (tap the corners, then tap the first or last corner to finish), add a point, then Edit: tap a shape and drag a corner, a midpoint or the whole shape, and Delete. The count above the map follows. Switch to Capture and back: the map reloads and the shapes come back. This is the phone half of the backlog's Done-when for the map; desktop Chrome is below.
 - **Floor plan:** the big number is the floor-plan total in Hermes on the iPhone 17 Pro Max; run each size a few times and note the medians. The backlog's threshold is about 2 s (on a recorded mesh, which comes with the capture module). The time grows with the triangle count, and how many floor triangles ARKit makes per m² isn't known yet, so **Dense** (the realistic layout as 5 cm squares, 1.1M triangles) shows how much margin a fine mesh would leave; generating it takes a moment and is shown apart. For reference: Node with its JIT takes about 12 ms on the realistic mesh and 37 ms on the dense one, `node --jitless` about 215 ms and 834 ms (`packages/floorplan/README.md`), and a desktop Chromium browser about 26 ms on the realistic mesh with `pnpm --filter @usg/mapper web`. Expo Go runs a development bundle (`__DEV__` on), compiled to Hermes bytecode by Metro.
 - **Capture:** the model, iOS version and the LiDAR line. If iOS is 26.4 to 26.6.0 the screen warns about the LiDAR drift regression (CLAUDE.md).
 
@@ -67,7 +69,7 @@ opens the whole app at <http://localhost:8081>. The map is the same DOM componen
 
 ## Configuration
 
-The API base URL is the dev server's host (the PC that serves the JavaScript, from `expo-constants` `hostUri`) with port `EXPO_PUBLIC_API_PORT`, default 28000. `EXPO_PUBLIC_API_URL` replaces it, for example through a tunnel or for another machine. Expo inlines `EXPO_PUBLIC_` variables when it bundles: put them in `apps/mapper/.env.local` (git-ignored) or the shell, then restart Metro.
+The API base URL is the dev server's host (the PC that serves the JavaScript, from `expo-constants` `hostUri`) with port `EXPO_PUBLIC_API_PORT`, default 28000. `EXPO_PUBLIC_API_URL` replaces it, for example through a tunnel or for another machine; `pnpm dev:phone` sets it to the ngrok domain. The Map tab loads the published map from `<api>/public/latest.json` and the version files it names, and the glyphs from `<api>/glyphs/`; the API lets any origin read those, so the map's WebView, served by Metro, can. Put `EXPO_PUBLIC_` variables in `apps/mapper/.env.local` (git-ignored) or the shell, then restart Metro (it doesn't watch `.env` files: `metro.config.js` blocks them). A production bundle (`expo export`, `pnpm build`) inlines their values; `metro.config.js` puts them in Metro's cache key, so an export after a change never reuses code with the old value.
 
 ```bash
 EXPO_PUBLIC_API_URL=http://192.168.1.20:28000
@@ -84,19 +86,20 @@ When the API exists it has to listen on all interfaces (not only `localhost`), a
 | `build` | `expo export --platform ios` into `dist/ios`: the Hermes bytecode bundle and the map's DOM-component bundle. Proves the JavaScript compiles; `pnpm build` at the root and CI run it |
 | `build:web` | `expo export --platform web` into `dist/web` |
 | `typecheck` | `tsc` |
-| `test` | Vitest on the pure logic in `test/` (API URL, health check, features, the benchmark, SVG paths, the OneMap style, device checks) |
+| `test` | Vitest on the pure logic in `test/` (API URL, health check, features, the benchmark, SVG paths, loading and checking the published map, the level bands and the camera, device checks) and on `metro.config.js` (what Metro may read, the cache key) |
 
 Each script except `test` first runs `scripts/maplibre-worker.mts`. maplibre-gl v6 finds its worker script next to its own module (`import.meta.url`), which a Metro bundle doesn't have, so the script copies `maplibre-gl/dist/maplibre-gl-worker.mjs` into the git-ignored `src/map/generated/maplibre-worker.ts` as a string, and the map hands it to `setWorkerUrl()` as a `blob:` URL. That works the same over the LAN, through a tunnel, in a browser and from `file://` in a release build.
 
 ## Layout
 
 ```
-app.config.ts, eas.json
+app.config.ts, eas.json, metro.config.js (what Metro may read, and its cache key)
 scripts/maplibre-worker.mts
 src/
   app/            Expo Router tabs: _layout, index (Map), floorplan, capture, about
-  map/            draw-map.tsx (the DOM component), style.ts (OneMap style and attribution),
-                  features.ts, worker.ts, presence.ts (counts mounted maps)
+  map/            draw-map.tsx (the DOM component), published.ts (loads and checks the published
+                  map), bands.ts (the level switcher's bands), camera.ts, features.ts, worker.ts,
+                  presence.ts (counts mounted maps)
   floorplan/      the on-phone benchmark and SVG paths
   capture/        device checks
   about/          API URL, health check, JavaScript engine
@@ -104,7 +107,7 @@ src/
 test/             Vitest
 ```
 
-`src/map/style.ts` is the only place that knows the base style, so `@usg/map-style` can replace it. The OneMap tile URL and attribution come from <https://www.onemap.gov.sg/docs/maps/> (checked 2026-10-15); the attribution keeps OneMap's wording and logo, with the logo's size as attributes because MapLibre v6 strips `style` attributes from attribution HTML. OpenStreetMap and LTA attribution are shown too (CLAUDE.md).
+The style is `@usg/map-style`'s, the webapp's: OneMap's Grey HD tiles, the indoor and street layers with the level filter (`applyBand`), the glyphs, and OneMap's, OpenStreetMap's and LTA's attribution, expanded on every screen size (CLAUDE.md). `src/map/published.ts` checks the files by hand, for what the style and the switcher read, so Ajv and the Node validators stay out of the bundle; `checkLatestPointer` from `@usg/contracts` keeps the version files under their own `snapshots/<sha256>/` directory. A 404 counts as "no map published" only when it is the API's own JSON one, not a tunnel's error page.
 
 ## Versions
 

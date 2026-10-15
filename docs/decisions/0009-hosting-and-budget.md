@@ -15,6 +15,18 @@ The budget is as low as possible. No cloud server until Phase 4; only public fil
 - Raw bundles hold trajectories, which are personal data ([0005](0005-privacy-by-design.md)), so the PostGIS and RustFS data on the PC sit on an encrypted disk (BitLocker, for example).
 - Raw bundles, the private full exports and a database dump are backed up to an external drive or a cheap S3 bucket in ap-southeast-1, encrypted at rest either way.
 
+### Remote access during Phases 1–3
+
+Testing on the phone goes through tunnels, not the LAN: the PC's Wi-Fi has the Public profile, so Windows Firewall blocks the phone, and opening a port on the LAN would take a firewall rule per test. `pnpm dev:phone` sets it up ([phone-testing.md](../phone-testing.md)):
+
+- **One ngrok agent on the owner's paid account, with two https endpoints.** The reserved domain forwards to the API on `127.0.0.1`; for tunnel testing the API also serves the webapp's build (`API_WEB_DIST`), so Safari, the public files and the mapper app share one https origin. A random ngrok address, new each run, forwards to Metro for Expo Go. Everything still listens on loopback only, Metro included (`expo start --localhost`), and dev:phone checks on every run that nothing it started answers on the PC's network addresses, so the LAN can't reach them whatever the firewall profile. The Vite dev server, PostGIS and RustFS are never exposed.
+- **Request inspection is off** for both endpoints (`inspect_db_size: -1`), with the agent's local web interface: ngrok's local inspector keeps request bodies, which must never hold a locate photo.
+- **TLS terminates at ngrok's edge, so ngrok sees the traffic.** That is acceptable for public map data and the read-only routes, and not for capture bundles or locate photos: before either goes through a tunnel, it needs end-to-end TLS (a TLS-passthrough tunnel with the certificate on the PC) or another path, such as the LAN for uploads ([0002](0002-photo-localization.md#privacy-path-release-blocking), [0005](0005-privacy-by-design.md)).
+- **Read-only until auth exists.** Every route the tunnel exposes is read-only today; no write route may be exposed until the owner's device-token auth exists (Phase 2).
+- **Metro's development server is not the PC's to everyone who reaches it.** Through any tunnel its requests arrive from loopback, which Metro and Expo CLI trust as the PC: anyone with the address could attach a debugger and run code in the app on the phone, open files in the PC's editor or read any file Metro watches. So ngrok's Traffic Policy on the Metro endpoint allows only GET and HEAD, refuses the debugger, DevTools, editor, symbolication, event-stream, status and Expo dev-page endpoints at ngrok's edge, and makes no client of Metro's message socket count as the PC; dev:phone stops if a check through the tunnel finds the debugger answering or the manifest pointing at plain HTTP. Metro reads only the app, the packages it imports and `node_modules`, never `.env` files, `.data/` or `db/private/` (`apps/mapper/metro.config.js`). What stays reachable by anyone with the run's address is the app's development code, which holds the PC's paths.
+- **`/health` gives its software versions only to the PC itself**, not through a proxy or tunnel.
+- The public files and the glyphs are public data, so the API lets any origin read them, without credentials, as Cloudflare will serve them; the mapper app's map, a DOM component served by Metro, has no fixed origin. Other routes keep the listed origins (`API_CORS_ORIGINS`).
+
 ### Public files: Cloudflare free tiers
 
 - The webapp's static build is served from Cloudflare Pages. Published map files (`indoor.json` and `street.json` under each version's immutable path, plus the short-TTL `latest.json` and `status.json`) are served from R2.
@@ -39,7 +51,7 @@ Only with the owner's explicit approval. Nothing in the MVP pipeline needs one. 
 ### Builds and accounts
 
 - iOS builds start on the EAS Free plan and on GitHub macOS runners, which are free for the public repo. Xcode Cloud is an option. EAS Starter is paid for only if the native loop becomes the bottleneck ([0007](0007-expo-mapper-app.md)).
-- Through Phase 3 the only subscription is the Apple Developer Program (US$99/yr); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates the Apple membership when the Swift spike starts, and the free Expo account now, for Expo Go ([0007](0007-expo-mapper-app.md)).
+- Through Phase 3 the only subscriptions are the Apple Developer Program (US$99/yr) and the owner's existing paid ngrok plan, used for phone testing (`pnpm dev:phone`; its usage stays within the plan's included amount); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates the Apple membership when the Swift spike starts, and the free Expo account now, for Expo Go ([0007](0007-expo-mapper-app.md)).
 
 ### OneMap
 
@@ -63,6 +75,8 @@ Only with the owner's explicit approval. Nothing in the MVP pipeline needs one. 
 
 - The public map does not depend on the owner's PC being on. Uploads, processing and moderation do.
 - Presigned part URLs must point at an address the phone can reach on the LAN, not `localhost`.
+- While `pnpm dev:phone` runs, anyone who knows the reserved domain can read the API's read-only routes (`/health` without the versions), and anyone with the run's Metro address can download the app's development bundle. Stop it after testing.
+- Phone testing depends on the owner's paid ngrok plan (two endpoints in one agent, Traffic Policy, random addresses), a running cost listed below. Expo's free tunnel isn't used: see Alternatives.
 - The snapshot writer publishes from the PC to Cloudflare. R2 credentials, storage keys and the OneMap token live in `.env` files, which are git-ignored.
 - Private data stays in Singapore: on the owner's PC, then in S3 ap-southeast-1 and on the Singapore server. Public, non-personal files may be served from Cloudflare's global edge.
 - The hostname that serves `POST /locate` is DNS-only, not proxied through Cloudflare, and nothing in front of it buffers request bodies to disk ([0002](0002-photo-localization.md)).
@@ -75,6 +89,9 @@ Only with the owner's explicit approval. Nothing in the MVP pipeline needs one. 
 - **An always-on cloud server from Phase 1.** The stack review first priced this at about US$45–80 a month all in. Not needed while the owner is the only user of the API.
 - **R2 for private bundles.** R2 cannot be pinned to Singapore, so private data could end up stored outside it.
 - **GPU localization from the start.** See Why: too costly before a CPU benchmark shows it is needed.
+- **The phone on the LAN for testing** (a firewall rule for the dev ports on the Public profile, or the Wi-Fi set to Private). Rejected for testing because each port needs a rule and the Private profile may open every port; uploads still use the LAN in Phase 2.
+- **A tunnel per service** (Vite, the API, RustFS). One endpoint for the API, which serves the build, plus one for Metro, exposes the least.
+- **Expo's own tunnel for Metro** (`expo start --tunnel`, an `exp.direct` address; the first version of dev:phone, 2026-10-15). Rejected the same day: it carries Metro's debugger and other PC-only endpoints to anyone with the address (Expo trusts loopback, and the tunnel's agent connects from loopback), with no way to filter them; Expo Go loaded the app over plain HTTP; the address stayed the same across runs; its agent kept a request inspector on the PC; and Expo's shared ngrok account refused new sessions that evening (ERR_NGROK_108, its 5,000-session limit), which the owner can't fix.
 
 ## Costs
 
@@ -88,4 +105,5 @@ Figures as of 2026-10-12; sources are in the [stack review](../reviews/2026-10-1
 | Localization compute | None | CPU, same box or a second small one; priced after the benchmark |
 | S3 and backups | External drive, or about US$2 a month | About US$2–5 a month |
 | Cloudflare, domain, email | About US$1–2 a month | About US$1–2 a month |
+| ngrok, for phone testing | The owner's existing paid plan. On 2026-10-15: Hobbyist US$10 a month or Pay-as-you-go US$20 a month, each with that much usage included; endpoint hours US$0.02, counted only while traffic flows | Same, while still used |
 | GPU | None | None without the owner's approval |

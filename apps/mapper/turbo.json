@@ -3,7 +3,31 @@
   "extends": ["//"],
   "tasks": {
     "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/map-style/src/**",
+        "$TURBO_ROOT$/packages/floorplan/src/**"
+      ],
       "env": ["EXPO_PUBLIC_*"]
+    },
+    "typecheck": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/map-style/src/**",
+        "$TURBO_ROOT$/packages/floorplan/src/**"
+      ]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/map-style/src/**",
+        "$TURBO_ROOT$/packages/floorplan/src/**",
+        "$TURBO_ROOT$/services/api/test/fixtures/snapshot/**"
+      ]
     }
   }
 }

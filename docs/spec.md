@@ -329,7 +329,9 @@ The budget is as low as possible. Details: [ADR 0009](decisions/0009-hosting-and
 | 4 | The smallest x86 Singapore server that runs the Node API and PostGIS (a target of about US$12–24 a month). Private bundles in S3 ap-southeast-1. Postgres backups with WAL archiving to S3, and a restore drill. Localization on CPU, on the same or a second small box |
 | All phases | The webapp and public map files on Cloudflare free tiers (Pages + R2) |
 
-A GPU is used only with the owner's explicit approval. Through Phase 3 the only subscription is the Apple Developer Program (US$99 a year); a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates that membership when the Swift spike starts, and a free Expo account now: Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account.
+For testing on the phone through Phase 3, `pnpm dev:phone` runs one ngrok agent on the owner's paid account with two endpoints: the reserved domain to the API, which also serves the webapp's build, and a random address per run to Metro, whose debugger and other PC-only endpoints ngrok's Traffic Policy refuses. Read-only routes, public map data and the app's development code only, never capture bundles or locate photos ([ADR 0009](decisions/0009-hosting-and-budget.md#remote-access-during-phases-13), [docs/phone-testing.md](phone-testing.md)).
+
+A GPU is used only with the owner's explicit approval. Through Phase 3 the only subscriptions are the Apple Developer Program (US$99 a year) and the owner's existing paid ngrok plan, for phone testing; a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates that membership when the Swift spike starts, and a free Expo account now: Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account.
 
 ## Privacy, legal and permissions
 

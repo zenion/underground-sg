@@ -1,5 +1,4 @@
-// GET <api>/health, with a timeout. The API doesn't exist yet on this branch, so "not reachable"
-// is the normal answer for now.
+// GET <api>/health, with a timeout: whether the API (services/api) answers, and how fast.
 
 export type Health =
   | { readonly ok: true; readonly status: number; readonly ms: number }

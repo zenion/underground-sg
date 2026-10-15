@@ -1,6 +1,6 @@
 # 0005: Privacy by design
 
-Status: accepted · 2026-10-12 · amended 2026-10-12
+Status: accepted · 2026-10-12 · amended 2026-10-12, 2026-10-15
 
 ## Decision
 
@@ -37,6 +37,7 @@ Licence rule: code and weights must both be permissive. Never Ultralytics YOLO (
 - Bundles are private; nothing in a bundle is served publicly.
 - Private data stays in Singapore: the owner's PC through Phase 3, then S3 in ap-southeast-1 with Block Public Access and encryption. Public, non-personal files may be served from Cloudflare's global edge. R2 cannot be pinned to Singapore, so nothing private goes there ([0009](0009-hosting-and-budget.md)).
 - `captures.contributor_id` is set from the upload's auth, never from the manifest.
+- Capture bundles, anchor and evidence photos never pass through a TLS-terminating third-party proxy or a request inspector, development tunnels included: `pnpm dev:phone`'s ngrok endpoints carry public map data and the mapper app's development code only ([0009](0009-hosting-and-budget.md#remote-access-during-phases-13)). Query photos follow the same rule ([0002](0002-photo-localization.md)).
 
 ### Localization queries
 

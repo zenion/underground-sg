@@ -2,6 +2,7 @@
 // @usg/scripts/env), so variables already set in the environment win. Errors name the variable,
 // never its value: some of these are credentials.
 
+import { resolve } from "node:path";
 import { required } from "@usg/scripts/env";
 import type { StackService } from "@usg/scripts/errors";
 
@@ -33,13 +34,21 @@ export interface ApiConfig extends StackConfig {
   /** The address to listen on: 127.0.0.1 by default; 0.0.0.0 to let the phone reach it on the LAN. */
   readonly host: string;
   readonly port: number;
-  /** Origins allowed to read responses from a browser or WebView (CORS). */
+  /**
+   * Origins allowed to read responses from a browser or WebView (CORS), except the public files and
+   * the glyphs, which any origin may read.
+   */
   readonly corsOrigins: readonly string[];
   /**
    * Where the public files are served, ending in `/` (Cloudflare R2's public URL in production),
    * or undefined to point clients at this API's `GET /public/`.
    */
   readonly publicFilesUrl: string | undefined;
+  /**
+   * The webapp's build directory (apps/web/dist) to serve at `/`, for testing through a tunnel
+   * (`pnpm dev:phone`), or undefined to serve no page. An absolute path.
+   */
+  readonly webDist: string | undefined;
 }
 
 export const DEFAULT_HOST = "127.0.0.1";
@@ -111,6 +120,11 @@ function publicFilesUrl(env: NodeJS.ProcessEnv): string | undefined {
   return url.href.endsWith("/") ? url.href : `${url.href}/`;
 }
 
+function webDist(env: NodeJS.ProcessEnv): string | undefined {
+  const value = optional(env, "API_WEB_DIST");
+  return value === undefined ? undefined : resolve(value);
+}
+
 function need(env: NodeJS.ProcessEnv, name: string): string {
   try {
     return required(name, env);
@@ -171,6 +185,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     port: port(env),
     corsOrigins: corsOrigins(env),
     publicFilesUrl: publicFilesUrl(env),
+    webDist: webDist(env),
     ...loadStackConfig(env),
   };
 }

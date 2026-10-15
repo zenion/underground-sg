@@ -1801,7 +1801,7 @@ export interface ApiDocuments {
   error: ErrorResponse;
 }
 /**
- * GET /health (services/api/README.md): whether the API reaches PostGIS and the object store, and the versions it runs with. The status code is 200 when every check passes and 503 otherwise, with this body either way. It never carries credentials, connection strings, endpoints, bucket names or the services' own error messages: a failed check gives only a problem code, and the API logs the details.
+ * GET /health (services/api/README.md): whether the API reaches PostGIS and the object store, and the versions it runs with, which go only to a request from the machine the API runs on (not through a proxy or tunnel): for any other request they are null. The status code is 200 when every check passes and 503 otherwise, with this body either way. It never carries credentials, connection strings, endpoints, bucket names or the services' own error messages: a failed check gives only a problem code, and the API logs the details.
  */
 export interface HealthResponse {
   /**
@@ -1821,16 +1821,16 @@ export interface HealthApi {
    */
   version: string;
   /**
-   * The Node.js version, for example v26.12.0.
+   * The Node.js version, for example v26.12.0; null for a request from another machine.
    */
-  node: string;
+  node: string | null;
   /**
    * The snapshot format version the API builds and serves (docs/snapshot-format.md).
    */
   snapshot_schema_version: number;
 }
 /**
- * PostGIS. The versions are null when the check could not read them.
+ * PostGIS. The versions are null when the check could not read them, and for a request from another machine.
  */
 export interface HealthDatabase {
   /**
@@ -1850,7 +1850,7 @@ export interface HealthDatabase {
    */
   postgis: string | null;
   /**
-   * The newest dbmate migration applied (its 14-digit version), or null when none is.
+   * The newest dbmate migration applied (its 14-digit version), or null when none is (and for a request from another machine).
    */
   migration: string | null;
 }
@@ -1867,7 +1867,7 @@ export interface HealthStorage {
    */
   problem: HealthProblem | null;
   /**
-   * The object store's version, when its health endpoint reports one (RustFS does); null otherwise.
+   * The object store's version, when its health endpoint reports one (RustFS does); null otherwise, and for a request from another machine.
    */
   server: string | null;
   buckets: HealthBuckets;

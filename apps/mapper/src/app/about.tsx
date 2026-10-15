@@ -1,4 +1,4 @@
-// About: versions, the JavaScript engine and the API the app will talk to.
+// About: versions, the JavaScript engine and the API the app talks to.
 
 import { isRunningInExpoGo } from "expo";
 import Constants from "expo-constants";
@@ -73,9 +73,9 @@ export default function AboutScreen() {
             />
             {health !== null && health !== "checking" && !health.ok ? (
               <Note>
-                {health.problem} That's expected until the API exists (services/api); when it runs
-                on this PC, check that it listens on all interfaces and that Windows Firewall lets
-                the port through.
+                {health.problem} Is the API running? `pnpm dev:phone` on the PC starts it behind the
+                tunnel. Over the LAN instead, the API must listen beyond the PC (API_HOST) and
+                Windows Firewall must let its port through.
               </Note>
             ) : null}
             <Button label="Check again" disabled={health === "checking"} onPress={check} />
@@ -84,8 +84,9 @@ export default function AboutScreen() {
           <Note tone="warn">{api.problem}</Note>
         )}
         <Note>
-          The app uses the dev server's host with port EXPO_PUBLIC_API_PORT (default 28000), or
-          EXPO_PUBLIC_API_URL when set.
+          The app uses EXPO_PUBLIC_API_URL when set (`pnpm dev:phone` sets it to the tunnel's https
+          address), or else the dev server's host with port EXPO_PUBLIC_API_PORT (default 28000).
+          The Map tab loads the published map from the same API.
         </Note>
       </Card>
     </ScrollView>
