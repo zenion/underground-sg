@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/api/health.schema.json",
+  "title": "HealthResponse",
+  "description": "GET /health (services/api/README.md): whether the API reaches PostGIS and the object store, and the versions it runs with. The status code is 200 when every check passes and 503 otherwise, with this body either way. It never carries credentials, connection strings, endpoints, bucket names or the services' own error messages: a failed check gives only a problem code, and the API logs the details.",
+  "type": "object",
+  "properties": {
+    "status": {
+      "description": "ok when every check passes; unavailable otherwise.",
+      "type": "string",
+      "enum": ["ok", "unavailable"]
+    },
+    "api": {
+      "$ref": "#/$defs/api"
+    },
+    "database": {
+      "$ref": "#/$defs/database"
+    },
+    "storage": {
+      "$ref": "#/$defs/storage"
+    }
+  },
+  "required": ["status", "api", "database", "storage"],
+  "additionalProperties": false,
+  "$defs": {
+    "problem": {
+      "title": "HealthProblem",
+      "description": "Why a check failed: unreachable (nothing answered), timeout (no answer in time), access_denied (the credentials were refused), not_migrated (the database is missing, or has no migrations or no PostGIS), missing_bucket (a bucket does not exist), error (anything else; the API logs it).",
+      "type": "string",
+      "enum": ["unreachable", "timeout", "access_denied", "not_migrated", "missing_bucket", "error"]
+    },
+    "api": {
+      "title": "HealthApi",
+      "description": "The API process.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of services/api (its package.json).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "node": {
+          "description": "The Node.js version, for example v26.12.0.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "snapshot_schema_version": {
+          "description": "The snapshot format version the API builds and serves (docs/snapshot-format.md).",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["version", "node", "snapshot_schema_version"],
+      "additionalProperties": false
+    },
+    "database": {
+      "title": "HealthDatabase",
+      "description": "PostGIS. The versions are null when the check could not read them.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "description": "true when a query ran, the migrations are applied and PostGIS is installed.",
+          "type": "boolean"
+        },
+        "problem": {
+          "description": "Why the check failed, or null when it passed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/problem"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "postgres": {
+          "description": "The server's PostgreSQL version (server_version), for example 18.0.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "postgis": {
+          "description": "The version of the PostGIS extension installed in the database (pg_extension), for example 3.6.0.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "migration": {
+          "description": "The newest dbmate migration applied (its 14-digit version), or null when none is.",
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{14}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["ok", "problem", "postgres", "postgis", "migration"],
+      "additionalProperties": false
+    },
+    "storage": {
+      "title": "HealthStorage",
+      "description": "The S3 object store: RustFS on the owner's PC.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "description": "true when every bucket exists and answers.",
+          "type": "boolean"
+        },
+        "problem": {
+          "description": "Why the check failed, or null when it passed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/problem"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "server": {
+          "description": "The object store's version, when its health endpoint reports one (RustFS does); null otherwise.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "buckets": {
+          "$ref": "#/$defs/buckets"
+        }
+      },
+      "required": ["ok", "problem", "server", "buckets"],
+      "additionalProperties": false
+    },
+    "buckets": {
+      "title": "HealthBuckets",
+      "description": "Each bucket by its role, true when it exists and answers. The names stay in the API's configuration.",
+      "type": "object",
+      "properties": {
+        "bundles": {
+          "description": "Raw capture bundles (private).",
+          "type": "boolean"
+        },
+        "exports": {
+          "description": "Private full exports of HEAD, for rollback.",
+          "type": "boolean"
+        },
+        "public": {
+          "description": "The public map files.",
+          "type": "boolean"
+        }
+      },
+      "required": ["bundles", "exports", "public"],
+      "additionalProperties": false
+    }
+  }
+}

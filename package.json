@@ -18,6 +18,9 @@
     "migrate": "pnpm --filter @usg/db migrate",
     "db": "pnpm --filter @usg/db run",
     "buckets": "pnpm --filter @usg/scripts buckets",
+    "api": "pnpm --filter @usg/api start",
+    "map": "pnpm --filter @usg/api map",
+    "demo": "pnpm --filter @usg/api demo",
     "web": "pnpm --filter @usg/web dev",
     "web:fixtures": "pnpm --filter @usg/web dev:fixtures"
   },

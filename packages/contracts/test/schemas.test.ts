@@ -3,9 +3,11 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
+  API_SCHEMA_BASE_URL,
   CAPTURE_BUNDLE_SCHEMA_BASE_URL,
   type CaptureBundleJsonPath,
   DIFF_SCHEMA_BASE_URL,
+  EXPORT_SCHEMA_BASE_URL,
   MAP_SCHEMA_BASE_URL,
   SCHEMA_BASE_URL,
   SNAPSHOT_SCHEMA_BASE_URL,
@@ -68,6 +70,8 @@ describe("schema files", () => {
     expect(MAP_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}map/`);
     expect(SNAPSHOT_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}snapshot/`);
     expect(DIFF_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}diff/`);
+    expect(API_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}api/`);
+    expect(EXPORT_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}export/`);
   });
 
   test.each(ALL_SCHEMA_FILES)("%s declares 2020-12, its $id, a title and a description", (file) => {

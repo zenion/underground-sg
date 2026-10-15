@@ -12,8 +12,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile, type JSONSchema } from "json-schema-to-typescript";
 import { InputData, JSONSchemaInput, JSONSchemaStore, quicktype } from "quicktype-core";
+import { API_SCHEMA_FILES } from "../src/api.ts";
 import { CAPTURE_BUNDLE_SCHEMA_FILES } from "../src/capture-bundle.ts";
 import { CHANGE_SET_DIFF_SCHEMA_FILE } from "../src/diff.ts";
+import { HEAD_EXPORT_SCHEMA_FILE } from "../src/export.ts";
 import {
   ALL_SCHEMA_FILES,
   readSchema,
@@ -93,6 +95,26 @@ export const DOCUMENT_GROUPS: readonly DocumentGroup[] = [
       "The type of a change set's diff, change_sets.diff (docs/diff-format.md). A type map only: no file has this shape.",
     documents: [
       { name: "change_sets.diff", schema: `diff/${CHANGE_SET_DIFF_SCHEMA_FILE}`, swift: false },
+    ],
+  },
+  {
+    key: "api",
+    title: "ApiDocuments",
+    description:
+      "The type of each services/api response body (services/api/README.md), keyed by the route it answers; error is the body of every 4xx and 5xx response. A type map only: no file has this shape.",
+    documents: Object.entries(API_SCHEMA_FILES).map(([name, file]) => ({
+      name,
+      schema: `api/${file}`,
+      swift: false,
+    })),
+  },
+  {
+    key: "export",
+    title: "ExportDocuments",
+    description:
+      "The type of the private full export of HEAD (docs/head-export-format.md), keyed by its name. A type map only: no file has this shape.",
+    documents: [
+      { name: "head-export.json", schema: `export/${HEAD_EXPORT_SCHEMA_FILE}`, swift: false },
     ],
   },
 ];

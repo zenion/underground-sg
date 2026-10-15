@@ -120,6 +120,40 @@ describe("UNIQUE (venue_id, name)", () => {
         { code: SQLSTATE.uniqueViolation, constraint: "levels_venue_id_name_key" },
       ),
     ));
+
+  test("a renaming that leaves two levels with one name is refused at once", () =>
+    db.rolledBack(() =>
+      db.expectRefused("UPDATE levels SET name = 'B2' WHERE id = $1", [LEVEL.funanB1], {
+        code: SQLSTATE.uniqueViolation,
+        constraint: "levels_venue_id_name_key",
+      }),
+    ));
+
+  test("deferred (as the publish does for a change set), two levels may swap names", () =>
+    db.rolledBack(async () => {
+      await db.query("SET CONSTRAINTS levels_venue_id_name_key DEFERRED");
+      await db.query("UPDATE levels SET name = 'B1' WHERE id = $1", [LEVEL.funanB2]);
+      await db.query("UPDATE levels SET name = 'B2' WHERE id = $1", [LEVEL.funanB1]);
+      await db.query("SET CONSTRAINTS levels_venue_id_name_key IMMEDIATE");
+      const rows = await db.query<{ id: string; name: string }>(
+        "SELECT id, name FROM levels WHERE id = ANY($1::uuid[]) ORDER BY id",
+        [[LEVEL.funanB2, LEVEL.funanB1]],
+      );
+      expect(rows).toEqual([
+        { id: LEVEL.funanB2, name: "B1" },
+        { id: LEVEL.funanB1, name: "B2" },
+      ]);
+    }));
+
+  test("deferred, a name left on two levels is refused when the check comes", () =>
+    db.rolledBack(async () => {
+      await db.query("SET CONSTRAINTS levels_venue_id_name_key DEFERRED");
+      await db.query("UPDATE levels SET name = 'B2' WHERE id = $1", [LEVEL.funanB1]);
+      await db.expectRefused("SET CONSTRAINTS levels_venue_id_name_key IMMEDIATE", [], {
+        code: SQLSTATE.uniqueViolation,
+        constraint: "levels_venue_id_name_key",
+      });
+    }));
 });
 
 describe("stairs and escalators are never step_free", () => {

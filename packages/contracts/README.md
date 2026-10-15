@@ -1,12 +1,14 @@
 # @usg/contracts
 
-JSON Schema 2020-12 files for the project's file formats, with TypeScript and Swift types generated from them, the capture bundle validator, and validators for the public map files and change-set diffs. The schemas are the machine-readable form of the docs, which come first:
+JSON Schema 2020-12 files for the project's file formats, with TypeScript and Swift types generated from them, the capture bundle validator, and validators for the public map files, change-set diffs and the private full export of HEAD. The schemas are the machine-readable form of the docs, which come first:
 
 | Format | Doc | Schemas |
 | --- | --- | --- |
 | Capture bundle | [docs/capture-bundle.md](../../docs/capture-bundle.md) | `schemas/capture-bundle/` |
 | Public map files: `latest.json`, `indoor.json`, `street.json`, `status.json` | [docs/snapshot-format.md](../../docs/snapshot-format.md) | `schemas/snapshot/` |
 | Change-set diff (`change_sets.diff`) | [docs/diff-format.md](../../docs/diff-format.md) | `schemas/diff/` |
+| API response bodies (`GET /health`, `GET /map/latest`, errors) | [services/api/README.md](../../services/api/README.md) | `schemas/api/` |
+| Private full export of HEAD (`map_versions.private_export_uri`) | [docs/head-export-format.md](../../docs/head-export-format.md) | `schemas/export/` |
 
 The map files and the diff share `schemas/map/defs.schema.json`: the HEAD tables' enums and GeoJSON geometry. Change the doc, then the schemas, then the code that writes and reads the format. The capture bundle and the snapshot files bump their `schema_version` on a breaking change (a new field, enum value or file included).
 
@@ -18,21 +20,23 @@ The map files and the diff share `schemas/map/defs.schema.json`: the HEAD tables
 | `schemas/map/defs.schema.json` | The map data model's shared definitions: positions and geometries, ordinal, the enums of `db/schema.sql` |
 | `schemas/snapshot/` | The public map files, snapshot format v1: `latest`, `indoor`, `street`, `status` |
 | `schemas/diff/change-set-diff.schema.json` | `change_sets.diff`: one branch per feature type and op a change set may use |
-| `src/index.ts` | The `.` entry: the generated types; constants (`SCHEMA_VERSION`, the schema file for each document, the enum values, `DEPTH_SIZE`, `UPLOAD_PART_BYTES`, the snapshot paths and cache headers); and the checks the map schemas can't express (`checkIndoorSnapshot`, `checkChangeSetDiff` and the rest, in `src/map.ts`, `src/snapshot.ts` and `src/diff.ts`) |
+| `schemas/api/` | The response bodies of services/api: `health`, `map-latest` and `error` (Fastify's error shape). TypeScript types only |
+| `schemas/export/head-export.schema.json` | The private full export of HEAD that each map version keeps for rollback: every HEAD row with its `id` and `rev`, its columns reusing the diff's row definitions (`HeadVenue` to `HeadAnchor`). TypeScript types only |
+| `src/index.ts` | The `.` entry: the generated types; constants (`SCHEMA_VERSION`, the schema file for each document, the enum values, `DEPTH_SIZE`, `UPLOAD_PART_BYTES`, the snapshot paths and cache headers); and the checks the map schemas can't express (`checkIndoorSnapshot`, `checkChangeSetDiff`, `checkHeadExport` and the rest, in `src/map.ts`, `src/snapshot.ts`, `src/diff.ts` and `src/export.ts`), and `headExportKey` |
 | `src/schema-files.ts` | Node only: the list of schema files and their reader, shared by the generator and the Ajv setup |
 | `src/generated/contracts.ts` | Generated TypeScript types for every schema. Do not edit |
-| `src/validators.ts` | The `./validators` entry (Node only, Ajv): `validateSnapshotFile`, `validateVersion`, `validateChangeSetDiff`, `snapshotSha256`, `verifyLatestPointer`, `streetConnectorId` |
+| `src/validators.ts` | The `./validators` entry (Node only, Ajv): `validateSnapshotFile`, `validateVersion`, `validateChangeSetDiff`, `validateHeadExport`, `validateApiDocument`, `snapshotSha256`, `verifyLatestPointer`, `streetConnectorId`, `inlineSchema`, `createAjv` |
 | `generated/swift/CaptureBundle.swift` | Generated Swift Codable types. Do not edit |
 | `src/bundle-validator/` | The bundle validator and its CLI, `cli.ts` (Node only; see [Bundle validator](#bundle-validator)) |
 | `scripts/gen.ts` | The generator (`pnpm gen`); `scripts/codegen.ts` does the work |
-| `test/` | Ajv strict-mode compile, the docs' examples and invalid variants, enums and columns against `db/schema.sql`, a check that the generated files are current, the bundle validator's tests (`bundle-*.test.ts`) on synthetic bundles generated in code by `bundle-fixture.ts` and `tar-writer.ts`, and the map files' and diff's tests (`snapshot.test.ts`, `diff.test.ts`, `docs.test.ts`) on the synthetic City Hall examples in `map-examples.ts` |
+| `test/` | Ajv strict-mode compile, the docs' examples and invalid variants, enums and columns against `db/schema.sql`, a check that the generated files are current, the bundle validator's tests (`bundle-*.test.ts`) on synthetic bundles generated in code by `bundle-fixture.ts` and `tar-writer.ts`, the map files' and diff's tests (`snapshot.test.ts`, `diff.test.ts`, `docs.test.ts`) on the synthetic City Hall examples in `map-examples.ts`, and the private export's (`export.test.ts`) |
 
 Package exports:
 
 - `@usg/contracts`: types and constants. Environment-neutral (no Node APIs, no Ajv), so the mapper app (Hermes) and the webapp can import it. `pnpm typecheck` checks this: besides the package's own `tsc`, it runs `tsc -p tsconfig.neutral.json`, which compiles `src/index.ts` and what it imports with only the ES2024 library (no Node or DOM types) and `noUncheckedSideEffectImports`, so a Node global or a `node:` import (static, side-effect or dynamic) fails. A test follows the entry's imports and checks they stay inside the package.
 - `@usg/contracts/schemas/*`: the schema files, for example `@usg/contracts/schemas/capture-bundle/manifest.schema.json` (import it `with { type: "json" }`, or read the file).
 - `@usg/contracts/bundle-validator`: the Node-only bundle validator, with Ajv. Ajv stays out of the `.` entry; a test checks that the `.` entry never reaches it.
-- `@usg/contracts/validators`: the Node-only validators for the public map files and change-set diffs, with Ajv and `node:crypto`: the schema, then the `check*` functions (`validateVersion` checks a version's two files against each other too), plus the content hashes of [snapshot-format.md](../../docs/snapshot-format.md#content-addressing) and street connectors' ids (UUIDv5, which needs SHA-1).
+- `@usg/contracts/validators`: the Node-only validators for the public map files, change-set diffs, the private full export and API responses, with Ajv and `node:crypto`: the schema, then the `check*` functions (`validateVersion` checks a version's two files against each other too), plus the content hashes of [snapshot-format.md](../../docs/snapshot-format.md#content-addressing) and street connectors' ids (UUIDv5, which needs SHA-1). `inlineSchema(path)` turns a schema file into one self-contained schema, every `$ref` replaced by its target and no `$id`, `$schema` or `$defs`, for tools that can't resolve this package's `$id`s: services/api gives its Fastify routes these as response schemas, and @fastify/swagger builds the OpenAPI document from them. `createAjv` is the package's Ajv setup (2020-12, strict, formats, every schema added).
 
 ## Schema ids
 
@@ -44,11 +48,11 @@ Each schema's `$id` is `https://underground-sg.local/schemas/<family>/<file>` (`
 pnpm gen
 ```
 
-Run it after changing a schema and commit the output. It writes `src/generated/contracts.ts` with json-schema-to-typescript and `generated/swift/CaptureBundle.swift` with quicktype, and deletes anything else in those two directories. The documents it covers are `DOCUMENT_GROUPS` in `scripts/codegen.ts`, built from the constants in `src/capture-bundle.ts`, `src/snapshot.ts` and `src/diff.ts`. Every document gets TypeScript types, and each opts in or out of Swift (`swift`): the capture bundle's documents opt in, because the Swift module writes them; the map files and the diff opt out, because no Swift code reads them. The output is deterministic and the same on Windows and Linux: inputs come from that fixed list, schemas are read only from this package, line endings are LF, and no paths, times or tool versions are written. CI runs `pnpm gen` on Ubuntu and Windows and fails on any diff; the package tests also generate into a temporary directory and compare, so `pnpm test` catches stale output locally.
+Run it after changing a schema and commit the output. It writes `src/generated/contracts.ts` with json-schema-to-typescript and `generated/swift/CaptureBundle.swift` with quicktype, and deletes anything else in those two directories. The documents it covers are `DOCUMENT_GROUPS` in `scripts/codegen.ts`, built from the constants in `src/capture-bundle.ts`, `src/snapshot.ts`, `src/diff.ts`, `src/api.ts` and `src/export.ts`. Every document gets TypeScript types, and each opts in or out of Swift (`swift`): the capture bundle's documents opt in, because the Swift module writes them; the map files, the diff, the export and the API's documents opt out, because no Swift code reads them. The output is deterministic and the same on Windows and Linux: inputs come from that fixed list, schemas are read only from this package, line endings are LF, and no paths, times or tool versions are written. CI runs `pnpm gen` on Ubuntu and Windows and fails on any diff; the package tests also generate into a temporary directory and compare, so `pnpm test` catches stale output locally.
 
 Biome skips directories named `generated` (`biome.json`): the generators own the formatting of their output (json-schema-to-typescript runs Prettier with the repo's settings, and Biome can't format Swift), and lint fixes to generated code would be overwritten. `tsc` still typechecks the generated TypeScript.
 
-The TypeScript types are compiled from one in-memory root, `ContractDocuments`, with a type map per group: `CaptureBundleDocuments` (bundle path to document type, for example `CaptureBundleDocuments["poses.jsonl"]` is `PoseLine`), `SnapshotDocuments` (`SnapshotDocuments["indoor.json"]` is `IndoorSnapshot`) and `DiffDocuments` (`ChangeSetDiff`). One compile declares every shared type once, so titles must be unique across all the schemas.
+The TypeScript types are compiled from one in-memory root, `ContractDocuments`, with a type map per group: `CaptureBundleDocuments` (bundle path to document type, for example `CaptureBundleDocuments["poses.jsonl"]` is `PoseLine`), `SnapshotDocuments` (`SnapshotDocuments["indoor.json"]` is `IndoorSnapshot`), `DiffDocuments` (`ChangeSetDiff`), `ApiDocuments` (route to response body, for example `ApiDocuments["GET /health"]` is `HealthResponse`) and `ExportDocuments` (`HeadExport`). One compile declares every shared type once, so titles must be unique across all the schemas.
 
 ## Swift
 

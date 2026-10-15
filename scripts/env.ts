@@ -15,9 +15,12 @@ export function loadRootEnv(): void {
   }
 }
 
-/** A variable that must be set, from the environment or the root `.env`. */
-export function required(name: string): string {
-  const value = process.env[name];
+/**
+ * A variable that must be set, from the environment or the root `.env` (after `loadRootEnv`).
+ * The error names the variable, never a value.
+ */
+export function required(name: string, env: NodeJS.ProcessEnv = process.env): string {
+  const value = env[name];
   if (value === undefined || value === "") {
     throw new Error(
       `${name} is not set. Copy .env.example to .env at the repo root, or set it in the environment.`,

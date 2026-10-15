@@ -2,6 +2,7 @@
 
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "pg-connection-string";
 
 export const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 export const MIGRATIONS_DIR = fileURLToPath(new URL("../migrations/", import.meta.url));
@@ -44,7 +45,37 @@ export function withDatabase(url: URL, name: string): URL {
   return copy;
 }
 
-/** True for a server on this machine: the compose stack, or CI's service container. */
-export function isLocalHost(url: URL): boolean {
-  return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+/** True for a host name on this machine (loopback): `localhost`, 127.0.0.0/8 or `::1`. */
+export function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" || host === "[::1]" || host === "::1" || /^127(?:\.\d{1,3}){3}$/.test(host)
+  );
+}
+
+/**
+ * Query parameters that name the server instead of the URL's host: node-postgres (through
+ * pg-connection-string) takes `host`, and lib/pq, which dbmate uses, takes `host` and `hostaddr`
+ * (and `service`, a file of settings). A URL with any of them is never taken for a local one.
+ */
+const HOST_PARAMETERS = ["host", "hostaddr", "service"];
+
+/**
+ * True for a server on this machine (the compose stack, or CI's service container), as the
+ * drivers read the URL: its host is loopback, no query parameter names another server, and
+ * node-postgres's own parse of it agrees.
+ */
+export function isLocalHost(url: URL | string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  for (const name of parsed.searchParams.keys()) {
+    if (HOST_PARAMETERS.includes(name.toLowerCase())) return false;
+  }
+  if (!isLoopbackHost(parsed.hostname)) return false;
+  const host = parse(parsed.href).host;
+  return host !== null && host !== undefined && isLoopbackHost(host);
 }

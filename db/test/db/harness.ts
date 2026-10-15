@@ -2,11 +2,17 @@
 // the file, so files run in parallel and leave nothing behind. Inside a file, tests run in
 // transactions that are rolled back (`rolledBack`), except the ones about a deferred rule,
 // which fires at COMMIT and so needs a real commit (`committed`, `expectCommitRefused`).
+//
+// Other packages' database tests reuse this (`@usg/db/test/harness`, with
+// `@usg/db/test/global-setup` as their Vitest globalSetup); `url` lets them open their own
+// connections, for example a Kysely pool, to the file's database.
 
 import pg from "pg";
 import { afterAll, beforeAll, expect, inject } from "vitest";
 import { withDatabase } from "../../src/config.ts";
 import { createScratchFromTemplate, dropScratch } from "../../src/scratch.ts";
+// For its `ProvidedContext` declaration, which types `inject` below; erased at run time.
+import type {} from "./global-setup.ts";
 
 /** The SQLSTATEs the schema's rules raise. */
 export const SQLSTATE = {
@@ -26,6 +32,7 @@ export type Refusal = { code: string; constraint: string } | { code: string; mes
 
 export class TestDb {
   #client: pg.Client | undefined;
+  #url: URL | undefined;
   #inTransaction = false;
 
   get client(): pg.Client {
@@ -33,14 +40,22 @@ export class TestDb {
     return this.#client;
   }
 
+  /** The database's URL, for opening other connections to it. Set once connected. */
+  get url(): URL {
+    if (this.#url === undefined) throw new Error("not connected: call useDatabase()");
+    return new URL(this.#url);
+  }
+
   async connect(url: URL): Promise<void> {
     this.#client = new pg.Client({ connectionString: url.href });
     await this.#client.connect();
+    this.#url = new URL(url);
   }
 
   async close(): Promise<void> {
     await this.#client?.end();
     this.#client = undefined;
+    this.#url = undefined;
   }
 
   async query<R extends pg.QueryResultRow = Record<string, unknown>>(

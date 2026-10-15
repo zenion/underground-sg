@@ -3,7 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Scripts for the local Docker stack in docker-compose.yml",
+  "description": "Scripts for the local Docker stack in docker-compose.yml, and the root .env loader and stack error messages the services share",
+  "exports": {
+    "./env": "./env.ts",
+    "./errors": "./errors.ts"
+  },
   "scripts": {
     "buckets": "node buckets.ts",
     "typecheck": "tsc"
