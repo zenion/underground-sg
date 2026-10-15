@@ -46,20 +46,26 @@ function pathPattern(text) {
     .join("[\\\\/]");
 }
 
-/** The folders on the way to the sources (apps, packages), which the on-demand reads walk through. */
-const ANCESTORS = [
-  ...new Set(
-    SOURCES.flatMap((source) =>
-      source
-        .split("/")
-        .slice(0, -1)
-        .map((_, i, parts) => parts.slice(0, i + 1).join("/")),
-    ),
-  ),
-];
-const outsideSources = new RegExp(
-  `^${pathPattern(root)}[\\\\/](?!(?:${[...SOURCES, "node_modules"].map(pathPattern).join("|")})(?:[\\\\/]|$)|(?:${ANCESTORS.map(pathPattern).join("|")})$)`,
-);
+// Blocks what is inside the repo root's other folders: every top-level folder except apps/,
+// packages/ and node_modules/, and inside apps/ and packages/ everything but the app and its
+// packages. Files directly at the repo root (package.json, pnpm-workspace.yaml, …) stay
+// readable: Metro looks at them while resolving on Linux, where pnpm's links are relative, and
+// blocking them makes it fail ("Invariant Violation: Failed to collapse"). They are in the
+// public repo anyway; the private files among them are blocked by PRIVATE below.
+const SEP = "[\\\\/]";
+const groups = new Map();
+for (const source of SOURCES) {
+  const [group, name] = source.split("/");
+  groups.set(group, [...(groups.get(group) ?? []), name]);
+}
+const insideGroups = [...groups]
+  .map(
+    ([group, names]) =>
+      `${pathPattern(group)}${SEP}(?!(?:${names.map(pathPattern).join("|")})(?:${SEP}|$))`,
+  )
+  .join("|");
+const otherFolders = `(?!(?:${[...groups.keys(), "node_modules"].map(pathPattern).join("|")})${SEP})[^\\\\/]+${SEP}`;
+const outsideSources = new RegExp(`^${pathPattern(root)}${SEP}(?:${insideGroups}|${otherFolders})`);
 const PRIVATE = [
   /[\\/]\.env(\.[^\\/]*)?$/,
   /[\\/]credentials\.json$/,

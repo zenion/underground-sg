@@ -62,7 +62,6 @@ describe("metro.config.js", () => {
   test.each([
     // Under the repo root but outside the app's sources: Expo's on-demand file system would read
     // them otherwise.
-    join(ROOT, "package.json"),
     join(ROOT, "db", "package.json"),
     join(ROOT, "services", "api", "src", "config.ts"),
     join(ROOT, "scripts", "dev-phone-lib.ts"),
@@ -81,6 +80,8 @@ describe("metro.config.js", () => {
     join(ROOT, "packages", "map-style", ".env.production.local"),
     join(ROOT, ".data", "fixtures", "funan-b2.json"),
     join(ROOT, ".data", "dev-phone", "ngrok.log"),
+    join(ROOT, ".git", "config"),
+    join(ROOT, "docs", "spec.md"),
     join(APP, ".turbo", "turbo-build.log"),
     "/home/ci/usg/db/private/zones.json",
     "/home/ci/usg/apps/mapper/.env.local",
@@ -89,6 +90,10 @@ describe("metro.config.js", () => {
   });
 
   test.each([
+    // Files directly at the repo root: Metro reads them while resolving on Linux (pnpm's relative
+    // links) and fails if they are blocked. They are public in the repo.
+    join(ROOT, "package.json"),
+    join(ROOT, "pnpm-workspace.yaml"),
     // The folders on the way, which Expo's on-demand reads walk through in an export.
     join(ROOT, "apps"),
     join(ROOT, "packages"),
