@@ -8,6 +8,8 @@ Change this doc first, then the JSON Schemas in `packages/contracts/schemas/snap
 
 All files live in the public bucket (`usg-public` in RustFS on the owner's PC, Cloudflare R2 in production; [0009](decisions/0009-hosting-and-budget.md)). Nothing private is ever written there.
 
+On the owner's PC the API stands in for Cloudflare: it serves the bucket read-only at `GET /public/<key>` (`/public/latest.json`, `/public/snapshots/<snapshot_sha256>/indoor.json`), only the files listed below, and answers 404 for one that isn't there, as before the first publish. The bucket itself gets no public-read rule. The webapp's dev server (`pnpm web`) proxies `/public/` to it.
+
 ```
 latest.json                           pointer to the current version
 status.json                           status overlay; never part of a version
@@ -131,15 +133,15 @@ An excerpt (`features` cut to four):
       "properties": { "feature_type": "node", "id": "40000000-0000-0000-0000-000000000004",
         "level_id": null, "ordinal": 0, "kind": "exit", "name": "Exit B",
         "street_name": "North Bridge Road", "connector_id": "90000000-0000-0000-0000-000000000002" },
-      "geometry": { "type": "Point", "coordinates": [103.8506, 1.2928] } },
+      "geometry": { "type": "Point", "coordinates": [103.8506, 1.2916] } },
     { "type": "Feature", "id": "50000000-0000-0000-0000-000000000003",
       "properties": { "feature_type": "edge", "id": "50000000-0000-0000-0000-000000000003",
         "from_node": "40000000-0000-0000-0000-000000000003",
         "to_node": "40000000-0000-0000-0000-000000000004", "from_ordinal": -2, "to_ordinal": 0,
         "level_id": null, "kind": "stairs", "connector_id": "90000000-0000-0000-0000-000000000002",
         "oneway": false, "access": "public", "opening_hours": "Mo-Su 06:00-24:00",
-        "length_m": 18.5, "step_free": false, "sheltered": true, "outdoor": false },
-      "geometry": { "type": "LineString", "coordinates": [[103.8502, 1.2915], [103.8506, 1.2928]] } }
+        "length_m": 24.2, "step_free": false, "sheltered": true, "outdoor": false },
+      "geometry": { "type": "LineString", "coordinates": [[103.8504, 1.2916], [103.8506, 1.2916]] } }
   ]
 }
 ```
@@ -161,14 +163,14 @@ The street graph imported from OpenStreetMap (`street_nodes` and `street_edges`)
   },
   "features": [
     { "type": "Feature", "id": 1001, "properties": { "feature_type": "street_node" },
-      "geometry": { "type": "Point", "coordinates": [103.8507, 1.29285] } },
+      "geometry": { "type": "Point", "coordinates": [103.8507, 1.2916] } },
     { "type": "Feature", "id": 1002, "properties": { "feature_type": "street_node" },
       "geometry": { "type": "Point", "coordinates": [103.8515, 1.293] } },
     { "type": "Feature",
       "properties": { "feature_type": "street_edge", "osm_way_id": 2001, "from_osm_node": 1001,
         "to_osm_node": 1002, "highway": "footway", "footway": "sidewalk", "covered": false,
-        "length_m": 92.31 },
-      "geometry": { "type": "LineString", "coordinates": [[103.8507, 1.29285], [103.8515, 1.293]] } }
+        "length_m": 178.58 },
+      "geometry": { "type": "LineString", "coordinates": [[103.8507, 1.2916], [103.8515, 1.293]] } }
   ]
 }
 ```

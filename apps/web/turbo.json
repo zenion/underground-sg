@@ -1,0 +1,33 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/map-style/src/**",
+        "$TURBO_ROOT$/packages/map-style/glyphs/**"
+      ],
+      "env": ["VITE_*"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/map-style/src/**"
+      ]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/contracts/schemas/**",
+        "$TURBO_ROOT$/packages/map-style/src/**",
+        "$TURBO_ROOT$/packages/map-style/glyphs/**"
+      ]
+    }
+  }
+}

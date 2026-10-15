@@ -20,7 +20,9 @@
     "buckets": "pnpm --filter @usg/scripts buckets",
     "api": "pnpm --filter @usg/api start",
     "map": "pnpm --filter @usg/api map",
-    "demo": "pnpm --filter @usg/api demo"
+    "demo": "pnpm --filter @usg/api demo",
+    "web": "pnpm --filter @usg/web dev",
+    "web:fixtures": "pnpm --filter @usg/web dev:fixtures"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
