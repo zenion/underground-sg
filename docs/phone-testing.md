@@ -86,6 +86,16 @@ An error screen (LogBox) on the phone shows the stack without source lines: ngro
 
 What to send back: anything wrong in Safari, the Floor plan numbers, whether the Map tab showed the published map and drawing worked, and the iOS and Expo Go versions (About shows the SDK; Expo Go's own version is in its Settings).
 
+## With the development build
+
+Once the development build is installed (EAS `development` profile, Developer Mode on), serve it instead of Expo Go:
+
+```bash
+pnpm dev:phone --dev-client
+```
+
+Everything else is the same: the API on the reserved domain, Metro on a random https address behind the same ngrok rules. The summary prints a QR code for the build's deep link (`exp+underground-sg://expo-development-client/?url=…`): scan it with the Camera app, or open **Underground SG Mapper** and in its launcher tap **Enter URL manually** and type the `https://…ngrok.app` address. No Expo sign-in is needed for the development build. Swift changes need a new build (`eas build --profile development --platform ios`; the first took about 5 minutes); TypeScript changes reload through Metro.
+
 ## Stop it
 
 Press **Ctrl+C** in the terminal. Metro stops, then dev:phone stops ngrok and the API: every process it started, with their children, and nothing else (your own `node` or `ngrok` windows are left alone). The reserved domain then answers ngrok's "endpoint offline" page, and the Metro address is gone for good. PostGIS and RustFS keep running; `docker compose stop` stops them and keeps the data.
