@@ -42,6 +42,7 @@ import {
   apiEnv,
   apiPort,
   classifyHealth,
+  devClientUrl,
   ENDPOINTS,
   expoArgs,
   expoEnv,
@@ -597,7 +598,9 @@ async function main(): Promise<void> {
   }
 
   // 4. ngrok: the API on the domain and, when Metro runs, Metro on a random address.
-  const withMetro = whoami.kind === "signed-in";
+  // Expo Go opens a project only when it and Expo CLI share an Expo account; the development build
+  // doesn't need that.
+  const withMetro = options.devClient || whoami.kind === "signed-in";
   say(
     `Starting ngrok: ${origin} → 127.0.0.1:${port}${withMetro ? `, and a random address → Metro on localhost:${METRO_PORT}` : ""}; inspection off (log: ${logs}/ngrok.log)…`,
   );
@@ -658,7 +661,7 @@ async function main(): Promise<void> {
   say(`${origin} answers through the tunnel.`);
 
   // 5. Metro for Expo Go, on loopback, reached through the Metro endpoint.
-  if (whoami.kind !== "signed-in") {
+  if (!withMetro) {
     const metro: MetroState =
       whoami.kind === "not-signed-in"
         ? { kind: "not-signed-in" }
@@ -672,15 +675,21 @@ async function main(): Promise<void> {
     cwd: mapper,
     quiet: true,
   });
-  say(`Starting Metro for Expo Go on localhost:${METRO_PORT}, reached at ${metroUrl}…`);
+  say(
+    `Starting Metro for ${options.devClient ? "the development build" : "Expo Go"} on localhost:${METRO_PORT}, reached at ${metroUrl}…`,
+  );
   const metroStartedAt = Date.now();
   // Metro gets this terminal: its keys (r reloads the app) and Ctrl+C, which it handles itself;
   // its exit then stops the rest.
-  const metroProcess = spawn(NODE, [expo, ...expoArgs({ clear: options.clear })], {
-    cwd: mapper,
-    env: expoEnv(process.env, { domain, metroUrl }),
-    stdio: "inherit",
-  });
+  const metroProcess = spawn(
+    NODE,
+    [expo, ...expoArgs({ clear: options.clear, devClient: options.devClient })],
+    {
+      cwd: mapper,
+      env: expoEnv(process.env, { domain, metroUrl }),
+      stdio: "inherit",
+    },
+  );
   const metroChild = track("Metro", metroProcess, true, false, metroStartedAt);
   metroProcess.on("error", (error) => {
     if (!stopping) void shutdown(1, `Metro couldn't start: ${error.message}`);
@@ -715,7 +724,7 @@ async function main(): Promise<void> {
     }
   }
   await checkNotOnLan([port, METRO_PORT]);
-  const url = expoGoUrl(metroUrl);
+  const url = options.devClient ? devClientUrl(metroUrl) : expoGoUrl(metroUrl);
   let qr: string | undefined;
   try {
     const modules = toQR(url);
@@ -724,7 +733,19 @@ async function main(): Promise<void> {
     qr = undefined;
   }
   console.log(
-    summary({ domain, published, metro: { kind: "running", user: whoami.user, url, qr }, logs }),
+    summary({
+      domain,
+      published,
+      metro: {
+        kind: "running",
+        client: options.devClient ? "dev-client" : "expo-go",
+        user: whoami.kind === "signed-in" ? whoami.user : undefined,
+        url,
+        metroUrl,
+        qr,
+      },
+      logs,
+    }),
   );
 }
 

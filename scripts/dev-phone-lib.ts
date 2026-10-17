@@ -215,13 +215,14 @@ export function apiEnv(
 }
 
 /**
- * Expo CLI's arguments: Metro for Expo Go (not the dev client), listening on loopback only
- * (`--localhost`); the phone reaches it through ngrok's Metro endpoint (EXPO_PACKAGER_PROXY_URL).
+ * Expo CLI's arguments: Metro for Expo Go, or for the installed development build with
+ * `devClient`, listening on loopback only (`--localhost`); the phone reaches it through ngrok's
+ * Metro endpoint (EXPO_PACKAGER_PROXY_URL).
  */
-export function expoArgs(options: { clear?: boolean } = {}): string[] {
+export function expoArgs(options: { clear?: boolean; devClient?: boolean } = {}): string[] {
   return [
     "start",
-    "--go",
+    options.devClient ? "--dev-client" : "--go",
     "--localhost",
     "--port",
     String(METRO_PORT),
@@ -251,19 +252,22 @@ export function expoEnv(
 export interface Options {
   /** Pass --clear to Metro (a stale shared cache). */
   readonly clear: boolean;
+  /** Serve the installed development build instead of Expo Go. */
+  readonly devClient: boolean;
   /** Don't publish the demo map when nothing is published. */
   readonly noDemo: boolean;
   readonly help: boolean;
 }
 
-export const USAGE = "usage: pnpm dev:phone [--clear] [--no-demo]";
+export const USAGE = "usage: pnpm dev:phone [--dev-client] [--clear] [--no-demo]";
 
 export function parseOptions(args: readonly string[]): Options {
-  const known = new Set(["--clear", "--no-demo", "--help", "-h"]);
+  const known = new Set(["--dev-client", "--clear", "--no-demo", "--help", "-h"]);
   const unknown = args.filter((arg) => !known.has(arg));
   if (unknown.length > 0) throw new SetupError(`Unknown argument ${unknown[0]}. ${USAGE}`);
   return {
     clear: args.includes("--clear"),
+    devClient: args.includes("--dev-client"),
     noDemo: args.includes("--no-demo"),
     help: args.includes("--help") || args.includes("-h"),
   };
@@ -423,6 +427,22 @@ export function parseWhoami(
       ? `expo whoami exited with code ${result.status ?? "none"}`
       : redact(first).slice(0, 200);
   return { kind: "failed", detail };
+}
+
+/**
+ * The development build's URL scheme: expo-dev-client registers `exp+` and the slug with
+ * characters outside [A-Za-z0-9+.-] removed, lowercased (its getDefaultScheme). The slug is
+ * "underground-sg" (apps/mapper/app.config.ts; a test keeps the two in step).
+ */
+export const DEV_CLIENT_SCHEME = "exp+underground-sg";
+
+/**
+ * The deep link that opens the installed development build on Metro's https address, as Expo
+ * CLI builds it for `--dev-client` (UrlCreator.constructDevClientUrl).
+ */
+export function devClientUrl(metroUrl: string): string {
+  const origin = new URL(metroUrl).origin;
+  return `${DEV_CLIENT_SCHEME}://expo-development-client/?url=${encodeURIComponent(origin)}`;
 }
 
 /** The exps:// URL Expo Go opens for Metro's https address: exps:// is exp:// over https. */
@@ -611,9 +631,14 @@ export function qrText(modules: Uint8Array, size: number): string {
 export type MetroState =
   | {
       readonly kind: "running";
-      readonly user: string;
-      /** The exps:// URL. */
+      /** Expo Go (exps:// URL, needs the same Expo account) or the installed development build. */
+      readonly client: "expo-go" | "dev-client";
+      /** The Expo account on this PC, when known (Expo Go needs it). */
+      readonly user?: string | undefined;
+      /** The exps:// URL (Expo Go) or the exp+underground-sg:// deep link (development build). */
       readonly url: string;
+      /** Metro's https address, which the development build's launcher also accepts. */
+      readonly metroUrl?: string | undefined;
       /** Its QR code (qrText), when one could be made. */
       readonly qr?: string | undefined;
     }
@@ -634,9 +659,20 @@ export function summary(options: {
       : `map version ${options.published.version}${options.published.demo ? " (the demo map)" : ""}`;
   const lines = ["", "Ready to test on the iPhone", "", `  Safari:   ${origin}   (${map})`];
   const { metro } = options;
-  if (metro.kind === "running") {
+  if (metro.kind === "running" && metro.client === "dev-client") {
     lines.push(
-      `  Expo Go:  signed in as ${metro.user} on this PC; sign in to the same account in Expo Go.`,
+      "  Dev build: open the installed Underground SG Mapper (the development build, not Expo Go).",
+      metro.qr === undefined
+        ? "            In its launcher, tap Enter URL manually and type"
+        : "            Scan this QR code with the iPhone's Camera app, or in its launcher tap Enter URL manually and type",
+      `            ${metro.metroUrl ?? metro.url}`,
+      "            (https; a new address each run.)",
+      `            The app reaches the API at ${origin}.`,
+    );
+    if (metro.qr !== undefined) lines.push("", metro.qr);
+  } else if (metro.kind === "running") {
+    lines.push(
+      `  Expo Go:  signed in as ${metro.user ?? "(unknown)"} on this PC; sign in to the same account in Expo Go.`,
       metro.qr === undefined
         ? "            In Expo Go, tap Enter URL manually and type"
         : "            Scan this QR code with the iPhone's Camera app, or in Expo Go enter",

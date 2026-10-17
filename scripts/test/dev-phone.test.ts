@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // The pure parts of `pnpm dev:phone` (dev-phone-lib.ts): settings, the children's arguments,
 // environments and ngrok configuration, reading Docker's, the API's, ngrok's and Expo's answers,
 // the summary and its QR code, and which processes it stops.
@@ -8,6 +9,8 @@ import {
   apiPort,
   classifyHealth,
   DEFAULT_API_PORT,
+  DEV_CLIENT_SCHEME,
+  devClientUrl,
   expoArgs,
   expoEnv,
   expoGoUrl,
@@ -76,12 +79,19 @@ describe("settings", () => {
   });
 
   test("options", () => {
-    expect(parseOptions([])).toEqual({ clear: false, noDemo: false, help: false });
+    expect(parseOptions([])).toEqual({
+      clear: false,
+      devClient: false,
+      noDemo: false,
+      help: false,
+    });
     expect(parseOptions(["--clear", "--no-demo"])).toEqual({
       clear: true,
+      devClient: false,
       noDemo: true,
       help: false,
     });
+    expect(parseOptions(["--dev-client"]).devClient).toBe(true);
     expect(parseOptions(["-h"]).help).toBe(true);
     expect(() => parseOptions(["--tunnel"])).toThrow(/Unknown argument --tunnel/);
   });
@@ -227,6 +237,14 @@ describe("the children's arguments, environments and ngrok configuration", () =>
     expect(expoArgs()).toEqual(["start", "--go", "--localhost", "--port", String(METRO_PORT)]);
     expect(expoArgs({ clear: true })).toContain("--clear");
     expect(expoArgs()).not.toContain("--tunnel");
+    // The installed development build instead of Expo Go: same loopback-only Metro.
+    expect(expoArgs({ devClient: true })).toEqual([
+      "start",
+      "--dev-client",
+      "--localhost",
+      "--port",
+      String(METRO_PORT),
+    ]);
   });
 
   test("Metro: URLs on the Metro endpoint's https address, the API on the domain, no QR", () => {
@@ -550,6 +568,29 @@ describe("which processes are stopped", () => {
   });
 });
 
+describe("the development build", () => {
+  test("its deep link opens Metro's https origin, as Expo CLI builds it", () => {
+    expect(devClientUrl("https://ab12cd34ef56.ngrok.app")).toBe(
+      "exp+underground-sg://expo-development-client/?url=https%3A%2F%2Fab12cd34ef56.ngrok.app",
+    );
+    // Only the origin: a path or query on Metro's address never reaches the launcher.
+    expect(devClientUrl("https://ab12cd34ef56.ngrok.app/x?y=1")).toBe(
+      devClientUrl("https://ab12cd34ef56.ngrok.app"),
+    );
+  });
+
+  test("its scheme follows the app's slug (expo-dev-client: exp+ and the cleaned, lowercased slug)", () => {
+    const config = readFileSync(
+      new URL("../../apps/mapper/app.config.ts", import.meta.url),
+      "utf8",
+    );
+    const slug = /\bslug:\s*"([^"]+)"/.exec(config)?.[1];
+    expect(slug).toBeDefined();
+    const expected = `exp+${(slug ?? "").replace(/[^A-Za-z0-9+\-.]/g, "").toLowerCase()}`;
+    expect(DEV_CLIENT_SCHEME).toBe(expected);
+  });
+});
+
 describe("the summary", () => {
   const base = { domain: "example.ngrok.app", logs: ".data/dev-phone" };
 
@@ -559,6 +600,7 @@ describe("the summary", () => {
       published: { version: 1, demo: true },
       metro: {
         kind: "running",
+        client: "expo-go",
         user: "xennion",
         url: "exps://ab12cd34ef56.ngrok.app",
         qr: "█▀▄ QR",
@@ -578,10 +620,35 @@ describe("the summary", () => {
     const text = summary({
       ...base,
       published: undefined,
-      metro: { kind: "running", user: "xennion", url: "exps://ab12cd34ef56.ngrok.app" },
+      metro: {
+        kind: "running",
+        client: "expo-go",
+        user: "xennion",
+        url: "exps://ab12cd34ef56.ngrok.app",
+      },
     });
     expect(text).toContain("Enter URL manually");
     expect(text).not.toContain("Scan this QR code");
+  });
+
+  test("the development build: its deep link as a QR code and the https address for its launcher", () => {
+    const text = summary({
+      ...base,
+      published: { version: 1, demo: true },
+      metro: {
+        kind: "running",
+        client: "dev-client",
+        url: devClientUrl("https://ab12cd34ef56.ngrok.app"),
+        metroUrl: "https://ab12cd34ef56.ngrok.app",
+        qr: "█▀▄ QR",
+      },
+    });
+    expect(text).toContain(
+      "open the installed Underground SG Mapper (the development build, not Expo Go)",
+    );
+    expect(text).toContain("https://ab12cd34ef56.ngrok.app");
+    expect(text).toContain("█▀▄ QR");
+    expect(text).not.toContain("sign in to the same account in Expo Go");
   });
 
   test("without an Expo sign-in it says how to sign in", () => {
