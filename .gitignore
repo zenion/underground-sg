@@ -15,6 +15,16 @@ credentials.json
 /capture-*/
 /*.bundle/
 
+# session recordings and their exports never go in git (docs/session-recording.md, ADR 0010).
+# Unanchored, so a copy anywhere in the tree is ignored. Only the generated synthetic sets
+# (`pnpm rec synth`, origin: synthetic; one directory per set, holding rec-<id>/ beside its
+# capture-<id>/ bundles) are tracked, and CI and the pre-push hook check that they are synthetic.
+# A set's own directory must not be named rec-* or replay-*, or nothing inside it can be re-included.
+rec-*/
+replay-*/
+*.part
+!packages/recording/fixtures/synthetic/**/rec-*/
+
 # restricted_zones outlines (back-of-house areas) are private
 db/private/
 

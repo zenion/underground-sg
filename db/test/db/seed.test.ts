@@ -4,7 +4,7 @@
 // a database that holds the demo map.
 
 import { describe, expect, test } from "vitest";
-import { CORE_VENUE, coreVenues } from "../../seed/core-venues.ts";
+import { CORE_VENUE, coreVenues, EXPANSION_VENUE } from "../../seed/core-venues.ts";
 import { DEMO_OWNER } from "../../src/demo.ts";
 import { checkDataset, type SeedDataset, SeedError, type SeedVenue, seed } from "../../src/seed.ts";
 import { point } from "./fixtures.ts";
@@ -63,6 +63,8 @@ describe("the core venues", () => {
     const first = await seed(db.client, coreVenues);
     expect(first.insertedVenues).toEqual(Object.values(CORE_VENUE));
     expect(first.insertedLevels).toEqual([]);
+    // Funan and CityLink Mall aren't there to remove.
+    expect(first.removedVenues).toEqual([]);
     const after = await headRows(db);
 
     const second = await seed(db.client, coreVenues);
@@ -81,11 +83,61 @@ describe("the core venues", () => {
       ]),
     ).toEqual([
       { name: "City Hall MRT", kind: "mrt_station" },
-      { name: "CityLink Mall", kind: "mall" },
       { name: "Esplanade MRT", kind: "mrt_station" },
-      { name: "Funan", kind: "mall" },
+      { name: "Marina Square", kind: "mall" },
       { name: "Raffles City", kind: "mall" },
+      { name: "South Beach", kind: "other" },
     ]);
+    // Scanning needs no venue permission (2026-10-17), so none is recorded.
+    expect(
+      await db.value(
+        "SELECT count(*)::int FROM venues WHERE id = ANY($1) AND permission IS NOT NULL",
+        [Object.values(CORE_VENUE)],
+      ),
+    ).toBe(0);
+  });
+
+  test("take Funan and CityLink Mall out of a database seeded before the corridor", async () => {
+    // The dataset as it was before 2026-10-17, for the two venues that left it.
+    const earlier: SeedDataset = {
+      name: "core venues before 2026-10-17",
+      venues: [
+        {
+          id: EXPANSION_VENUE.funan,
+          name: "Funan",
+          kind: "mall",
+          operator: null,
+          permission:
+            "Written permission from Funan's landlord, granted 2026-10-15 (letter kept outside the repo)",
+          footprint: null,
+          levels: [],
+        },
+        {
+          id: EXPANSION_VENUE.cityLinkMall,
+          name: "CityLink Mall",
+          kind: "mall",
+          operator: null,
+          permission: null,
+          footprint: null,
+          levels: [],
+        },
+      ],
+    };
+    await seed(db.client, earlier);
+
+    const report = await seed(db.client, coreVenues);
+    expect(report.removedVenues).toEqual([EXPANSION_VENUE.funan, EXPANSION_VENUE.cityLinkMall]);
+    expect(
+      await db.value("SELECT count(*)::int FROM venues WHERE id = ANY($1)", [
+        Object.values(EXPANSION_VENUE),
+      ]),
+    ).toBe(0);
+    expect(
+      await db.value("SELECT count(*)::int FROM venues WHERE id = ANY($1)", [
+        Object.values(CORE_VENUE),
+      ]),
+    ).toBe(Object.values(CORE_VENUE).length);
+    expect((await seed(db.client, coreVenues)).removedVenues).toEqual([]);
   });
 
   test("are a well-formed dataset with fixed ids", () => {

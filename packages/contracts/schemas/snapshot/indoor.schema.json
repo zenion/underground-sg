@@ -191,7 +191,7 @@
           ]
         },
         "elevation_m": {
-          "description": "Floor height in metres relative to the cluster height datum, or null until measured.",
+          "description": "Floor height in metres relative to the height datum, or null until measured.",
           "anyOf": [
             {
               "type": "number"

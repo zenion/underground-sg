@@ -55,7 +55,7 @@ Change this doc first, then `packages/contracts/schemas/export/head-export.schem
 | `published_at` | `map_versions.published_at`, in Singapore time |
 | `snapshot_sha256` | The version's public files ([snapshot-format.md](snapshot-format.md#content-addressing)), for cross-checking |
 | `venues` ... `anchors` | One entry per HEAD row, sorted by `id`: the row's `id` and `rev`, and `row`, its columns in the diff format's row format |
-| `permission` | Venues only: `venues.permission`, the reference to the written permission to scan. The seed script owns it and no diff carries it, so it sits beside `row` |
+| `permission` | Venues only: `venues.permission`, an optional, private reference to anything the venue agreed in writing (scanning needs none). The seed script owns it and no diff carries it, so it sits beside `row` |
 
 - `row` is exactly the diff format's row for that table ([diff-format.md](diff-format.md#rows)): geometry as GeoJSON with at most 7 decimals, `null` for absent text, no `ordinal` on nodes and anchors (a trigger copies it from the level), no bookkeeping times.
 - Not in the export: `restricted_zones` (not versioned; a restore that would delete a level or venue with zones is refused), the street graph and `street_connectors` (imported and derived data, which a rollback does not roll back), and everything outside HEAD (contributors, captures, change sets, moderation events).

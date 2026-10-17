@@ -65,6 +65,7 @@ opens the whole app at <http://localhost:8081>. The map is the same DOM componen
 
 - The `capture-native` Swift module (ARKit, keyframes, blur, bundle writer): Expo Go runs only the native code it ships with.
 - A development build needs the Apple Developer Program membership (US$99 a year), an Expo account, the phone registered with `eas device:create`, and Developer Mode on the phone. Then `eas build --profile development --platform ios` with the `development` profile in `eas.json` (`developmentClient: true`, internal distribution). `expo-dev-client` is already installed; Expo Go ignores it.
+- **Walks use the walk build**, not the development build: the same capture module in release configuration, without the dev client, with the JavaScript embedded (EAS internal distribution), so a capture in a venue needs no Metro, no tunnel and no signal ([ADR 0010](../../docs/decisions/0010-capture-recording-and-replay.md)). Both builds compile the session recorder, but only the walk build records; the `walk` profile is a backlog task.
 - **Bundle identifier:** `com.xennion.usg.mapper`, from the owner's domain (confirmed 2026-10-17). It can't change once the app is registered with Apple. `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` are placeholders for that build; Expo Go uses its own.
 
 ## Configuration
