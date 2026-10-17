@@ -3,6 +3,7 @@
 // the config in a fresh Node process, as Expo CLI does, with the environment it is given.
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
@@ -123,6 +124,11 @@ describe("metro.config.js", () => {
     expect(blocked(config, upper)).toBe(true);
     const lower = join(APP.toLowerCase(), "src", "map", "draw-map.tsx");
     expect(blocked(config, lower)).toBe(false);
+  });
+
+  test("the cache key follows the checkout's location (Metro's cache is shared by all checkouts)", () => {
+    const short = createHash("sha256").update(ROOT.toLowerCase()).digest("hex").slice(0, 16);
+    expect(config.cacheVersion).toContain(`+root-${short}`);
   });
 
   test("the cache key follows the EXPO_PUBLIC_ variables, which an export inlines", () => {

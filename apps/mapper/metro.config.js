@@ -85,6 +85,11 @@ const publicEnv = Object.keys(process.env)
   .sort()
   .map((name) => `${name}=${process.env[name]}`)
   .join("\n");
-config.cacheVersion = `${config.cacheVersion ?? ""}+env-${createHash("sha256").update(publicEnv).digest("hex").slice(0, 16)}`;
+const short = (text) => createHash("sha256").update(text).digest("hex").slice(0, 16);
+// Metro's cache lives in the OS temp folder and is shared by every checkout of the repo (worktrees
+// included), but some cached transforms hold paths relative to the checkout: Expo's DOM-component
+// entry keeps the component's path, and a cache hit from another checkout then fails with
+// "Unable to resolve ...draw-map.tsx". Keying the cache on the checkout's location keeps them apart.
+config.cacheVersion = `${config.cacheVersion ?? ""}+env-${short(publicEnv)}+root-${short(root.toLowerCase())}`;
 
 module.exports = config;
