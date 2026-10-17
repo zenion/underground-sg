@@ -1,6 +1,6 @@
 # 0004: PostGIS HEAD tables plus immutable published snapshots
 
-Status: accepted · 2026-10-12 · amended 2026-10-15
+Status: accepted · 2026-10-12 · amended 2026-10-15, 2026-10-17
 
 ## Decision
 
@@ -81,7 +81,7 @@ The index is built per published version from approved captures only ([0002](000
 
 - `levels.ordinal` is the level-switcher display band: 0 is the street band, -1 the first basement band, and so on. Several levels of one venue may share a band; `levels.sort_key` orders them within it.
 - Venue-signed names ("B2") live in `levels.name`, unique per venue: `UNIQUE (venue_id, name)`.
-- Physical height is `levels.elevation_m`: metres relative to the cluster height datum, NULL until measured. The datum is a reference street-level floor, chosen on the site walk and recorded in the spec.
+- Physical height is `levels.elevation_m`: metres relative to the height datum, NULL until measured. The datum is a reference street-level floor, chosen on the site walk and recorded in the spec.
 - A trigger keeps `nodes.ordinal` and `anchors.ordinal` in step with `levels.ordinal`; rows without a level use 0. `nodes.elevation_m` is optional.
 - Routing never infers connectivity from equal ordinals (0003).
 

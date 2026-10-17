@@ -122,7 +122,7 @@
           "minimum": 1
         },
         "permission": {
-          "description": "venues.permission: the reference to the written permission to scan, or null. Written only by the seed script; no diff carries it.",
+          "description": "venues.permission: an optional, private reference to anything the venue agreed in writing (scanning needs none), or null. Written only by the seed script; no diff carries it.",
           "anyOf": [
             {
               "type": "string",

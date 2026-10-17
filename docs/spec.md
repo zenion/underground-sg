@@ -11,9 +11,9 @@ The gap: UPLs join MRT stations, malls and offices into one network, but no publ
 
 MVP goals (targets to validate in the pilot):
 
-- Map the City Hall cluster end to end on the pedestrian network: every public level on it, every exit, escalator and lift.
+- Map the corridor from South Beach to Raffles City through Esplanade MRT end to end on the pedestrian network, with its links to Marina Square and City Hall MRT: every public level on it, every exit, escalator and lift.
 - Locate a user on the correct level and within about 5 m from a single photo. Response time is measured and reported against a 3 s target; it is not a launch gate.
-- Route between any two street points in the cluster, preferring underground or sheltered paths, and avoiding MRT paid areas and links that are closed at the time of travel.
+- Route between any two street points along the corridor, preferring underground or sheltered paths, and avoiding MRT paid areas and links that are closed at the time of travel.
 - Publish a contributor's edit within 48 hours of submission, after review (from Phase 4, when contributors join).
 
 ## Users and core use cases
@@ -30,32 +30,34 @@ Five groups, two of them on the supply side.
 
 The owner (Josh) is the only mapper through Phase 3. Who moderates at launch is an open question.
 
-## MVP scope: City Hall cluster
+## MVP scope: the Esplanade corridor
 
-The MVP covers one dense, connected cluster you can walk daily, so drift, positioning and routing are tested on real ground before scaling.
+The MVP covers one short, connected corridor that can be walked repeatedly, so drift, positioning and routing are tested on real ground before scaling (owner decision, 2026-10-17, [ADR 0011](decisions/0011-mvp-scope-esplanade-corridor.md); it replaces the City Hall cluster). Its spine is the unpaid B1 level of Esplanade MRT (CC3), signed "Esplanade Xchange": from South Beach through the Exit F link, along B1, and through the Exit G passage into Raffles City's basement, which links on to City Hall MRT's unpaid concourse. A branch runs from Exit B along Marina Link to Marina Square's basement door. Planning lengths from OpenStreetMap: Exit F to the Raffles City entrance is about 150 m, and Exit F to Marina Square's door about 250 m.
 
-Core venues (boundary to confirm on the site walk):
+Core venues (boundaries, level names and which levels are unpaid are confirmed on the site walk):
 
-- City Hall MRT interchange: its public levels on the pedestrian network, and all its exits
-- Funan, including the UPL from its Basement 2 to City Hall station
-- Raffles City
-- CityLink Mall and its link to Esplanade MRT
-- Esplanade MRT station exits
+| Venue | Kind | In scope |
+| --- | --- | --- |
+| Esplanade MRT | MRT station | The unpaid B1 level and its links: the Exit F link to South Beach, the Exit G passage to Raffles City, Exit B to Marina Link, and the street exits along the way (C, E and F). Not the paid concourse |
+| South Beach | Mixed-use development (`other`) | Its public link to Exit F, up to and including its door, and as much of its public basement as is on the pedestrian network |
+| Raffles City | Mall | The basement the Exit G passage reaches, and its link to City Hall MRT: the corridor's west end |
+| City Hall MRT | MRT station | The unpaid concourse where Raffles City's link arrives |
+| Marina Square | Mall | Marina Link, from Esplanade Exit B to Marina Square's basement door. The interior is optional and low priority: the mall closes on 31 Mar 2027 for a redevelopment due to finish around 2031 |
 
-Stretch, if the core goes smoothly: Marina Square, Suntec City, Esplanade theatres.
+After the MVP, the first expansion is the former City Hall cluster: Funan with the UPL from its Basement 2 to City Hall MRT, City Hall MRT's other public levels and exits, and CityLink Mall with its link to Esplanade MRT. Later candidates: Suntec City and the Esplanade theatres.
 
 Levels: pedestrian-network levels only. That means basements, the street-level floor and link bridges, plus the vertical connectors (escalators, lifts, stairs) between them.
 
-In scope: public walkways on those levels, exits, escalators, lifts, stairs, fare gates, toilets, and shop names as points of interest. Opening hours of links and exits, and MRT paid-area boundaries, because routing needs them. Street footpaths around the cluster (from OpenStreetMap), so routes can start and end on the street.
+In scope: public walkways on those levels, exits, escalators, lifts, stairs, fare gates, toilets, and shop names as points of interest. Opening hours of links and exits, and MRT paid-area boundaries, because routing needs them. Street footpaths around the corridor (from OpenStreetMap), so routes can start and end on the street.
 
 Out of scope for MVP:
 
 - a public native app;
-- other clusters (Orchard, Raffles Place);
+- other areas (Orchard, Raffles Place), and the City Hall cluster until the first expansion;
 - upper retail floors, office and hotel lobbies;
 - live crowd levels, shop opening hours and inventory;
 - back-of-house and restricted areas;
-- landmark photos in directions, unless landlords' permission covers publishing photos.
+- landmark photos in directions, for now (an open question below).
 
 ## System architecture
 
@@ -87,8 +89,8 @@ Capture is an Expo app (`apps/mapper`, React Native and TypeScript) with one loc
 
 Who does what:
 
-- **Swift module:** the ARKit session and RealityKit view, keyframe selection, blurring, the bundle writer, floor-triangle export, and packing the bundle for upload. Nothing per frame (images, depth, mesh or per-frame poses) crosses into JavaScript.
-- **TypeScript:** every screen, the anchor and tag flows, the drift calculation, the floor-plan preview, the draft store, route tests, upload, and the map. It receives status events about five times a second and compact results such as file paths and floor triangles.
+- **Swift module:** the ARKit session and RealityKit view, the candidate gate and keyframe selection, blurring, the bundle writer, floor-triangle export, and packing the bundle for upload; also the session recorder, compiled only into the owner's development and walk builds and run only in the walk build ([Recording and replay](#recording-and-replay)). Nothing per frame (images, depth, mesh or per-frame poses) crosses into JavaScript.
+- **TypeScript:** every screen, the anchor and tag flows, the drift calculation, the floor-plan preview, the draft store, route tests, upload, and the map. It receives status events about five times a second and compact results such as file paths and floor triangles; a recording keeps a trace of exactly what it received.
 
 Device: the owner captures with an iPhone 17 Pro Max. Keep iOS current, but avoid iOS 26.4 to 26.6.0, which had a reported LiDAR world-tracking drift regression. Every segment records `os_version` and `device_model`. The iPhone 17 Pro Max is the reference device; an iPad Pro with LiDAR may work but is not tested.
 
@@ -109,7 +111,7 @@ Every ARKit session starts with an arbitrary heading, so two segments that share
 2. Walk one short segment (one corridor, hall or level) at a steady pace, phone at chest height.
 3. Tap to tag features as you pass them: nodes (exit, entrance, escalator, lift, stairs, travelator, ramp, fare gate, door) and points of interest (toilet, shop and the other POI categories). Connectors are tagged at each landing.
 4. End on a second anchor. Every segment starts and ends on anchors, which is how segments join and how drift is corrected. At a street exit the phone also records a GNSS fix.
-5. Review the preview, then queue the upload. Through Phase 3 the phone uploads over home Wi-Fi to the owner's PC.
+5. Review the preview, then queue the upload. From Phase 2 the phone uploads over home Wi-Fi to the owner's PC; in Phase 1 the session's bundles reach the PC over USB ([Recording and replay](#recording-and-replay)).
 
 Capture guidelines:
 
@@ -117,10 +119,22 @@ Capture guidelines:
 - Walk segments out and back, or close loops, where practical. That is what makes drift measurable.
 - Zig-zag through wide halls. LiDAR is useful to about 5 m, so one pass down the middle gives a strip, not the hall.
 - Public walkways only. Never scan back-of-house, service or security areas.
+- Walk with the walk build, whose JavaScript is embedded: it needs no Metro, no tunnel and no signal underground.
+- Start and stop each session at a public anchor, such as a station exit's street door or a venue door, and walk one session per leg, within the safe session length the spike measures for heat.
 
-What each capture records: RGB keyframes (already blurred), LiDAR depth and confidence maps, ARKit camera poses plus keyframe transforms re-read at the end of the session, IMU data, the ARKit scene mesh with per-face classification, the anchors and tags, per-frame blur boxes, and GNSS fixes at street exits. The bundle is packed as an uncompressed tar and uploaded in 16 MiB parts. Layout and fields: [capture-bundle.md](capture-bundle.md) (`schema_version` 1).
+What each capture records: RGB keyframes (already blurred; keyframes are chosen from the module's candidate frames, and marking an anchor or a tag always forces one), LiDAR depth and confidence maps, ARKit camera poses plus keyframe transforms re-read at the end of the session, IMU data, the ARKit scene mesh with per-face classification, the anchors and tags, per-frame blur boxes, and GNSS fixes at street exits. The bundle is packed as an uncompressed tar and uploaded in 16 MiB parts. Layout and fields: [capture-bundle.md](capture-bundle.md) (`schema_version` 1).
 
-Privacy on the device: faces, the head region of every detected person, and screens (personal devices, plus any display showing people) are blurred irreversibly in Swift: every keyframe through one write path before it is written, and photos taken outside a capture before they are stored or uploaded. Unblurred frames never leave the phone and never reach JavaScript. An on-device privacy self-test must pass. The screen detector is a permissively licensed Core ML model chosen in the Phase 1 spike ([ADR 0005](decisions/0005-privacy-by-design.md)).
+Privacy on the device: faces, the head region of every detected person, and screens (personal devices, plus any display showing people) are blurred irreversibly in Swift: every keyframe, and every candidate a recording keeps, through one write path before it is written, and photos taken outside a capture before they are stored or uploaded. Unblurred frames never leave the phone and never reach JavaScript. An on-device privacy self-test must pass. The screen detector is a permissively licensed Core ML model chosen in the Phase 1 spike ([ADR 0005](decisions/0005-privacy-by-design.md)). The blur fails closed: a frame is written only after every detector has run on it. Before iOS takes its app-switcher snapshot, the module covers the camera view, and it keeps the view out of screenshots and screen recordings.
+
+### Recording and replay
+
+The owner's walk build can also record a capture session: beside the session's bundles, a private **session recording** keeps what the bundles leave out. That is every frame's pose, the motion sensors, the mesh as it grew, events, the owner's actions, exactly what JavaScript received and, in the standard profile, the extra candidate images, blurred like keyframes. Walk a route once, then replay it as the software changes: keyframe selection, the bundle writers, the floor plan, the capture screens and processing all re-run on the PC without walking again. A replay can't re-run ARKit's tracking or meshing, tune the blur on venue faces or reproduce heat; those need planned walk days. Details: [ADR 0010](decisions/0010-capture-recording-and-replay.md); format: [session-recording.md](session-recording.md).
+
+- **Profiles:** `lean` (no images or depth, so walks can start before the blur is finished; for routine walks), `standard` (adds the blurred candidates; for walks meant as fixtures) and `dense` (short experiments).
+- **Owner builds only.** The recorder is compiled only into the development and walk builds, and only the walk build records: off by default and chosen per session. Venue walks use the walk build, so nothing passes through Metro or a tunnel. Desk checks in the development build write no GNSS, never leave the phone and are deleted there.
+- **Never ingested.** The phone writes the same v1 bundles with or without a recording, and ingest only ever sees bundles.
+- **Off the phone over USB.** In Phase 1 a session's bundles and recording are exported to the app's Documents folder and pulled with `pnpm rec pull` (pymobiledevice3 on Windows), verified by SHA-256; from Phase 2 they can go over the LAN.
+- **Private.** A recording is personal data, as private as a raw bundle. It is kept while it serves development, reviewed every 3 months and deleted on request. AI agents run the replay tools but read only their aggregate output.
 
 ## Mapper mode: the fast loop
 
@@ -183,7 +197,7 @@ The map is a graph of nodes and edges laid over level polygons, versioned as a w
 
 | Entity | Key fields | Notes |
 | --- | --- | --- |
-| Venue | id, name, kind, operator, permission, footprint polygon | A mall, station or link. `operator` is the landlord or station operator |
+| Venue | id, name, kind, operator, permission, footprint polygon | A mall, station or link. `operator` is the landlord or station operator. `permission` is an optional, private reference to anything a venue agreed in writing; scanning doesn't need it |
 | Level | id, venue_id, name ("B2"), ordinal, elevation_m, sort_key | `ordinal` is the level-switcher display band; several levels of one venue may share it. `elevation_m` is the physical height |
 | Space | id, level_id, polygon, kind (walkway, shop, plaza) | Drawn on the map |
 | Node | id, level_id, ordinal, point, kind (junction, exit, entrance, escalator, lift, stairs, fare_gate, door, travelator, ramp), connector_id, elevation_m | Exits carry the street they open onto. Escalator, lift, stairs, travelator and ramp nodes are landings (one per end or lift stop), grouped by `connector_id` |
@@ -202,9 +216,9 @@ The map is a graph of nodes and edges laid over level polygons, versioned as a w
 
 A single-row `map_head` table points at the current version and is locked during approval, so approvals never interleave. Drafts are not in the database through Phase 3; they live on the phone.
 
-**Levels and height.** `ordinal` is a display band for the level switcher: 0 is the street band, -1 the first basement band, and so on. It says nothing exact about height: the B2 of one venue need not be level with the B2 of another, and the street level varies across the cluster. Physical height is `levels.elevation_m`, in metres relative to the cluster height datum. Routing never infers a connection from equal ordinals.
+**Levels and height.** `ordinal` is a display band for the level switcher: 0 is the street band, -1 the first basement band, and so on. It says nothing exact about height: the B2 of one venue need not be level with the B2 of another, and the street level varies along the corridor. Physical height is `levels.elevation_m`, in metres relative to the height datum. Routing never infers a connection from equal ordinals.
 
-**Cluster height datum.** A reference street-level floor, chosen on the Phase 1 site walk. Not chosen yet; record it here when it is.
+**Height datum.** A reference street-level floor, chosen on the Phase 1 site walk. Not chosen yet; record it here when it is.
 
 **Published files.** Each version publishes two files under an immutable, content-addressed path: `indoor.json` (venues, levels, spaces, nodes, edges, POIs and street connectors, as IMDF-like GeoJSON features) and `street.json` (the OSM-derived street graph, under ODbL). Two short-lived files sit outside versions: `latest.json` points at the current version, and `status.json` holds the status overlay. A version's files live under `snapshots/<snapshot_sha256>/`, named by a hash of their content. Format: [snapshot-format.md](snapshot-format.md), with JSON Schemas in `packages/contracts`. Background: [ADR 0004](decisions/0004-storage-and-versioning.md).
 
@@ -283,13 +297,13 @@ Display:
 
 Routing:
 
-- One TypeScript router (`packages/routing`) runs in the browser and in the mapper app. There is no port to maintain. The cluster graph is small enough to route on the client; move routing to the server (pgRouting) if the network grows past a few clusters.
+- One TypeScript router (`packages/routing`) runs in the browser and in the mapper app. There is no port to maintain. The MVP's graph is small enough to route on the client; move routing to the server (pgRouting) if the network grows past a few clusters.
 - Street side: the OSM street graph, imported with filters that drop tunnels, indoor ways, ways with a negative level or layer, and ways inside venue footprints, because OSM already maps some underground links. Street connectors join it to indoor exits. OneMap's routing API cannot take the indoor graph as input, so it is not used for routing.
 - The street graph ships as its own file, `street.json`, under ODbL. Keeping it separate is meant to keep the indoor data a separate database under the OSMF collective-database guideline; this needs legal review.
 - Cost is time in seconds: length divided by walking speed, plus fixed seconds per edge kind (lift boarding wait, level change), times factors such as a heavy penalty on outdoor edges when "stay underground" is on. All values live in `packages/routing/routing-config.json`, validated by a schema in `packages/contracts`, and are tuned in Phase 3 field tests. Background: [ADR 0003](decisions/0003-routing.md).
 - Excluded by default: features closed in the status overlay, MRT paid areas (`paid_fare_zone`) and customers-only links. Edges whose opening hours say closed at the time of travel (Asia/Singapore time) are always excluded; an exit's hours sit on the edges leading to it. Step-free mode also excludes stairs and escalators.
 - Vertical connectors: an escalator, stairs, lift, ramp or travelator is an edge between two landing nodes on different levels. A lift has one landing node per stop sharing a `connector_id`, with edges between consecutive stops and a one-time boarding penalty. Routing never infers a connection from equal ordinals. Reversing escalator schedules are a later addition.
-- Directions are turn by turn. Landmark photos are dropped from the MVP unless landlords' permission covers publishing photos (see [Privacy, legal and permissions](#privacy-legal-and-permissions)).
+- Directions are turn by turn. Landmark photos are not in the MVP for now; whether and when to add them is an open question (see [Privacy and legal](#privacy-and-legal)).
 
 ## Tech stack
 
@@ -298,21 +312,21 @@ TypeScript carries the clients and the backend. Go is used only for the localiza
 | Layer | Choice | Why |
 | --- | --- | --- |
 | Mapper app | Expo (React Native, TypeScript), `apps/mapper`: SDK 57 now, SDK 58 once stable; New Architecture, expo-dev-client, Expo Router | The UI is built on Windows with Fast Refresh; only the Swift module needs native builds |
-| Native capture | One local Expo module in Swift, `apps/mapper/modules/capture-native` (Expo Modules API): ARKit session and RealityKit view, keyframe selection, Apple Vision blur, bundle writer, floor-triangle export, `packBundle` | Only native code can read LiDAR, and no maintained library exposes scene reconstruction with depth and pose export |
+| Native capture | One local Expo module in Swift, `apps/mapper/modules/capture-native` (Expo Modules API): ARKit session and RealityKit view, the candidate gate and keyframe selection, Apple Vision blur, bundle writer, floor-triangle export, `packBundle`; the session recorder, compiled only into the owner's development and walk builds and run only in the walk build | Only native code can read LiDAR, and no maintained library exposes scene reconstruction with depth and pose export |
 | Mapper map | maplibre-gl-js + terra-draw in an Expo DOM component; `@maplibre/maplibre-react-native` v11 as the fallback for read-only views | Same renderer and style as the webapp, with polygon editing |
 | Webapp | Vite + React SPA with MapLibre GL JS v6, `apps/web`, static build on Cloudflare; moderation UI as an authenticated route | The public map is static files routed on the client; no server rendering needed |
 | API | Node 26 (the latest release; the owner tracks the newest Node, not only LTS), Fastify 5, Kysely with raw SQL for geometry, `services/api` | One language with the clients and the shared packages |
 | Jobs | Postgres-backed job queue, no Redis (pg-boss or graphile-worker, chosen in the Phase 1 job-queue task) | One fewer service to run |
 | Processing | TypeScript workers in separate processes, `services/processing`; onnxruntime-node for the privacy re-check; a containerised Python step (COLMAP 4.x / pycolmap) only if Phase 2 data needs it | Heavy work stays out of the API process; no GPU for the MVP |
 | Localization (Phase 4) | Go service, `services/localization`: onnxruntime_go, MegaLoc, (RaCo-)ALIKED + LightGlue, PoseLib via a cgo shim; built in a Linux container | Node runs ONNX inference on the main thread and would need a copy of each model per worker thread |
-| Contracts | `packages/contracts`: JSON Schema 2020-12 files for the capture bundle, snapshot files, diff format, status overlay and routing config. TS types, Ajv validation, Swift Codable types (quicktype), Fastify route schemas and OpenAPI come from them | The Swift writer, the validator, the API and the clients read one definition; CI fails on a codegen diff |
-| Shared TS packages | `packages/routing`, `packages/map-style`, `packages/floorplan`, `packages/contracts` | One copy each, used by the webapp, the mapper app and processing |
+| Contracts | `packages/contracts`: JSON Schema 2020-12 files for the capture bundle, the session recording, snapshot files, diff format, status overlay and routing config. TS types, Ajv validation, Swift Codable types (quicktype), Fastify route schemas and OpenAPI come from them | The Swift writer, the validator, the API and the clients read one definition; CI fails on a codegen diff |
+| Shared TS packages | `packages/routing`, `packages/map-style`, `packages/floorplan`, `packages/contracts`; `packages/recording` for replays on the PC (`pnpm rec`) | One copy each, used by the webapp, the mapper app and processing |
 | Database | Postgres 18 + PostGIS 3.6 (`postgis/postgis:18-3.6`) | Spatial queries, graph storage, versioning |
 | Migrations | dbmate, plain SQL in `db/migrations/` | `db/schema.sql` is a generated snapshot of the migrated schema; CI regenerates it and fails on a diff |
 | Object storage | S3 API only. Local: RustFS (SeaweedFS as fallback), with separate buckets for raw bundles, private exports and public files. Later private storage: S3 ap-southeast-1. Public: Cloudflare R2/Pages | MinIO community edition is archived; R2 cannot be pinned to Singapore, so nothing private goes there |
 | Monorepo | pnpm workspaces + Turborepo, Vitest, TypeScript strict, Biome for lint and format; Go only in `services/localization` with its own go.mod | One toolchain across apps, services and packages |
 | CI | GitHub Actions: lint, typecheck, tests, contracts codegen check; a macOS runner job for the Swift module | macOS runners are free for public repos |
-| iOS builds | EAS Build (Free plan to start) and/or `eas build --local` on GitHub macOS runners; Xcode Cloud as an option. Dev client + Metro on Windows for JS changes | No Mac needed |
+| iOS builds | EAS Build (Free plan to start) and/or `eas build --local` on GitHub macOS runners; Xcode Cloud as an option. Two profiles: `development` (dev client + Metro on Windows for JS changes, desk testing) and `walk` (JavaScript embedded, for every capture in a venue) | No Mac needed |
 | Base data | OneMap raster tiles; OpenStreetMap street graph; LTA's MRT Station Exit data | Authoritative Singapore base map, an open pedestrian network, open exit positions |
 
 Development happens on Windows. The repo lives on the Windows filesystem; Node, pnpm and Expo run natively; Docker Desktop with the WSL2 backend runs PostGIS and RustFS; cgo is built only inside Linux containers. There is no Mac by default: rent a cloud Mac for occasional Xcode, Simulator or Instruments days, and reconsider a used Mac mini if blind native debugging costs more than about a day a week. The repo will be public on GitHub.
@@ -325,27 +339,28 @@ The budget is as low as possible. Details: [ADR 0009](decisions/0009-hosting-and
 
 | Phase | Where it runs |
 | --- | --- |
-| 1 to 3 | No cloud hosting. PostGIS, the local S3 stand-in, the API and the processing workers run on the owner's PC (Docker on WSL2). The phone uploads over home Wi-Fi on the LAN. Raw bundles, the private full exports and the database are backed up to an external drive or a cheap S3 bucket in Singapore, encrypted at rest either way |
+| 1 to 3 | No cloud hosting. PostGIS, the local S3 stand-in, the API and the processing workers run on the owner's PC (Docker on WSL2). In Phase 1 bundles and recordings reach the PC over USB; from Phase 2 the phone uploads over home Wi-Fi on the LAN. Raw bundles, recordings, the private full exports and the database are backed up to an external drive or a cheap S3 bucket in Singapore, encrypted at rest either way |
 | 4 | The smallest x86 Singapore server that runs the Node API and PostGIS (a target of about US$12–24 a month). Private bundles in S3 ap-southeast-1. Postgres backups with WAL archiving to S3, and a restore drill. Localization on CPU, on the same or a second small box |
 | All phases | The webapp and public map files on Cloudflare free tiers (Pages + R2) |
 
-For testing on the phone through Phase 3, `pnpm dev:phone` runs one ngrok agent on the owner's paid account with two endpoints: the reserved domain to the API, which also serves the webapp's build, and a random address per run to Metro, whose debugger and other PC-only endpoints ngrok's Traffic Policy refuses. Read-only routes, public map data and the app's development code only, never capture bundles or locate photos ([ADR 0009](decisions/0009-hosting-and-budget.md#remote-access-during-phases-13), [docs/phone-testing.md](phone-testing.md)).
+For testing on the phone through Phase 3, `pnpm dev:phone` runs one ngrok agent on the owner's paid account with two endpoints: the reserved domain to the API, which also serves the webapp's build, and a random address per run to Metro, whose debugger and other PC-only endpoints ngrok's Traffic Policy refuses. Read-only routes, public map data and the app's development code only, never capture bundles, recordings, anything pose-bearing or locate photos ([ADR 0009](decisions/0009-hosting-and-budget.md#remote-access-during-phases-13), [docs/phone-testing.md](phone-testing.md)). It is for desk testing: captures in a venue use the walk build.
 
-A GPU is used only with the owner's explicit approval. Through Phase 3 the only subscriptions are the Apple Developer Program (US$99 a year) and the owner's existing paid ngrok plan, for phone testing; a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner creates that membership when the Swift spike starts, and a free Expo account now: Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account.
+A GPU is used only with the owner's explicit approval. Through Phase 3 the only subscriptions are the Apple Developer Program (US$99 a year) and the owner's existing paid ngrok plan, for phone testing; a domain and email add about US$1–2 a month, and S3 backups about US$2 a month if used. The owner joins the Apple Developer Program now, before the spike's first build (every build needs it, and enrolment can take days), and creates a free Expo account now: Expo Go on iOS opens a project only when Expo CLI and Expo Go are signed in to the same account.
 
-## Privacy, legal and permissions
+## Privacy and legal
 
-Permission to scan is the main blocker, ahead of any technical risk, so outreach starts before the capture app is finished. This section is a checklist of issues to resolve, not legal advice; get a lawyer to review contributor terms and data licences before launch. Background: [ADR 0005](decisions/0005-privacy-by-design.md).
+This section is a checklist of issues to resolve, not legal advice; get a lawyer to review contributor terms and data licences before launch. Background: [ADR 0005](decisions/0005-privacy-by-design.md) and, for recordings, [ADR 0010](decisions/0010-capture-recording-and-replay.md).
 
-- **Landlords:** malls are private property. Ask each landlord (Funan, Raffles City, CityLink) for written permission to scan public areas, and whether it also covers publishing photos. A public-good, non-commercial framing helps.
-- **MRT stations:** ask the station operator and LTA. Expect stricter rules than in malls.
+- **Scanning permission (owner decision, 2026-10-17):** not needed, and not a gate for any phase. The owner may still ask a venue as a courtesy. If station staff or security object on the day, the owner handles it there. Funan's landlord gave written permission on 2026-10-15; that stays on record as history. Everything below still applies in full, the privacy rules and the public-walkways-only rule included.
+- **Protected places:** the Infrastructure Protection Act 2017 makes photographing a declared protected area or place an offence without its owner's permission. On the site walk, the owner checks the Police's published list once for anything on the corridor; if anything is listed, the owner decides what to do before walking it. This is a legal check, not a permission request and not a gate.
 - **PDPA, captures:** identifiable faces in captures are personal data. Blur irreversibly on the phone (faces, the heads of detected people, and screens: personal devices plus any display showing people), re-check on the server and quarantine frames that slipped through, and keep raw bundles private. Nothing in a bundle is ever served publicly.
 - **PDPA, trajectories:** a contributor's poses, IMU data, timestamps and GNSS fixes are their personal data. Needs a privacy notice, encryption at rest, and a retention rule for raw bundles: delete them a set period after approval unless flagged for reprocessing. The period is set before Phase 4.
+- **PDPA, recordings:** a session recording is richer: a full-rate trajectory, 100 Hz motion that can identify a walker by gait, the magnetometer, relative altitude and, in the standard profile, more blurred bystander images. Depth and the mesh still show bystanders' outlines; masking depth inside head boxes is a minimisation option decided in the spike. Recordings are kept while they serve development, reviewed by the owner every 3 months and deleted on request, every copy (decided 2026-10-17). Venue bundles kept as fixtures follow the same rule, and backup sets are kept at most 30 days, so a deletion reaches every copy within that time. They never pass through Metro or a tunnel, and AI agents read only aggregate tool output from them, since what an agent reads leaves Singapore.
 - **PDPA, localization:** query photos and feature payloads are never stored or logged, and an IP address is never logged with a position (see the privacy path in [ADR 0002](decisions/0002-photo-localization.md)).
-- **Other images:** anchor reference photos are keyframes, so already blurred, and private. Photos taken in the mapper app outside a capture are blurred on the phone, and the unblurred original is deleted at once. Status evidence photos are private and blurred server-side (an unblurred original is held only in private storage until then, and deleted once blurred), kept only until the decision plus a retention period, and never public. Any image upload that reaches the Node API streams to private storage or stays in memory, never a temp file, with a test.
-- **Landmark photos:** only if landlords' permission covers publishing photos. Each crop is re-encoded (which strips EXIF), has people blurred as well as faces, is approved by a moderator one by one, and is served from a separate public bucket, with a takedown and cache-purge procedure.
-- **Data residency:** private data stays in Singapore (the owner's PC through Phase 3, then S3 ap-southeast-1 and a Singapore server). Public, non-personal files may be served from Cloudflare's global edge.
-- **Contributor terms:** contributors confirm they had permission to scan, grant you a licence to their captures, and agree to the no-restricted-areas rule.
+- **Other images:** anchor reference photos are keyframes, so already blurred, and private. Recorded candidates go through the same blur path as keyframes. The app covers the camera view before iOS takes its app-switcher snapshot, and keeps it out of screenshots and screen recordings; if a screenshot is taken anyway, the app asks for it to be deleted. Photos taken in the mapper app outside a capture are blurred on the phone, and the unblurred original is deleted at once. Status evidence photos are private and blurred server-side (an unblurred original is held only in private storage until then, and deleted once blurred), kept only until the decision plus a retention period, and never public. Any image upload that reaches the Node API streams to private storage or stays in memory, never a temp file, with a test.
+- **Landmark photos:** not in the MVP for now; whether and when to add them is an open question (below). If they are added, each crop is re-encoded (which strips EXIF), has people blurred as well as faces, is approved by a moderator one by one, and is served from a separate public bucket, with a takedown and cache-purge procedure.
+- **Data residency:** private data, recordings included, stays in Singapore (the owner's PC through Phase 3, then S3 ap-southeast-1 and a Singapore server). Public, non-personal files may be served from Cloudflare's global edge.
+- **Contributor terms:** contributors grant a licence to their captures and agree to the public-walkways-only and privacy rules. Whether the terms also say anything about venue permission is an open question (below).
 - **Map data licence:** combining OpenStreetMap data with your own can trigger OSM's share-alike licence (ODbL) on the combined database. The plan ships the OSM-derived street graph as a separate ODbL file; get legal review. The licence for the indoor data is still open.
 - **OneMap terms:** confirm the terms of use and attribution for base tiles and APIs, and email SLA before any tile caching or offline packs.
 - **LTA exit data:** used under the Singapore Open Data Licence, with attribution.
@@ -354,31 +369,38 @@ Permission to scan is the main blocker, ahead of any technical risk, so outreach
 
 ## Risks and open questions
 
-The two risks that could stop the project are landlord refusal and positioning failing in corridors that look alike. The pilot is designed to test both early.
+The two risks that could stop the project are segments that won't align (the hinge problem) and positioning failing in corridors that look alike. The spike and the pilot test the first early; Phase 4 tests the second.
 
 | Risk | Effect | Mitigation |
 | --- | --- | --- |
-| Landlords or operators refuse | Gaps in the network | Start with the venue most likely to say yes; offer them the map data back |
-| Anchor registration (the hinge problem) | Segments rotate around shared anchors; drift can't be measured | Define anchors as physical features; try the registration candidates on a real door in the Phase 1 spike |
+| Staff or security object on the day | A walk is cut short; gaps until the next one | The owner handles it on the spot: explains the project and its privacy rules, and stops if asked. Quiet weekday mornings; the owner may ask venues ahead as a courtesy. Not a blocker: scanning needs no permission |
+| Marina Square closes on 31 Mar 2027 for redevelopment (to about 2031) | Marina Link may close or change; an interior scan would go stale within months | Map Marina Link up to the mall's door; the interior is optional and low priority; closures become status edits; check Marina Link's status on the site walk |
+| Anchor registration (the hinge problem) | Segments rotate around shared anchors; drift can't be measured | Define anchors as physical features; try the registration candidates on a real door on the corridor in the Phase 1 spike |
 | Drift over long corridors | Segments misalign; routes cross walls | Short segments, anchors at both ends, out-and-back walks, network adjustment with street priors, measure drift in the pilot; COLMAP only if the data calls for it |
 | iOS drift regressions | Captures drift more than expected | Keep iOS current, avoid 26.4 to 26.6.0, record `os_version` and `device_model` with every segment |
 | Blind native debugging without a Mac | Slow Swift fixes; spike overruns | Structured device logs, an in-app debug screen, crash reporting, pure-maths Swift tested on CI; rent a cloud Mac for hard days; reconsider a used Mac mini if it costs more than about a day a week |
+| Heat on long sessions | Throttling, dropped frames, worse tracking | Measure at the planned session length in the spike; one session per leg, cooling the phone between legs; the recorder steps down before the capture does |
+| Replays trusted too much | Conclusions about ARKit, registration, blur or heat drawn from replays that can't show them | Label replay results as such; decide ARKit configuration, registration, blur and performance on live walks, batched into planned walk days |
 | Look-alike corridors | Wrong position, or no position | Use level and last-fix hints; ask the user to face a sign; retrieval-only answers; QR fallback |
 | Locate is slow on CPU | Answers take longer than 3 s | Few candidates, fewer keypoints, pre-filters, early stopping, retrieval-only answers; measure and report; a GPU only with the owner's approval |
 | Shuttered shopfronts at capture time | Localization fails by day, when shops are open | Capture during opening hours on quiet weekday mornings |
 | Shopfronts change | Localization degrades, map goes stale | Status edits from users; re-scan busy segments on a schedule |
 | OneMap licence revoked, or raster overzoom | Base map lost or blurry at indoor zooms | Confirm terms and email SLA early; render the exact attribution; the indoor layers carry the detail at high zooms |
-| Few contributors | Map stops growing | The owner seeds the cluster; recruit local mapping communities in Phase 4 |
+| Few contributors | Map stops growing | The owner maps the corridor and the first expansion; recruit local mapping communities in Phase 4 |
 | Crowds block the view | Poor scans and failed localization | Capture on quiet weekday mornings; retry prompts for users |
 
 Open questions:
 
-- [ ] Side project, or pitched to an agency (SLA, URA, GovTech)? This changes how permissions and funding work.
+- [ ] Side project, or pitched to an agency (SLA, URA, GovTech)? This changes how funding and upkeep work.
 - [ ] Which licence for the published map data? The street graph can ship separately under ODbL; the indoor data's licence is open.
 - [x] How do contributors sign in? Decided in principle: no sign-in until Phase 4, then email one-time codes plus passkeys. Better Auth is the likely library now that the API is TypeScript; confirm in Phase 4. Singpass needs a Singapore-registered entity (UEN), so it is off the table unless the project is pitched to an agency.
-- [ ] Which stretch venues come after the core cluster?
+- [ ] Which venues come after the first expansion (the former City Hall cluster)?
 - [ ] Who moderates at launch, and how many hours a week will it take?
-- [ ] How long are raw bundles kept after approval, and status evidence photos after the decision? Set before Phase 4.
+- [ ] How long are raw bundles kept after approval, and status evidence photos after the decision? Set before Phase 4. (Recordings' retention is decided: [ADR 0010](decisions/0010-capture-recording-and-replay.md).)
+- [ ] Landmark photos in directions: in or out, and if in, when? They were tied to landlords' permission to publish photos; with scanning permission no longer sought, they are left out for now.
+- [ ] Do the Phase 4 contributor terms say anything about venue permission (they used to ask contributors to confirm they had it), or only the public-walkways-only and privacy rules?
+- [ ] Does Marina Link stay open while Marina Square is redeveloped (2027 to about 2031)? Checked on the site walk and with the mall.
+- [ ] Where does Esplanade's Exit F reach the street: a street door of its own, or only inside South Beach? Checked on the site walk. If it has no public street door, sessions start and stop at Exit C or E, and the street priors come from other street exits (C or E, then City Hall's A or B once Raffles City's link is mapped).
 
 ## Milestones
 
@@ -386,9 +408,9 @@ The MVP runs in four phases, and each one moves on only after a test on the grou
 
 | Phase | Work | Gate |
 | --- | --- | --- |
-| 1. Groundwork | Site walk of the cluster (pedestrian-network levels, link opening hours, paid-area boundaries, height datum); ask landlords, LTA; Expo/Swift capture spike; contracts, database and API skeleton, webapp skeleton | One venue says yes |
-| 2. Capture pilot | Scan the Funan UPL in both directions; anchor registration; network adjustment with street priors; measure drift; decide on COLMAP | Segments align end to end |
-| 3. Map and routing | Cluster graph; routing via UPLs with paid areas, opening hours, step-free mode and cost in seconds | Routes verified on foot |
+| 1. Groundwork | Site walk of the corridor (pedestrian-network levels, link opening hours, paid-area boundaries, height datum); Expo/Swift capture spike with the session recorder; a first corridor walk, recorded; contracts, database and API skeleton, webapp skeleton | The spike's exit criteria are met, and a first corridor walk has been recorded and replays on the PC |
+| 2. Capture pilot | Walk the corridor's pilot segments: Exit F's street door through the Exit F link to the B1 junction; the B1 junction through the Exit G passage to Raffles City's B2 door, out and back; the B1 junction to the Exit C or E street door with GNSS, for a second street prior; then Marina Link. Anchor registration; network adjustment with street priors; measure drift; decide on COLMAP | Segments align end to end |
+| 3. Map and routing | The corridor's graph, with Raffles City's link to City Hall MRT's concourse; routing via UPLs with paid areas, opening hours, step-free mode and cost in seconds | Routes verified on foot |
 | 4. Locate and launch | Photo localization (Go service, on CPU); contributor sign-up and trust tiers; moderation queue; status overlay; Singapore hosting | Public beta goes live |
 
-Phase 1's gate matters most because one landlord saying yes unblocks everything after it; the Funan UPL is a good first ask, since it is short, public and well defined. The Phase 1 spike has its own exit criteria (build loop time, capture throughput without dropped frames or throttling, memory, preview latency, the on-device privacy self-test, and anchor registration on a real door); they are listed in [ADR 0007](decisions/0007-expo-mapper-app.md) and the [backlog](backlog.md).
+Phase 1's gate matters most: the spike shows the native capture loop works without a Mac, and once a corridor walk is recorded, later software changes can be checked on real data without walking it again. The spike's exit criteria (build loop time, heat and throughput over a session of the planned length, memory, preview latency, the on-device privacy self-test with the snapshot and screenshot checks, and anchor registration on a real door on the corridor) are listed in [ADR 0007](decisions/0007-expo-mapper-app.md) and the [backlog](backlog.md). The pilot segments are short (about 30 to 150 m each) and all in unpaid areas; Exit F to Exit C or E gives two street priors 90 to 140 m apart, and City Hall's exits, 240 to 360 m away, join the group when Raffles City's link is mapped.

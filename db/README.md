@@ -21,7 +21,7 @@ The app database (`usg`) is created by `pnpm migrate`, from `template1`. The Pos
 
 ## Seed script
 
-`pnpm db seed` loads `seed/core-venues.ts` into HEAD on `DATABASE_URL`'s database: the five core venues with their real names and kinds (Funan, Raffles City and CityLink Mall as malls, City Hall MRT and Esplanade MRT as MRT stations), and the reference to Funan's written permission (granted 2026-10-15; the letter stays out of the repo). Their levels, footprints and operators are TODO until the owner's site walk: signage is never guessed, because a level, once created, changes only through change sets. Seeded rows reach the public files only inside a version that publishes a change set ([CLAUDE.md](../CLAUDE.md)).
+`pnpm db seed` loads `seed/core-venues.ts` into HEAD on `DATABASE_URL`'s database: the MVP's five core venues on the Esplanade corridor with their real names and kinds (Esplanade MRT and City Hall MRT as MRT stations, Raffles City and Marina Square as malls, and South Beach, a mixed-use development, as `other`). Their `permission` is null: scanning needs no venue permission (decided 2026-10-17). Funan and CityLink Mall, seeded before that, are in the dataset's `remove` list, so a re-run takes them out of HEAD; they return with the same ids in the first expansion. Their levels, footprints and operators are TODO until the owner's site walk: signage is never guessed, because a level, once created, changes only through change sets. Seeded rows reach the public files only inside a version that publishes a change set ([CLAUDE.md](../CLAUDE.md)).
 
 The mechanism (`src/seed.ts`, exported as `@usg/db/seed`; [0004](../docs/decisions/0004-storage-and-versioning.md)):
 

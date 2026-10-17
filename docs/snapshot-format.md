@@ -213,7 +213,7 @@ Public files are served from Cloudflare's global edge, so they hold public, non-
 
 - anchors: their positions, `facing_deg`, street priors (`surveyed_geom`, `prior_source`, `prior_sigma_m`) and reference photos (`photo_uri`);
 - restricted zones: no outline, no note, nothing that reveals that one exists;
-- `venues.permission` (references to landlords' letters), and `venues.operator`, which clients don't need;
+- `venues.permission` (an optional, private reference to anything a venue agreed in writing; scanning needs none), and `venues.operator`, which clients don't need;
 - contributors, change sets, moderation events, reviewers, `published_by`;
 - captures, bundle URIs, device models, segment alignments, trajectories;
 - status evidence (`evidence_uri`) and status reports' ids, change sets and authors;

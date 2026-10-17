@@ -1,6 +1,6 @@
 # 0008: Anchors, alignment and georeferencing
 
-Status: accepted · 2026-10-12 · amended 2026-10-15
+Status: accepted · 2026-10-12 · amended 2026-10-15, 2026-10-17
 
 ## Decision
 
@@ -40,6 +40,8 @@ Otherwise it is null. Capture guideline: walk segments out and back, or close lo
 ### Refined keyframes
 
 The `camera.transform` values logged in `poses.jsonl` are snapshots that jump at ARKit loop closures, while ARAnchors and mesh anchors are refined later. The module adds an ARAnchor at each keyframe and re-reads its transform at session end, into `refined_keyframes.jsonl` (`{frame, transform}`). Mesh vertices are written with the mesh anchor transforms read at session end.
+
+Whether ARKit refines keyframe anchors at all is measured in the spike (amended 2026-10-17). An Apple engineer said in August 2026 that the world map is optimised without anchor update notifications, so the session recorder samples anchor transforms on its own timer rather than waiting for updates ([0010](0010-capture-recording-and-replay.md)). The result decides whether an ARAnchor per keyframe is worth its cost; the recorded anchor history and actions also feed the choice of registration approach.
 
 ### One network adjustment
 
@@ -95,7 +97,7 @@ Background and sources: [stack review](../reviews/2026-10-12-stack-review.md), s
 
 ## Consequences
 
-- Backlog test: recover a known transform for a chain of 4 synthetic segments where only the two ends have street priors, using real City Hall coordinates.
+- Backlog test: recover a known transform for a chain of 4 synthetic segments where only the two ends have street priors, using real coordinates on the MVP corridor (Esplanade Exits F and C and the Raffles City door; amended 2026-10-17).
 - Capture bundle v1 carries the anchor `kind`, `point`, `facing` and `registration`, plus `refined_keyframes.jsonl` and `gnss.jsonl` (`schema_version` 1).
 - Mapping practice: anchors at door thresholds, fare-gate lines or permanent signs; out-and-back walks or loops; a GNSS fix at each street exit.
 - What counts as "widely spaced", and the residual thresholds that gate publishing, are tuning values set from the Phase 2 data.

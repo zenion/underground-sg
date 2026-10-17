@@ -8,6 +8,8 @@ The schemas in `packages/contracts` (JSON Schema 2020-12) are the machine-readab
 
 Who writes what ([0007](decisions/0007-expo-mapper-app.md)): the Swift module writes everything that is per frame (keyframes, depth, confidence, poses, refined keyframes, IMU, blur records) plus the mesh, and packs the bundle. The TypeScript app writes `manifest.json`, `anchors.json`, `tags.json` and the floor-plan preview from the compact results the module returns. Nothing per frame crosses into JavaScript. `gnss.jsonl` arrives with the street-prior work in Phase 2; which side writes it is decided then.
 
+The owner's walk build can also write a private session recording beside a session's bundles; the development build compiles the recorder but doesn't record ([session-recording.md](session-recording.md), [0010](decisions/0010-capture-recording-and-replay.md)). It is never part of a bundle and never uploaded to ingest, and no bundle depends on it: a bundle is the same with or without one.
+
 ## Changes from v0
 
 - Container defined: an uncompressed tar, uploaded as S3 multipart in 16 MiB parts.
@@ -28,7 +30,7 @@ The bundle starts as a directory on the phone, `capture-<capture_id>/`. When the
 3. While the app is in the foreground, it enqueues every part at once with expo-file-system's `File.createUploadTask` (a background session).
 4. The server completes the upload with `ListParts`, then validation runs ([Ingest and validation](#ingest-and-validation)).
 
-The tar holds the bundle directory, so member names start with `capture-<capture_id>/`. Parts are only a transport detail: ingest works on the reassembled tar. Through Phase 3 the phone uploads over home Wi-Fi to the owner's PC, where RustFS serves the S3 API ([0009](decisions/0009-hosting-and-budget.md)). If uploads must be strictly Wi-Fi-only or survive the app being killed, a small native uploader replaces step 3 ([0007](decisions/0007-expo-mapper-app.md)).
+The tar holds the bundle directory, so member names start with `capture-<capture_id>/`. Parts are only a transport detail: ingest works on the reassembled tar. In Phase 1, before the upload API exists, bundles reach the PC over USB inside a session's export ([0010](decisions/0010-capture-recording-and-replay.md)). From Phase 2 the phone uploads over home Wi-Fi to the owner's PC, where RustFS serves the S3 API ([0009](decisions/0009-hosting-and-budget.md)). If uploads must be strictly Wi-Fi-only or survive the app being killed, a small native uploader replaces step 3 ([0007](decisions/0007-expo-mapper-app.md)).
 
 ## Layout
 
@@ -75,6 +77,8 @@ Everything spatial in a bundle is in the ARKit world frame of the session that r
 
 ## Keyframes, depth and confidence
 
+- Keyframes are a subset of the module's candidate frames, chosen as the phone moves. `markAnchor` and `addTag` always force a keyframe; an anchor's is its reference photo ([0010](decisions/0010-capture-recording-and-replay.md)).
+- A keyframe is written only once every detector (face, head, screen) has run on it. A frame whose detectors failed is dropped: it gets no line marked `"keyframe": true` and no files.
 - Keyframe JPEGs are 3-component colour (YCbCr, as JPEG stores RGB), written in the camera sensor's native landscape orientation, not rotated for display: width at least height. Their size is `manifest.image_size`, and the `intrinsics` in `poses.jsonl` are for that size.
 - A keyframe JPEG holds one image, the blurred keyframe: SOI, its segments, a frame header, one or more scans and EOI, with nothing after EOI. It carries no thumbnail or second image: no JFIF or JFXX thumbnail, no Exif thumbnail (IFD1) and no MPF segment, since the server's privacy re-check only looks at the main image. Other metadata, such as JFIF, Exif without a thumbnail or an ICC profile, is allowed.
 - Depth PNGs are 16-bit greyscale in millimetres, from ARKit's `smoothedSceneDepth`, at `manifest.depth_size`, which is always 256 × 192, in the same orientation.
@@ -147,7 +151,7 @@ There is no `contributor_id`. The server sets `captures.contributor_id` from the
     "role": "start",
     "anchor_id": "bac5bc30-e4b3-44f0-a134-04168e65db9e",
     "kind": "floor_point",
-    "name": "Funan B2 UPL door",
+    "name": "Raffles City B2 door (Exit G)",
     "ordinal": -2,
     "point": [0.21, -1.43, -0.86],
     "facing": [0.0, 0.0, -1.0],
@@ -159,7 +163,7 @@ There is no `contributor_id`. The server sets `captures.contributor_id` from the
     "role": "end",
     "anchor_id": "31d751b1-1605-4791-8d33-77e1ccdfcbd8",
     "kind": "image_anchor",
-    "name": "City Hall exit A gate sign",
+    "name": "Raffles City B2 directory board",
     "ordinal": -2,
     "point": [-41.37, 0.62, -148.95],
     "facing": [0.6, 0.0, 0.8],
@@ -177,7 +181,7 @@ An anchor is a physical feature, not the phone's pose at a tap ([0008](decisions
 | `role` | `start` or `end`; exactly one of each |
 | `anchor_id` | The existing anchor's UUID, or `null` if the anchor is new |
 | `kind` | `floor_point`: an ARKit raycast to the floor at a door threshold or fare-gate line, plus the facing direction. `image_anchor`: an `ARImageAnchor` on a permanent planar sign, which gives a repeatable 6-DoF pose |
-| `name` | As used on site, e.g. "Funan B2 UPL door" |
+| `name` | As used on site, e.g. "Raffles City B2 door (Exit G)" |
 | `ordinal` | Display band of the anchor's level (0 street, -1 first basement band, ...): an integer from -32768 to 32767, a `smallint` like `levels.ordinal`. Processing sets `anchors.level_id` |
 | `point` | `[x, y, z]` in the ARKit world: the floor point, or the image anchor's origin |
 | `facing` | Horizontal unit vector (y = 0) in the ARKit world: the direction the door or sign faces. Processing turns it into `anchors.facing_deg` |
@@ -219,13 +223,13 @@ One JSON object per line, one line per frame:
 
 ## refined_keyframes.jsonl
 
-Optional. One line per keyframe:
+Optional. At most one line per keyframe: a keyframe without a refinement anchor has none.
 
 ```json
 { "frame": 123, "transform": [16 floats] }
 ```
 
-At each keyframe the module adds an ARAnchor at the camera pose. At session end it re-reads every one of those anchors, whose transforms ARKit has refined in the meantime, and writes them here. Same transform convention as `poses.jsonl`. Where a line exists, it is a better estimate of the keyframe pose than the logged one, and it keeps the poses consistent with the mesh.
+At each keyframe the module adds an ARAnchor at the camera pose. At session end it re-reads every one of those anchors, whose transforms ARKit has refined in the meantime, and writes them here. Same transform convention as `poses.jsonl`. Where a line exists, it is a better estimate of the keyframe pose than the logged one, and it keeps the poses consistent with the mesh. Whether ARKit refines these anchors at all is measured in the Phase 1 spike, which also decides whether the file is worth an ARAnchor per keyframe ([0008](decisions/0008-anchors-and-georeferencing.md)).
 
 ## imu.jsonl
 
@@ -294,7 +298,7 @@ end_header
 
 The rules are in [0005](decisions/0005-privacy-by-design.md). What they mean for a bundle:
 
-- **Blur before writing.** Unblurred images never enter the bundle. Every keyframe goes through the module's one `writeBlurredJPEG` path, which blurs before the JPEG is encoded, and the JPEG holds only that blurred image: no thumbnail or second image ([Keyframes](#keyframes-depth-and-confidence)).
+- **Blur before writing.** Unblurred images never enter the bundle. Every keyframe goes through the module's one `writeBlurredJPEG` path, which blurs before the JPEG is encoded, and the JPEG holds only that blurred image: no thumbnail or second image ([Keyframes](#keyframes-depth-and-confidence)). It fails closed: a frame whose detectors didn't all run is never written.
 - **Blur is irreversible:** a solid fill, or pixelation with cells of 16 px or larger, over a padded box.
 - **What is blurred:**
   - faces (`VNDetectFaceRectanglesRequest`);
@@ -358,7 +362,8 @@ When the upload completes, ingest enqueues validation on the job queue. Validati
 | Which side of a door `facing` points to, so two segments that mark the same door from opposite sides agree | With the registration approach, Phase 1 spike |
 | How two bundles refer to the same new anchor before it has a server ID (both carry `anchor_id: null`) | With the registration approach, Phase 1 spike |
 | Where an image anchor's reference image and physical size are kept, so later sessions can detect the sign | With the registration approach, Phase 1 spike |
-| With `continuous_session`, when the session-end reads (`refined_keyframes.jsonl`, mesh transforms) happen for each segment's bundle | With the registration approach, Phase 1 spike |
+| With `continuous_session`, when the session-end reads (`refined_keyframes.jsonl`, mesh transforms) happen for each segment's bundle | With the registration approach, Phase 1 spike, from the recorded anchor history ([0010](decisions/0010-capture-recording-and-replay.md)) |
+| With `continuous_session`, how frames are numbered across the segments of one session: from 0 in each bundle, or continuing (a recording keeps the session's numbering and each segment's offset) | With the registration approach, Phase 1 spike |
 | The screen detector model and its licence | Phase 1 spike ([0005](decisions/0005-privacy-by-design.md)) |
 | The server-side screen detector, and what a still-sharp screen does | Phase 2 screen re-check task ([0005](decisions/0005-privacy-by-design.md)) |
 | Which side writes `gnss.jsonl` | Phase 2, with the street priors |

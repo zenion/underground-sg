@@ -1,6 +1,6 @@
 # 0002: Photo-based localization for public users
 
-Status: accepted · 2026-10-12 · amended 2026-10-12, 2026-10-15
+Status: accepted · 2026-10-12 · amended 2026-10-12, 2026-10-15, 2026-10-17
 
 ## Decision
 
@@ -81,7 +81,7 @@ Background and sources: [stack review](../reviews/2026-10-12-stack-review.md), s
 - Positions are discrete fixes, not continuous tracking. The dot stays at the last fix between photos.
 - Fallbacks: the retrieval-only answer; tap a nearby landmark ("I'm at"); QR codes at junctions if landlords agree.
 - Query photos and feature payloads are processed in memory, dropped once the pose is returned, and never stored or logged (0005).
-- Target: correct level, within about 5 m. Validate in Phase 4 with a CPU benchmark on Funan data, and report the response time.
+- Target: correct level, within about 5 m. Validate in Phase 4 with a CPU benchmark on data from the MVP's corridor ([spec](../spec.md#mvp-scope-the-esplanade-corridor); amended 2026-10-17), and report the response time.
 - Capture during opening hours on quiet weekday mornings. Shopfronts are the best landmarks; shutters at capture time would not match daytime queries.
 - MegaLoc's training data (ScanNet, MSLS) has research-only terms. Get legal review if an agency adopts the project.
 - PoseLib's robust focal-length estimation is only on master: pin a commit or wrap p4pf.

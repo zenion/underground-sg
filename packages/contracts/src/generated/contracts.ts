@@ -759,7 +759,7 @@ export interface LevelProperties {
    */
   sort_key: Smallint;
   /**
-   * Floor height in metres relative to the cluster height datum, or null until measured.
+   * Floor height in metres relative to the height datum, or null until measured.
    */
   elevation_m: number | null;
 }
@@ -2044,7 +2044,7 @@ export interface HeadVenue {
    */
   rev: number;
   /**
-   * venues.permission: the reference to the written permission to scan, or null. Written only by the seed script; no diff carries it.
+   * venues.permission: an optional, private reference to anything the venue agreed in writing (scanning needs none), or null. Written only by the seed script; no diff carries it.
    */
   permission: string | null;
   /**

@@ -48,7 +48,10 @@ export interface SeedVenue {
   readonly kind: VenueKind;
   /** The landlord or station operator, or null. Private. */
   readonly operator: string | null;
-  /** A reference to the written permission to scan (never the letter itself), or null. Private. */
+  /**
+   * An optional reference to anything the venue agreed in writing (never the document itself),
+   * or null; scanning needs no permission. Private.
+   */
   readonly permission: string | null;
   readonly footprint: MultiPolygon | null;
   /** elevation_m stays NULL until measured, through a change set. */

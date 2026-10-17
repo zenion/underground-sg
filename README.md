@@ -2,7 +2,7 @@
 
 Find your way through downtown Singapore's underground links and malls: see where you are, and get a route between two street-level points that stays underground.
 
-Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded, with the contracts, the database schema, the API (`services/api`, with the publish transaction and a local demo map), the webapp skeleton (`apps/web`) and the mapper app shell, which runs in Expo Go ([apps/mapper](apps/mapper/README.md)). The MVP covers the City Hall cluster: City Hall MRT, Funan, Raffles City, CityLink Mall and Esplanade MRT.
+Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffolded, with the contracts, the database schema, the API (`services/api`, with the publish transaction and a local demo map), the webapp skeleton (`apps/web`) and the mapper app shell, which runs in Expo Go ([apps/mapper](apps/mapper/README.md)). The MVP covers the Esplanade corridor: from South Beach through the unpaid B1 level of Esplanade MRT to Raffles City's basement and on to City Hall MRT's unpaid concourse, with Marina Link to Marina Square. The former City Hall cluster (Funan, the rest of City Hall MRT, CityLink Mall) comes next.
 
 ## Docs
 
@@ -11,10 +11,11 @@ Status: Phase 1. The stack was decided on 2026-10-12 and the monorepo is scaffol
 | [docs/spec.md](docs/spec.md) | Product and technical spec, the source of truth |
 | [docs/backlog.md](docs/backlog.md) | Tasks by phase, in detail for phases 1 and 2 |
 | [docs/capture-bundle.md](docs/capture-bundle.md) | Format of a capture upload, shared by the mapper app and the server |
+| [docs/session-recording.md](docs/session-recording.md) | Format of a session recording: what the owner's builds keep of a capture so it can be replayed on the PC |
 | [docs/snapshot-format.md](docs/snapshot-format.md) | The public map files: `latest.json`, each version's `indoor.json` and `street.json`, and the `status.json` overlay |
 | [docs/diff-format.md](docs/diff-format.md) | A change set's diff, and how approval applies it to the map |
 | [docs/head-export-format.md](docs/head-export-format.md) | The private full export of the map that each version keeps for rollback |
-| [docs/phone-testing.md](docs/phone-testing.md) | Testing the webapp and the mapper app on the iPhone through tunnels (`pnpm dev:phone`) |
+| [docs/phone-testing.md](docs/phone-testing.md) | Testing the webapp and the mapper app on the iPhone through tunnels (`pnpm dev:phone`), at a desk; walks use the walk build |
 | [docs/decisions/](docs/decisions/) | Why the key choices were made |
 | [docs/reviews/](docs/reviews/) | Background research behind the decisions, such as the 2026-10-12 stack review |
 | [db/](db/) | The PostGIS schema: dbmate migrations, a generated `schema.sql` snapshot and the database rule tests |
@@ -68,7 +69,7 @@ pnpm test:db
 - `pnpm api` runs the API on http://127.0.0.1:28000 (`/health`, `/map/latest`, `/public/...`, `/glyphs/...`, `/openapi.json`); see [services/api/README.md](services/api/README.md) for its settings and for opening it to the phone on the LAN (`API_HOST=0.0.0.0`, and allow Node through the Windows firewall on private networks only).
 - `pnpm demo` publishes a made-up demo map (names start with `Demo:`, `latest.json` says `"demo": true`) to the local stack through the real publish path, so the API, the webapp and the mapper app have something to show; `pnpm demo --reset` wipes it again by recreating the local database. Both work only on a stack on this machine that holds nothing but the demo. Details in [services/api/README.md](services/api/README.md#the-demo).
 - `pnpm map gates <change-set-id>`, `pnpm map publish <change-set-id>...` and `pnpm map reconcile` run the automated gates, the publish transaction and the `latest.json` repair ([services/api/README.md](services/api/README.md#publishing)). Nothing publishes over HTTP.
-- `pnpm db seed` loads the core venues into HEAD (`db/seed/core-venues.ts`; levels and footprints wait for the site walk). Safe to run again; see [db/README.md](db/README.md#seed-script).
+- `pnpm db seed` loads the MVP's core venues into HEAD (`db/seed/core-venues.ts`; levels and footprints wait for the site walk). Safe to run again; see [db/README.md](db/README.md#seed-script).
 - `pnpm test:db` runs the database rule tests and the API's stack tests against the stack. Each test file gets its own throwaway database (`usg_scratch_*`), and the API's tests their own buckets (`usg-test-*`), so the `usg` database and the buckets above are never touched. `pnpm check` doesn't run them; CI does, in its `Database (postgis)` job.
 - The RustFS console is at http://localhost:29001/rustfs/console/; sign in with `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
 - The data lives in the Docker volumes `usg_postgis-data` and `usg_rustfs-data`, inside Docker Desktop's disk image, so encrypt the drive that image is on before real captures arrive ([0009](docs/decisions/0009-hosting-and-budget.md)). `docker compose down` keeps the volumes; `docker compose down -v` deletes them.
