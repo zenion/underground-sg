@@ -65,7 +65,7 @@ opens the whole app at <http://localhost:8081>. The map is the same DOM componen
 
 - The `capture-native` Swift module (ARKit, keyframes, blur, bundle writer): Expo Go runs only the native code it ships with.
 - A development build needs the Apple Developer Program membership (US$99 a year), an Expo account, the phone registered with `eas device:create`, and Developer Mode on the phone. Then `eas build --profile development --platform ios` with the `development` profile in `eas.json` (`developmentClient: true`, internal distribution). `expo-dev-client` is already installed; Expo Go ignores it.
-- **Confirm the bundle identifier** in `app.config.ts` (`com.zenion.usg.mapper` is a placeholder) before the first EAS build: it can't change once the app is registered with Apple. `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` are placeholders for that build; Expo Go uses its own.
+- **Bundle identifier:** `com.xennion.usg.mapper`, from the owner's domain (confirmed 2026-10-17). It can't change once the app is registered with Apple. `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` are placeholders for that build; Expo Go uses its own.
 
 ## Configuration
 

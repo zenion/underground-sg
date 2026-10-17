@@ -13,9 +13,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: "portrait",
   userInterfaceStyle: "light",
   ios: {
-    // Placeholder: confirm before the first EAS build. It can't change once the app is registered
-    // with Apple.
-    bundleIdentifier: "com.zenion.usg.mapper",
+    // Reverse DNS of the owner's domain, xennion.com (confirmed 2026-10-17). It can't change once
+    // the app is registered with Apple.
+    bundleIdentifier: "com.xennion.usg.mapper",
     supportsTablet: false,
     infoPlist: {
       // Placeholders for the development build; Expo Go uses its own.
