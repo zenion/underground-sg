@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/import.schema.json",
+  "title": "RecordingImport",
+  "description": "import.json of an imported replay set on the PC, recording_version 1 (docs/session-recording.md): written by pnpm rec import in .data/fixtures/recordings/<recording_id>/, and updated by pnpm rec review and when a quarantine is carried over. Never leaves the PC.",
+  "type": "object",
+  "properties": {
+    "recording_version": {
+      "description": "Version of the session recording format.",
+      "type": "integer",
+      "const": 1
+    },
+    "recording_id": {
+      "description": "The replay set's recording id.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        }
+      ]
+    },
+    "imported_at": {
+      "description": "When it was imported.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/dateTime"
+        }
+      ]
+    },
+    "reviewed_at": {
+      "description": "When the owner last reviewed it, or null until pnpm rec review.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/dateTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recheck": {
+      "description": "The face re-check's run, or null for a set with no images.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/recheck"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "deleted": {
+      "description": "Every file deleted by the re-check or by a quarantine carried over from ingest. At most 60000.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/deletion"
+      },
+      "maxItems": 60000
+    }
+  },
+  "required": [
+    "recording_version",
+    "recording_id",
+    "imported_at",
+    "reviewed_at",
+    "recheck",
+    "deleted"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "recheck": {
+      "title": "ImportRecheck",
+      "description": "The server's face re-check over every image in the set.",
+      "type": "object",
+      "properties": {
+        "detector": {
+          "description": "The detector and its version.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "images_checked": {
+          "description": "Images checked.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "images_deleted": {
+          "description": "Images deleted because a face was still sharp.",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["detector", "images_checked", "images_deleted"],
+      "additionalProperties": false
+    },
+    "deletion": {
+      "title": "ImportDeletion",
+      "description": "One deleted image.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Its path in the replay set: a recording's candidate or a bundle's keyframe, with its depth and confidence.",
+          "type": "string",
+          "pattern": "^(rec|capture)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(candidates|keyframes|depth|confidence)/[0-9]{6}\\.(jpg|png)$"
+        },
+        "frame": {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/frameIndex"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "required": ["path", "frame", "reason"],
+      "additionalProperties": false
+    },
+    "reason": {
+      "title": "ImportDeletionReason",
+      "description": "recheck: the face re-check found a sharp face. quarantine: ingest quarantined the frame.",
+      "type": "string",
+      "enum": ["recheck", "quarantine"]
+    }
+  }
+}

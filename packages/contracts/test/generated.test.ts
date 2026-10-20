@@ -12,6 +12,11 @@ import {
   SWIFT_DOCUMENTS,
   writeGenerated,
 } from "../scripts/codegen.ts";
+import {
+  RECORDING_SCHEMA_FILES,
+  RECORDING_SET_SCHEMA_FILES,
+  RECORDING_SWIFT_FILES,
+} from "../src/recording.ts";
 import { ALL_SCHEMA_FILES } from "./schemas.ts";
 
 // quicktype and Prettier take a few seconds on a cold start.
@@ -60,24 +65,41 @@ describe("generated code", () => {
 });
 
 describe("which documents get which output", () => {
-  test("every schema except a defs file is a document of exactly one group", () => {
-    const documents = DOCUMENT_GROUPS.flatMap((group) => group.documents.map((d) => d.schema));
-    expect(new Set(documents).size).toBe(documents.length);
-    expect([...documents].sort()).toEqual(
+  test("every schema except a defs file is a document of one group, and only the recording reuses another's", () => {
+    for (const group of DOCUMENT_GROUPS) {
+      const schemas = group.documents.map((d) => d.schema);
+      expect(new Set(schemas).size, group.key).toBe(schemas.length);
+    }
+    const owned = DOCUMENT_GROUPS.flatMap((group) =>
+      group.documents
+        .map((d) => d.schema)
+        .filter((schema) => group.key !== "recording" || schema.startsWith("recording/")),
+    );
+    expect(new Set(owned).size).toBe(owned.length);
+    expect([...owned].sort()).toEqual(
       ALL_SCHEMA_FILES.filter((file) => !file.endsWith("/defs.schema.json")).sort(),
     );
+    // The recording reuses only the capture bundle's line schemas.
+    const recording = DOCUMENT_GROUPS.find((group) => group.key === "recording");
+    for (const document of recording?.documents ?? []) {
+      expect(document.schema).toMatch(/^recording\/|^capture-bundle\/[a-z-]+-line\.schema\.json$/);
+    }
   });
 
-  test("only the capture bundle's documents get Swift types", () => {
-    expect(SWIFT_DOCUMENTS.map((d) => d.schema)).toEqual(
-      DOCUMENT_GROUPS.flatMap((g) => g.documents)
+  test("only the capture bundle's documents and the recording files Swift writes get Swift types", () => {
+    expect(SWIFT_DOCUMENTS.map((d) => d.schema)).toEqual([
+      ...DOCUMENT_GROUPS.flatMap((g) => g.documents)
         .map((d) => d.schema)
-        .filter((schema) => schema.startsWith("capture-bundle/")),
-    );
+        .filter((schema) => schema.startsWith("capture-bundle/"))
+        .filter((schema, index, all) => all.indexOf(schema) === index),
+      ...RECORDING_SWIFT_FILES.map(
+        (name) => ({ ...RECORDING_SCHEMA_FILES, ...RECORDING_SET_SCHEMA_FILES })[name],
+      ),
+    ]);
   });
 
   test(
-    "CaptureBundle.swift has no snapshot or diff types",
+    "Contracts.swift has no snapshot, diff or PC-only recording types",
     async () => {
       const swift = (await generate()).find((file) => file.path === GENERATED_SWIFT_FILE);
       for (const name of [
@@ -86,10 +108,14 @@ describe("which documents get which output", () => {
         "StatusOverlay",
         "ChangeSetDiff",
         "VenueRow",
+        "BoundaryLine",
+        "RecordingImport",
       ]) {
         expect(swift?.content).not.toContain(name);
       }
       expect(swift?.content).toContain("struct CaptureManifest");
+      expect(swift?.content).toContain("struct RecordingManifest");
+      expect(swift?.content).toContain("struct ExportParts");
     },
     TIMEOUT_MS,
   );

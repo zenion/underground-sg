@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/mesh-history-line.schema.json",
+  "title": "MeshHistoryLine",
+  "description": "One line of mesh/history.jsonl in a session recording, recording_version 1 (docs/session-recording.md): the index of one block of mesh/history.bin, one per changed mesh anchor per snapshot. Checked by validate-recording, not by this schema: t never decreases; transform, offset, bytes, vertices and faces are null exactly for remove; and each block lies inside history.bin.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "description": "The snapshot's time.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+        }
+      ]
+    },
+    "anchor": {
+      "description": "The mesh anchor's identifier.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        }
+      ]
+    },
+    "op": {
+      "$ref": "defs.schema.json#/$defs/historyOp"
+    },
+    "transform": {
+      "description": "Anchor to world at t, or null for remove.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/transform"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "offset": {
+      "description": "Where the block starts in history.bin, or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bytes": {
+      "description": "The block's length in history.bin (compressed), or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertices": {
+      "description": "Vertices in the block, or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "faces": {
+      "description": "Faces in the block, or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "final": {
+      "description": "true for the snapshot at stop, which holds every anchor with the session-end transforms.",
+      "type": "boolean"
+    }
+  },
+  "required": ["t", "anchor", "op", "transform", "offset", "bytes", "vertices", "faces", "final"],
+  "additionalProperties": false
+}

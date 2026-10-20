@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/anchor-line.schema.json",
+  "title": "AnchorHistoryLine",
+  "description": "One line of anchors.jsonl in a session recording, recording_version 1 (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh snapshot and at stop. Updates only for anchors that moved more than about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by this schema: t never decreases, transform is null exactly for remove, and frame is set exactly for keyframe anchors.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "description": "When it was sampled.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+        }
+      ]
+    },
+    "anchor": {
+      "description": "ARKit's anchor identifier.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        }
+      ]
+    },
+    "kind": {
+      "$ref": "#/$defs/kind"
+    },
+    "op": {
+      "$ref": "defs.schema.json#/$defs/historyOp"
+    },
+    "transform": {
+      "description": "Anchor to world, or null for remove.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/transform"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "frame": {
+      "description": "The keyframe's frame for a keyframe anchor, else null.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/frameIndex"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["t", "anchor", "kind", "op", "transform", "frame"],
+  "additionalProperties": false,
+  "$defs": {
+    "kind": {
+      "title": "AnchorHistoryKind",
+      "description": "keyframe: the anchor placed at a keyframe. image: a detected image anchor. mesh: a mesh anchor. marked: an anchor markAnchor placed.",
+      "type": "string",
+      "enum": ["keyframe", "image", "mesh", "marked"]
+    }
+  }
+}

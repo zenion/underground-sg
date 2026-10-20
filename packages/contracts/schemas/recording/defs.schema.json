@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/defs.schema.json",
+  "title": "RecordingDefs",
+  "description": "Shared definitions for the session recording schemas, recording_version 1 (docs/session-recording.md). Not a recording file: the other schemas reference these with $ref.",
+  "$defs": {
+    "profile": {
+      "title": "RecordingProfile",
+      "description": "What a recording keeps: lean (no images or depth), standard (lean plus the non-keyframe candidates, blurred, with depth) or dense (standard with more candidates and mesh snapshots, for short sessions).",
+      "type": "string",
+      "enum": ["lean", "standard", "dense"]
+    },
+    "thermalState": {
+      "title": "ThermalState",
+      "description": "ProcessInfo.thermalState.",
+      "type": "string",
+      "enum": ["nominal", "fair", "serious", "critical"]
+    },
+    "worldMapping": {
+      "title": "WorldMappingStatus",
+      "description": "ARFrame.worldMappingStatus.",
+      "type": "string",
+      "enum": ["notAvailable", "limited", "extending", "mapped"]
+    },
+    "historyOp": {
+      "title": "HistoryOp",
+      "description": "What happened to an anchor since its last line: added, moved (update) or removed.",
+      "type": "string",
+      "enum": ["add", "update", "remove"]
+    },
+    "deviceVector": {
+      "title": "DeviceVector",
+      "description": "[x, y, z] in the device frame (Core Motion axes: x to the right of the screen, y towards the top of the device, z out of the screen), as in the bundle's imu.jsonl.",
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "quaternion": {
+      "title": "Quaternion",
+      "description": "A unit quaternion [x, y, z, w].",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -1,
+        "maximum": 1
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "jsonText": {
+      "title": "JsonText",
+      "description": "JSON text: a string that parses as one JSON value, holding what JavaScript passed or received, whose shape the module doesn't fix. At most 16 KiB; readers parse it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16384
+    },
+    "recordingPath": {
+      "title": "RecordingPath",
+      "description": "Path of a recording file relative to rec-<recording_id>/, using / as the separator. Only the files of the recording layout are allowed; recording.json does not list itself.",
+      "type": "string",
+      "pattern": "^(frames|imu|motion|altitude|anchors|events|actions|telemetry|location|boundary)\\.jsonl$|^boundary/[0-9]{6}\\.f32$|^mesh/history\\.(bin|jsonl)$|^candidates/[0-9]{6}\\.jpg$|^(depth|confidence)/[0-9]{6}\\.png$|^privacy/blur\\.jsonl$"
+    },
+    "stageTimings": {
+      "title": "StageTimings",
+      "description": "Milliseconds each stage took for one frame; a stage that didn't run is left out. gate: the candidate gate; copy: copying the frame's data; sharpness: the pre-blur score; detect: the face, person and screen detectors; blur; encode: the JPEG; depth: the depth and confidence PNGs; write: writing the files.",
+      "type": "object",
+      "properties": {
+        "gate": {
+          "type": "number",
+          "minimum": 0
+        },
+        "copy": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sharpness": {
+          "type": "number",
+          "minimum": 0
+        },
+        "detect": {
+          "type": "number",
+          "minimum": 0
+        },
+        "blur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "encode": {
+          "type": "number",
+          "minimum": 0
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0
+        },
+        "write": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "stagePercentiles": {
+      "title": "StagePercentiles",
+      "description": "For each stage (as in StageTimings) that ran in the last second, its median and 95th percentile in milliseconds.",
+      "type": "object",
+      "properties": {
+        "gate": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "copy": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "sharpness": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "detect": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "blur": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "encode": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "depth": {
+          "$ref": "#/$defs/percentiles"
+        },
+        "write": {
+          "$ref": "#/$defs/percentiles"
+        }
+      },
+      "additionalProperties": false
+    },
+    "percentiles": {
+      "title": "StagePercentile",
+      "description": "A stage's median and 95th percentile time in milliseconds.",
+      "type": "object",
+      "properties": {
+        "p50": {
+          "description": "Median, in milliseconds.",
+          "type": "number",
+          "minimum": 0
+        },
+        "p95": {
+          "description": "95th percentile, in milliseconds.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["p50", "p95"],
+      "additionalProperties": false
+    }
+  }
+}

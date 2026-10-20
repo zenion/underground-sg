@@ -8,6 +8,11 @@ import { CAPTURE_BUNDLE_DEFS_SCHEMA_FILE, CAPTURE_BUNDLE_SCHEMA_FILES } from "./
 import { CHANGE_SET_DIFF_SCHEMA_FILE } from "./diff.ts";
 import { HEAD_EXPORT_SCHEMA_FILE } from "./export.ts";
 import { MAP_DEFS_SCHEMA_FILE } from "./map.ts";
+import {
+  RECORDING_DEFS_SCHEMA_FILE,
+  RECORDING_SCHEMA_FILES,
+  RECORDING_SET_SCHEMA_FILES,
+} from "./recording.ts";
 import { SNAPSHOT_SCHEMA_FILES } from "./snapshot.ts";
 
 /** The `schemas/` directory. */
@@ -25,7 +30,8 @@ export const ALL_CAPTURE_BUNDLE_SCHEMA_FILES: readonly string[] = [
 /**
  * Every schema file, as its path under `schemas/` (which is also its `$id` after
  * `SCHEMA_BASE_URL`): the capture bundle's, the shared map definitions, the snapshot files', the
- * change-set diff's, the API's and the private full export's.
+ * change-set diff's, the API's, the private full export's and the session recording's (whose
+ * imu, location and blur lines reuse the capture bundle's schemas).
  */
 export const ALL_SCHEMA_FILES: readonly string[] = [
   ...ALL_CAPTURE_BUNDLE_SCHEMA_FILES.map((file) => `capture-bundle/${file}`),
@@ -34,6 +40,11 @@ export const ALL_SCHEMA_FILES: readonly string[] = [
   `diff/${CHANGE_SET_DIFF_SCHEMA_FILE}`,
   ...Object.values(API_SCHEMA_FILES).map((file) => `api/${file}`),
   `export/${HEAD_EXPORT_SCHEMA_FILE}`,
+  `recording/${RECORDING_DEFS_SCHEMA_FILE}`,
+  ...[
+    ...Object.values(RECORDING_SCHEMA_FILES),
+    ...Object.values(RECORDING_SET_SCHEMA_FILES),
+  ].filter((file) => file.startsWith("recording/")),
 ];
 
 export type SchemaObject = Record<string, unknown>;
