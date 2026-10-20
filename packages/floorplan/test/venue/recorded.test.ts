@@ -14,9 +14,11 @@ import { FIXTURE_DIR, fixtureFiles, readFloorTriangles } from "./fixtures.ts";
 // on-phone benchmark (backlog: "Floor-plan benchmark on the phone").
 //
 // Nothing here prints a value from the mesh: assertions go through check() (test/check.ts), whose
-// messages name only the file and the item, and the log holds counts, areas and timings, not the
-// grid angle, which is the corridor's heading in the session frame. test/value-free.test.ts fails
-// if a file in this project uses Vitest's matchers or snapshots.
+// messages name only the file and the item, and the log holds counts and timings only. It leaves
+// out the grid angle, which is the corridor's heading in the session frame, and the grid's width
+// and height, which at 0.1 m cells give the floor's extent along the corridor. Areas are printed
+// as cell counts. test/value-free.test.ts fails if a file in this project uses Vitest's matchers
+// or snapshots, or reads the grid's size or angle or the mesh's extent.
 
 const files = fixtureFiles();
 
@@ -49,11 +51,10 @@ describe("recorded meshes", () => {
       build(name, triangles);
       const { polygons, coverage, stats } = build(name, triangles);
       console.log(
-        `${name}: ${stats.triangles} triangles (${stats.skippedTriangles} skipped), grid ` +
-          `${stats.gridWidth} x ${stats.gridHeight} cells, ` +
-          `${stats.polygons} polygons, ${stats.holes} holes, ${stats.vertices} vertices, ` +
-          `${(stats.walkableCells / 100).toFixed(1)} m² walkable, ` +
-          `${((stats.bridgedCells + stats.holeCells) / 100).toFixed(1)} m² of gaps; ` +
+        `${name}: ${stats.triangles} triangles (${stats.skippedTriangles} skipped), ` +
+          `${stats.observedCells} observed cells, ${stats.walkableCells} walkable cells, ` +
+          `${stats.bridgedCells + stats.holeCells} gap cells, ` +
+          `${stats.polygons} polygons, ${stats.holes} holes, ${stats.vertices} vertices; ` +
           `ms ${JSON.stringify(stats.timingsMs, (_, v) => (typeof v === "number" ? Math.round(v * 10) / 10 : v))}`,
       );
       checkWellFormed(polygons, `${name} polygons`);

@@ -11,14 +11,23 @@ import { CheckError, check, checkWellFormed } from "./check.ts";
 // comparison and snapshots write and diff the values, so no file in the venue project may use
 // them: the venue tests assert through check() in test/check.ts, whose messages name only the file
 // and the item. This test reads the venue project's source, and every file it imports, and fails
-// on any use of expect, assert (Vitest's and Node's print values too) or a snapshot matcher.
+// on any use of expect, assert or should (Vitest's chai and Node's assert print values too), chai
+// itself or a snapshot matcher. It also fails on the stats and error fields that hold derived
+// geometry, so the log can't print them: the grid's width and height (at 0.1 m cells, the floor's
+// extent along the corridor), its angle (the corridor's heading) and FloorplanExtentError's extent.
 
 const PACKAGE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
-const VENUE_DIR = join(PACKAGE_DIR, "test", "venue");
+const TEST_DIR = join(PACKAGE_DIR, "test");
+const VENUE_DIR = join(TEST_DIR, "venue");
 
 const FORBIDDEN: [RegExp, string][] = [
   [/\bexpect\b/, "expect"],
   [/\bassert\b/, "assert"],
+  [/\bshould\b/, "should"],
+  [/\bchai\b/, "chai"],
+  [/\b(?:gridWidth|gridHeight)\b/, "the grid's dimensions"],
+  [/\bgridAngleRad\b/, "the grid angle"],
+  [/\bextentM\b/, "the mesh's extent"],
   [
     /\b(?:toMatchSnapshot|toMatchInlineSnapshot|toMatchFileSnapshot|toThrowErrorMatchingSnapshot|toThrowErrorMatchingInlineSnapshot)\b/,
     "a snapshot matcher",
@@ -26,8 +35,10 @@ const FORBIDDEN: [RegExp, string][] = [
 ];
 
 /**
- * The files reached from `entries` through relative imports, with their text. Imports of
- * packages (vitest, node:) are not followed.
+ * The files under test/ reached from `entries` through relative imports, with their text. Imports
+ * of packages (vitest, node:) are not followed, and neither are imports of the library in src/: it
+ * defines the fields above and names them in its messages, and test/neutral.test.ts keeps it free
+ * of dependencies and `node:` imports, so it can't reach Vitest or Node's assert.
  */
 function reachable(
   entries: readonly string[],
@@ -43,7 +54,9 @@ function reachable(
     // Static (from "x"), side-effect (import "x") and dynamic (import("x")) imports.
     for (const match of text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
       const specifier = match[1] ?? "";
-      if (specifier.startsWith(".")) pending.push(join(dirname(file), specifier));
+      if (!specifier.startsWith(".")) continue;
+      const target = join(dirname(file), specifier);
+      if (!relative(TEST_DIR, target).startsWith("..")) pending.push(target);
     }
   }
   return files;
@@ -104,7 +117,7 @@ describe("value-free venue tests", () => {
     expect(projects).toHaveLength(2);
   });
 
-  test("no file in the venue project, or imported by one, uses expect or a snapshot matcher", () => {
+  test("no file in the venue project, or imported by one, uses a forbidden name", () => {
     const files = reachable(sourceFiles(VENUE_DIR), (file) => readFileSync(file, "utf8"));
     const names = [...files.keys()].map((file) =>
       relative(PACKAGE_DIR, file).replaceAll("\\", "/"),
@@ -183,13 +196,62 @@ describe("value-free venue tests", () => {
     ]);
   });
 
+  test("Vitest's should and chai fail it", () => {
+    expect(
+      planted({
+        "planted.test.ts": [
+          'import { should } from "vitest";',
+          "should();",
+          "polygons.length.should.equal(count);",
+          'import("./planted-helper.ts");',
+        ].join("\n"),
+        "planted-helper.ts": 'import { chai } from "vitest";\nchai.should();',
+      }),
+    ).toEqual([
+      "test/venue/planted.test.ts line 1 uses should",
+      "test/venue/planted.test.ts line 2 uses should",
+      "test/venue/planted.test.ts line 3 uses should",
+      "test/venue/planted-helper.ts line 1 uses chai",
+      "test/venue/planted-helper.ts line 2 uses should",
+      "test/venue/planted-helper.ts line 2 uses chai",
+    ]);
+  });
+
+  test("logging the grid's size or angle or the mesh's extent fails it", () => {
+    expect(
+      planted({
+        "planted.test.ts": [
+          'console.log(stats.gridWidth + " x " + stats.gridHeight + " cells");',
+          "const { gridAngleRad } = stats;",
+          "if (error instanceof FloorplanExtentError) console.log(error.extentM);",
+        ].join("\n"),
+      }),
+    ).toEqual([
+      "test/venue/planted.test.ts line 1 uses the grid's dimensions",
+      "test/venue/planted.test.ts line 2 uses the grid angle",
+      "test/venue/planted.test.ts line 3 uses the mesh's extent",
+    ]);
+  });
+
+  test("the library in src/ is not scanned, and a helper beside it in test/ is", () => {
+    expect(
+      planted({
+        "planted.test.ts": [
+          'import { buildFloorplan } from "../../src/index.ts";',
+          'import { log } from "../planted-helper.ts";',
+        ].join("\n"),
+        "../planted-helper.ts": "export const log = (stats) => console.log(stats.gridHeight);",
+      }),
+    ).toEqual(["test/planted-helper.ts line 1 uses the grid's dimensions"]);
+  });
+
   test("check() and comments that name what the code avoids pass it", () => {
     expect(
       planted({
         "planted.test.ts": [
           "// Never expect or toMatchSnapshot: their diffs print values.",
           "/*",
-          " * assert prints values too.",
+          " * assert and should print values too, and gridWidth is the floor's extent.",
           " */",
           'import { check } from "../check.ts";',
           'check(polygons.length > 0, "no polygons, expected at least one");',
