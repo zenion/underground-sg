@@ -11,7 +11,8 @@
   "scripts": {
     "rec": "node src/node/cli.ts",
     "typecheck": "tsc && tsc -p tsconfig.neutral.json",
-    "test": "vitest run"
+    "test": "vitest run --project unit",
+    "test:repo": "vitest run --project repo"
   },
   "dependencies": {
     "@usg/contracts": "workspace:*",

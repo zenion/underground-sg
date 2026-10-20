@@ -1,5 +1,6 @@
 // The root prepare script: it points git at .githooks/ in a checkout of the repo, and does nothing
-// in CI or outside a checkout's top level.
+// in CI or outside a checkout's top level. That the hook is tracked and executable is checked in
+// repo/hooks.test.ts (`pnpm test:repo`).
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -55,11 +56,5 @@ describe("installHooks", () => {
     mkdirSync(inner, { recursive: true });
     expect(installHooks(inner, LOCAL)).toBe("not-a-checkout");
     expect(git(outer, ["config", "--local", "core.hooksPath"]).status).not.toBe(0);
-  });
-
-  test("the hook is in the repo, executable", () => {
-    const root = join(import.meta.dirname, "..", "..");
-    const entry = git(root, ["ls-files", "-s", `${HOOKS_PATH}/pre-push`]).stdout;
-    expect(entry).toMatch(/^100755 /);
   });
 });

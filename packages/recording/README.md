@@ -45,4 +45,4 @@ The hook checks every commit the push would publish (each pushed ref's commits t
 
 ## Tests
 
-`pnpm --filter @usg/recording test`: the encoder against `inflateRawSync`; the set against `validate-recording`, against itself across runs and against the tracked copy, and its mesh, coordinates and floor plan; the output-path refusals; the check's rules, planted `origin: device` recordings and `gnss.jsonl` files in throwaway git repos, this repo's own tree, and the pre-push hook refusing a real push to a local bare remote.
+`pnpm --filter @usg/recording test`: the encoder against `inflateRawSync`; the set against `validate-recording`, against itself across runs and against the tracked copy, and its mesh, coordinates and floor plan; the output-path refusals; the check's rules, and planted `origin: device` recordings and `gnss.jsonl` files in throwaway git repos. `pnpm test:repo` (the `repo` project, an uncached Turborepo task, part of `pnpm check` and CI) checks this repo's own tree and the pre-push hook refusing a real push to a local bare remote: neither the index nor `.githooks/` is in the package's Turborepo hash, so a cached pass could hide a broken hook.

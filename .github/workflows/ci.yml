@@ -50,6 +50,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # The tests that read this repository's index or run .githooks/pre-push, outside any package's
+      # Turborepo hash, so they are an uncached task of their own.
+      - run: pnpm test:repo
       # Builds what has a build script: the webapp (apps/web/dist, about a second) and the mapper
       # app's iOS JavaScript export (Metro and Hermes bytecode plus the map's DOM-component bundle,
       # about 17 s cold on the owner's PC).
