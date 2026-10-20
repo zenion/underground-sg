@@ -167,7 +167,7 @@ A mesh anchor's transform at `t` is its latest line at or before `t` in either `
 | `cpu` | The app's CPU use, in percent of one core (it can pass 100) |
 | `free_disk_mb` | Free space on the phone |
 | `queue` | Frames waiting for the keyframe and candidate stages |
-| `candidates_blurred`, `candidates_dropped` | Counts since the recording opened |
+| `candidates_blurred`, `candidates_dropped` | Counts since the recording opened; `candidates_dropped` counts only drops the profile didn't intend (heat, backpressure, disk, blur), not `dropped:profile` |
 | `stage_ms` | For each stage of `frames.jsonl`'s `ms` that ran in the last second, `p50` and `p95` in milliseconds |
 
 **`location.jsonl`**, one line per GNSS fix in a window: exactly the bundle's `gnss.jsonl` line (`t`, `lat`, `lon`, `h_accuracy_m`).
