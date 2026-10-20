@@ -64,6 +64,14 @@ describe("planted cases fail", () => {
     ["const s = `${gnssFix}`;", "template"],
     ["const s = `at ${startT} s`;", "template"],
     ["console.log(value.unwrap());", "console"],
+    ["globalThis.console.log(pose);", "console"],
+    ["window.console?.warn(fix);", "console"],
+    ["console.log(result['hit']);", "console"],
+    ["const log = console.log;", "console-alias"],
+    ["const { log } = console;", "console-alias"],
+    ["const c = globalThis.console;", "console-alias"],
+    ["e.message = String(pose);", "error"],
+    ["e.stack = `at ${camera}`;", "error"],
     ["import { readFileSync } from 'node:fs';", "node-import"],
     ["export * from 'node:path';", "node-import"],
     ["const fs = require('node:fs');", "node-import"],
@@ -100,6 +108,48 @@ describe("planted cases fail", () => {
     ]);
   });
 
+  test("in the adapter: the module's raw results and events", () => {
+    const source = [
+      'import type { NativeSessionStatus } from "../../modules/capture-native/src/types.ts";',
+      'native.addListener("status", (raw: NativeSessionStatus) => {',
+      "  console.log(raw);",
+      "});",
+      "async function mark(options) {",
+      "  const raw = await native.markAnchor(options);",
+      "  throw new Error(JSON.stringify(raw));",
+      "}",
+    ].join("\n");
+    expect(scan(source, "src/capture/native.ts").map(describeFinding)).toEqual([
+      "src/capture/native.ts:3: console mentions raw",
+      "src/capture/native.ts:7: throw mentions raw",
+      "src/capture/native.ts:7: error mentions raw",
+    ]);
+  });
+
+  test("a name declared with a raw Native… type is sensitive whatever it is called", () => {
+    const findings = scanSources([
+      {
+        file: "src/a.ts",
+        source: [
+          'import type { NativeAddTagResult as Tagged } from "../modules/capture-native/src/types.ts";',
+          "export function f(tagged: Tagged) { console.log(tagged); }",
+        ].join("\n"),
+      },
+      {
+        file: "modules/capture-native/src/types.ts",
+        source: [
+          "export interface NativeThing { readonly t: number }",
+          "export interface Holder { readonly thing: NativeThing }",
+        ].join("\n"),
+      },
+      { file: "src/b.ts", source: "throw holder.thing;" },
+    ]);
+    expect(findings.map(describeFinding)).toEqual([
+      "src/a.ts:2: console mentions tagged",
+      "src/b.ts:1: throw mentions thing",
+    ]);
+  });
+
   test("in a screen: a pose formatted in JSX", () => {
     const source = [
       "export function Screen() {",
@@ -125,6 +175,13 @@ describe("clean cases pass", () => {
     "function f(x: Redacted<number>) { return x; }",
     "const location = { motion: 'granted' };",
     "import { parse } from '@babel/parser';",
+    "globalThis.console.info(count);",
+    "console.log = noop;",
+    "const target = { console: null };",
+    "interface Target { console?: object }",
+    "import type { NativeSyntheticEvent } from 'react-native';\nfunction f(e: NativeSyntheticEvent<object>) { console.log(e); }",
+    // A callback that is passed a raw event isn't the event: the property and the label are names.
+    'import type { NativeSessionStatus } from "../modules/capture-native/src/types.ts";\ninterface Events { status: (event: NativeSessionStatus) => void }\nconsole.log(status, event);',
   ])("%s", (source) => {
     expect(scan(source)).toEqual([]);
   });

@@ -4,9 +4,10 @@
 //
 // The adapter is the one place that sees the module's raw events and results. It feeds each to the
 // session's BoundaryTrace first, then wraps every session time and pose in Redacted, so the rest of
-// the app can't print one by accident. Results JavaScript never gets a line for: `start` (it
-// resolves before the window can open), `discard` (the recording is deleted), rejections (they
-// carry a code, not a session time) and the recorder's plumbing.
+// the app can't print one by accident. The raw values are declared with their Native… types, so
+// the no-pose lint treats them as sensitive whatever they are named. Results JavaScript never gets
+// a line for: `start` (it resolves before the window can open), `discard` (the recording is
+// deleted), rejections (they carry a code, not a session time) and the recorder's plumbing.
 //
 // Builds before the native glue have the module but no CaptureSession class and no recorder
 // functions: `openSession()` is then null, `listRecordings()` empty, `recoveryStatus()` null, and
@@ -33,6 +34,8 @@ import type {
   NativeRecordingEvent,
   NativeSessionStatus,
   NativeSessionWarning,
+  NativeStoppedEvent,
+  NativeStopResult,
   RecorderCapabilities,
   RecorderPermissions,
   RecordingEnded,
@@ -249,16 +252,16 @@ function adaptSession(native: CaptureSession, deps: CaptureNativeDeps): CaptureS
   };
 
   const subscriptions = [
-    native.addListener("status", (raw) => {
+    native.addListener("status", (raw: NativeSessionStatus) => {
       trace.record("status", raw.t, raw);
       trace.tick(raw.t);
       emit("status", wrapStatus(raw));
     }),
-    native.addListener("warning", (raw) => {
+    native.addListener("warning", (raw: NativeSessionWarning) => {
       trace.record("warning", raw.t, raw);
       emit("warning", wrapWarning(raw));
     }),
-    native.addListener("recording", (raw) => {
+    native.addListener("recording", (raw: NativeRecordingEvent) => {
       trace.record("recording", raw.t, raw);
       if (raw.state === "open") trace.windowOpened(raw.startT);
       else if (raw.state === "finalizing") trace.flush(true);
@@ -267,7 +270,7 @@ function adaptSession(native: CaptureSession, deps: CaptureNativeDeps): CaptureS
       }
       emit("recording", wrapRecording(raw));
     }),
-    native.addListener("stopped", (raw) => {
+    native.addListener("stopped", (raw: NativeStoppedEvent) => {
       trace.record("stopped", raw.t, raw);
       trace.end();
       emit("stopped", { t: redact(raw.t) });
@@ -282,18 +285,18 @@ function adaptSession(native: CaptureSession, deps: CaptureNativeDeps): CaptureS
       return { recordingId: result.recordingId };
     },
     async markAnchor(options) {
-      const raw = await native.markAnchor(options);
+      const raw: NativeMarkAnchorResult = await native.markAnchor(options);
       trace.record("markAnchor", raw.t, raw);
       return wrapMark(raw);
     },
     async addTag(options) {
-      const raw = await native.addTag(options);
+      const raw: NativeAddTagResult = await native.addTag(options);
       trace.record("addTag", raw.t, raw);
       return wrapTag(raw);
     },
     async stop() {
       trace.flush(true);
-      const raw = await native.stop();
+      const raw: NativeStopResult = await native.stop();
       trace.record("stop", raw.t, raw);
       return { t: redact(raw.t), recording: raw.recording };
     },
