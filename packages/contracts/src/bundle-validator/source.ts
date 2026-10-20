@@ -5,6 +5,9 @@ import type { ProblemCode } from "./report.ts";
 /** Chunk size for reading a tar file or a bundle directory's files from disk. */
 export const READ_CHUNK_BYTES = 1024 * 1024;
 
+/** Reads `length` bytes from `start`, in chunks; throws BundleIoError if it can't. */
+export type RangeReader = (start: number, length: number) => AsyncIterable<Uint8Array>;
+
 export type SourceEvent =
   | { readonly kind: "directory"; readonly name: string }
   | {
@@ -17,6 +20,12 @@ export type SourceEvent =
        * most once; a file that is never opened is skipped.
        */
       readonly open: () => AsyncIterable<Uint8Array>;
+      /**
+       * Reads part of the content again after the pass: present when the source can seek (a
+       * directory, a tar file or an export's parts), absent for a stream. validate-recording
+       * uses it for mesh/history.bin, whose index comes after it.
+       */
+      readonly reread?: RangeReader;
     }
   | {
       readonly kind: "problem";

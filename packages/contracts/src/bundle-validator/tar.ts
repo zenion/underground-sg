@@ -12,7 +12,10 @@
 // fits in a 100-byte name.
 
 import type { BundleLimits } from "./limits.ts";
-import { BundleIoError, problem, type SourceEvent } from "./source.ts";
+import { BundleIoError, problem, type RangeReader, type SourceEvent } from "./source.ts";
+
+/** The limits the tar reader enforces: the whole tar's size and its entries. */
+export type TarLimits = Pick<BundleLimits, "maxBundleBytes" | "maxEntries">;
 
 const BLOCK = 512;
 const TRAILING_READ = 64 * 1024;
@@ -217,11 +220,13 @@ function paddedSize(size: number): number {
 
 /**
  * Reads a tar stream as source events. A fatal problem ends the events: the stream could not be
- * read past it. Throws BundleIoError only when the source itself fails.
+ * read past it. Throws BundleIoError only when the source itself fails. `range`, when the tar can
+ * be read again at an offset (a file, or an export's parts), gives each file event a `reread`.
  */
 export async function* readTar(
   source: AsyncIterable<unknown>,
-  limits: BundleLimits,
+  limits: TarLimits,
+  range?: RangeReader,
 ): AsyncGenerator<SourceEvent> {
   const reader = new ByteReader(source);
   try {
@@ -315,6 +320,9 @@ export async function* readTar(
             opened = true;
             return reader.pieces(size);
           },
+          ...(range === undefined
+            ? {}
+            : { reread: (start: number, length: number) => range(bodyAt + start, length) }),
         };
       } else if (type === "5") {
         if (size > 0) {
@@ -351,6 +359,6 @@ export async function* readTar(
   }
 }
 
-function tooLarge(limits: BundleLimits): string {
+function tooLarge(limits: TarLimits): string {
   return `The tar is larger than ${limits.maxBundleBytes} bytes (maxBundleBytes)`;
 }

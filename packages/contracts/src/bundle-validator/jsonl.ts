@@ -1,5 +1,34 @@
 // Splits a streamed JSONL file into lines on \n bytes (which never occur inside a multi-byte
-// UTF-8 sequence), holding at most one line of `maxLineBytes` in memory.
+// UTF-8 sequence), holding at most one line of `maxLineBytes` in memory; and parses JSON bytes.
+
+const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+export type ParsedJson =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * UTF-8 JSON without a byte order mark, parsed; or why it isn't, in words that never quote the
+ * data (the parser's own message can, and the data may be personal). A JSONL line (`isLine`)
+ * must not be blank.
+ */
+export function parseJsonBytes(bytes: Uint8Array, isLine: boolean): ParsedJson {
+  let text: string;
+  try {
+    text = decoder.decode(bytes);
+  } catch {
+    return { ok: false, message: "Not valid UTF-8" };
+  }
+  if (text.charCodeAt(0) === 0xfeff) {
+    return { ok: false, message: "Starts with a byte order mark (BOM)" };
+  }
+  if (isLine && text.trim() === "") return { ok: false, message: "A blank line" };
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false, message: "Not valid JSON" };
+  }
+}
 
 export class LineSplitter {
   readonly #maxLineBytes: number;

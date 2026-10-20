@@ -195,6 +195,12 @@ describe("package exports", () => {
     );
   });
 
+  test("the recording-validator entry is src/recording-validator/index.ts", () => {
+    expect(require.resolve("@usg/contracts/recording-validator")).toBe(
+      join(PACKAGE_DIR, "src", "recording-validator", "index.ts"),
+    );
+  });
+
   test("schemas/* resolves to the schema files", () => {
     expect(require.resolve("@usg/contracts/schemas/capture-bundle/manifest.schema.json")).toBe(
       join(PACKAGE_DIR, "schemas", "capture-bundle", "manifest.schema.json"),
