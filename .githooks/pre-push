@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuses a push that would publish a session recording or capture data (ADR 0010, "Git and
+# EAS"): a pushed branch of the public repo is already published. pnpm install points git here
+# (core.hooksPath, scripts/install-hooks.ts); CI runs the same check on the checkout.
+#
+# Git passes the remote's name and URL as arguments and the refs being pushed on stdin; the check
+# reads every commit those refs would publish. Without Node the push is refused too.
+
+hooks_dir=$(dirname "$0")
+exec node "$hooks_dir/../packages/recording/scripts/check-tracked.ts" --pre-push "$@"

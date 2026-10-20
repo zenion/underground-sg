@@ -8,6 +8,7 @@ import {
   type CaptureBundleJsonPath,
 } from "../capture-bundle.ts";
 import { ALL_SCHEMA_FILES, readSchema } from "../schema-files.ts";
+import { SCHEMA_BASE_URL } from "../schema-ids.ts";
 import { displayPath } from "./report.ts";
 
 const addFormats = addFormatsModule.default;
@@ -34,12 +35,25 @@ export function createAjv(options: AjvOptions = {}): Ajv2020 {
   return ajv;
 }
 
+let sharedAjv: Ajv2020 | undefined;
 let validators: Map<CaptureBundleJsonPath, ValidateFunction> | undefined;
+
+/**
+ * The compiled validator for a schema, by its path under `schemas/` (for example
+ * `recording/frame-line.schema.json`), from the one Ajv the validators share.
+ */
+export function schemaValidator(path: string): ValidateFunction {
+  sharedAjv ??= createAjv();
+  const validate = sharedAjv.getSchema(`${SCHEMA_BASE_URL}${path}`);
+  if (validate === undefined) throw new Error(`No schema with $id ending ${path}`);
+  return validate;
+}
 
 /** The compiled validator for a bundle file (for a .jsonl file, for one line). */
 export function validatorFor(bundlePath: CaptureBundleJsonPath): ValidateFunction {
   if (validators === undefined) {
-    const ajv = createAjv();
+    sharedAjv ??= createAjv();
+    const ajv = sharedAjv;
     validators = new Map();
     for (const [path, file] of Object.entries(CAPTURE_BUNDLE_SCHEMA_FILES)) {
       const validate = ajv.getSchema(`${CAPTURE_BUNDLE_SCHEMA_BASE_URL}${file}`);

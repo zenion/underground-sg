@@ -20,7 +20,7 @@ import type {
   Transform,
 } from "../generated/contracts.ts";
 import { type ImageSize, JpegParser, type PngHeader, PngParser } from "./images.ts";
-import { LineSplitter } from "./jsonl.ts";
+import { LineSplitter, parseJsonBytes } from "./jsonl.ts";
 import {
   BUNDLE_DIRECTORY_PATTERN,
   type BundleFile,
@@ -61,7 +61,7 @@ interface FileRecord {
   readonly sha256: string | null;
 }
 
-interface Sink {
+export interface Sink {
   push(chunk: Uint8Array): void;
   end(complete: boolean): void;
 }
@@ -108,7 +108,7 @@ interface BlurFacts {
 }
 
 /** A sink that keeps a copy of every chunk and hands over the whole file if it was complete. */
-function collectingSink(onEnd: (bytes: Uint8Array) => void): Sink {
+export function collectingSink(onEnd: (bytes: Uint8Array) => void): Sink {
   const pieces: Uint8Array[] = [];
   return {
     push: (chunk) => {
@@ -139,10 +139,11 @@ function sizeText(size: readonly number[]): string {
 }
 
 /**
- * A schema_version other than 1, described without echoing the data: an integer is shown, any
- * other value only by its type, since it could be a whole document of personal data.
+ * A version other than 1 (schema_version, or a recording's recording_version), described without
+ * echoing the data: an integer is shown, any other value only by its type, since it could be a
+ * whole document of personal data.
  */
-function describeVersion(value: unknown): string {
+export function describeVersion(value: unknown): string {
   if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
   if (value === null) return "null";
   if (Array.isArray(value)) return "an array";
@@ -208,17 +209,23 @@ export class BundleCollector {
 
   /** Reads every event. Throws only what the source throws (BundleIoError). */
   async consume(events: AsyncIterable<SourceEvent>): Promise<void> {
-    for await (const event of events) {
-      if (event.kind === "problem") {
-        this.#add(event.code, event.name === null ? null : this.#shown(event.name), event.message);
-        if (event.fatal) this.#fatal = true;
-      } else if (event.kind === "directory") {
-        this.#entries++;
-        this.#checkName(event.name, true);
-      } else {
-        this.#entries++;
-        await this.#readFile(event.name, event.size, event.open);
-      }
+    for await (const event of events) await this.handle(event);
+  }
+
+  /**
+   * Reads one event. validate-recording hands each bundle of a replay set its own events this
+   * way, from the one tar of the set.
+   */
+  async handle(event: SourceEvent): Promise<void> {
+    if (event.kind === "problem") {
+      this.#add(event.code, event.name === null ? null : this.#shown(event.name), event.message);
+      if (event.fatal) this.#fatal = true;
+    } else if (event.kind === "directory") {
+      this.#entries++;
+      this.#checkName(event.name, true);
+    } else {
+      this.#entries++;
+      await this.#readFile(event.name, event.size, event.open);
     }
   }
 
@@ -336,28 +343,10 @@ export class BundleCollector {
 
   /** Parses UTF-8 JSON; reports json.invalid and returns INVALID if it isn't. */
   #parseJson(bytes: Uint8Array, file: string, line?: number): unknown {
-    let text: string;
-    try {
-      text = decoder.decode(bytes);
-    } catch {
-      this.#add("json.invalid", file, "Not valid UTF-8", line);
-      return INVALID;
-    }
-    if (text.charCodeAt(0) === 0xfeff) {
-      this.#add("json.invalid", file, "Starts with a byte order mark (BOM)", line);
-      return INVALID;
-    }
-    if (line !== undefined && text.trim() === "") {
-      this.#add("json.invalid", file, "A blank line", line);
-      return INVALID;
-    }
-    try {
-      return JSON.parse(text);
-    } catch {
-      // The parser's message can quote the data, which may be personal: leave it out.
-      this.#add("json.invalid", file, "Not valid JSON", line);
-      return INVALID;
-    }
+    const parsed = parseJsonBytes(bytes, line !== undefined);
+    if (parsed.ok) return parsed.value;
+    this.#add("json.invalid", file, parsed.message, line);
+    return INVALID;
   }
 
   /** Validates against the file's schema; returns the value if valid, else null. */
@@ -967,12 +956,17 @@ export class BundleCollector {
       const label = `Anchor ${index} (${anchor.role})`;
       const [x, y, z] = anchor.facing;
       const length = Math.hypot(x, y, z);
-      if (Math.abs(y) > FACING_TOLERANCE || Math.abs(length - 1) > FACING_TOLERANCE) {
-        this.#add(
-          "anchors.facing",
-          "anchors.json",
-          `${label}: facing has y = ${y.toFixed(4)} and length ${length.toFixed(4)}; it must be horizontal (|y| <= ${FACING_TOLERANCE}) and of unit length (within ${FACING_TOLERANCE})`,
-        );
+      // Names the rule that failed, never the values: facing is geometry in the phone's world.
+      const failed = [
+        ...(Math.abs(y) > FACING_TOLERANCE
+          ? [`not horizontal (|y| above ${FACING_TOLERANCE})`]
+          : []),
+        ...(Math.abs(length - 1) > FACING_TOLERANCE
+          ? [`not of unit length (off by more than ${FACING_TOLERANCE})`]
+          : []),
+      ];
+      if (failed.length > 0) {
+        this.#add("anchors.facing", "anchors.json", `${label}: facing is ${failed.join(" and ")}`);
       }
       this.#checkTransform(anchor.transform, "anchors.json");
       const photo = classifyBundlePath(anchor.photo);

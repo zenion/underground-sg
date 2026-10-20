@@ -13,10 +13,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:venue": "turbo run test:venue",
+    "test:repo": "turbo run test:repo",
     "build": "turbo run build",
     "mapper": "pnpm --filter @usg/mapper start --go",
     "dev:phone": "node scripts/dev-phone.ts",
-    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:repo",
     "test:db": "turbo run test:db",
     "migrate": "pnpm --filter @usg/db migrate",
     "db": "pnpm --filter @usg/db run",
@@ -25,7 +26,10 @@
     "map": "pnpm --filter @usg/api map",
     "demo": "pnpm --filter @usg/api demo",
     "web": "pnpm --filter @usg/web dev",
-    "web:fixtures": "pnpm --filter @usg/web dev:fixtures"
+    "web:fixtures": "pnpm --filter @usg/web dev:fixtures",
+    "prepare": "node scripts/install-hooks.ts",
+    "rec": "pnpm --filter @usg/recording rec",
+    "check:tracked": "node packages/recording/scripts/check-tracked.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

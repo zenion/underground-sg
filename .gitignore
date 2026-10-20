@@ -19,6 +19,9 @@ credentials.json
 # Unanchored, so a copy anywhere in the tree is ignored. Only the generated synthetic sets
 # (`pnpm rec synth`, origin: synthetic; one directory per set, holding rec-<id>/ beside its
 # capture-<id>/ bundles) are tracked, and CI and the pre-push hook check that they are synthetic.
+# The re-include below matches any directory under fixtures/synthetic/, but the check allows only
+# the sets named in SYNTHETIC_SET_NAMES (packages/recording/src/synthetic/sets.ts), and
+# `pnpm rec synth` removes any other directory there.
 # A set's own directory must not be named rec-* or replay-*, or nothing inside it can be re-included.
 rec-*/
 replay-*/

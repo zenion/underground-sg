@@ -12,7 +12,8 @@
     "buckets": "node buckets.ts",
     "dev:phone": "node dev-phone.ts",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run --project unit",
+    "test:repo": "vitest run --project repo"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1150.0",

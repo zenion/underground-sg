@@ -1,0 +1,27 @@
+{
+  "name": "@usg/recording",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Session recordings on the PC (docs/session-recording.md, ADR 0010): the synthetic replay sets (`pnpm rec synth`) and the git check that keeps every other recording out of git. Environment-neutral source, plus a ./node entry for file work",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node/index.ts"
+  },
+  "scripts": {
+    "rec": "node src/node/cli.ts",
+    "typecheck": "tsc && tsc -p tsconfig.neutral.json",
+    "test": "vitest run --project unit",
+    "test:repo": "vitest run --project repo"
+  },
+  "dependencies": {
+    "@usg/contracts": "workspace:*",
+    "@usg/floorplan": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@usg/db": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

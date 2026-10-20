@@ -11,7 +11,8 @@
       "**",
       "!**/generated",
       "!services/api/test/fixtures/snapshot",
-      "!apps/mapper/modules/capture-native/Tests/CaptureCoreTests/Golden"
+      "!apps/mapper/modules/capture-native/Tests/CaptureCoreTests/Golden",
+      "!packages/recording/fixtures"
     ]
   },
   "formatter": {

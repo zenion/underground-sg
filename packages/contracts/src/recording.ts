@@ -195,6 +195,32 @@ export const MOTION_REFERENCE_FRAMES = [
   "xTrueNorthZVertical",
 ] as const satisfies readonly MotionReferenceFrame[];
 
+/** The reference frames without a north, in which motion.jsonl's `heading` is always null. */
+export const ARBITRARY_MOTION_REFERENCE_FRAMES = [
+  "xArbitraryZVertical",
+  "xArbitraryCorrectedZVertical",
+] as const satisfies readonly MotionReferenceFrame[];
+
+/** motion.jsonl's attitude quaternion has a norm within this of 1 (it isn't renormalised). */
+export const ATTITUDE_NORM_TOLERANCE = 1e-3;
+
+/**
+ * The recorder's plumbing: module calls that never get an actions.jsonl or boundary.jsonl line
+ * (appendBoundary's lines are already in boundary.jsonl; the others run outside a session).
+ */
+export const RECORDING_PLUMBING_CALLS = [
+  "appendBoundary",
+  "listRecordings",
+  "exportRecording",
+  "deleteRecording",
+] as const;
+
+/** The closes that take a final sample, all of whose lines are at `window.end_t`. */
+export const FINAL_SAMPLE_ENDS = [
+  "end_anchor",
+  "idle",
+] as const satisfies readonly RecordingEnded[];
+
 /**
  * What each event kind's `detail` holds (docs/session-recording.md, events.jsonl). The schema
  * allows any short code, so validate-recording checks this, and the Swift recorder writes events

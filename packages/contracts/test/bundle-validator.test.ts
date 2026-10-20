@@ -920,6 +920,22 @@ describe("hostile input", () => {
     }
   });
 
+  test("a bad facing is named by the rule it breaks, never by its values", async () => {
+    const files = changed((spec) => {
+      spec.anchors[0].facing = [0, 0.1234567, -0.9876543];
+    });
+    const report = await validateAsTar(files);
+    const facing = expectProblem(report, "anchors.facing", "anchors.json");
+    expect(facing.message).toBe(
+      "Anchor 0 (start): facing is not horizontal (|y| above 0.001) and not of unit length (off by more than 0.001)",
+    );
+    const length = Math.hypot(0.1234567, -0.9876543);
+    const json = JSON.stringify(report);
+    for (const value of ["1234", "0.12", "9876", "0.98", length.toFixed(4), length.toFixed(3)]) {
+      expect(json, value).not.toContain(value);
+    }
+  });
+
   test("an unknown field's name is escaped and cut short in the message", async () => {
     const files = changed((spec) => {
       const pose = spec.poses[0] as unknown as Record<string, unknown>;

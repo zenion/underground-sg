@@ -38,10 +38,21 @@ jobs:
       # Generated code must match the schemas in packages/contracts: regenerate it and fail on
       # any difference. --intent-to-add makes new, uncommitted generated files show up too.
       - run: pnpm gen
+      # So are the synthetic replay sets (pnpm rec synth, ADR 0010), the only session recordings
+      # allowed in git: regenerate them too, so a stale or hand-edited set fails the diff.
+      - run: pnpm rec synth
       - run: git add --intent-to-add --all && git diff --exit-code
+      # No session recording or capture data is tracked outside the generated sets, every tracked
+      # recording.json says origin: synthetic, and the sets hold at least one. The pre-push hook
+      # (.githooks/pre-push) runs the same check on every commit a push would publish.
+      - run: node packages/recording/scripts/check-tracked.ts --require-sets
+      - run: node packages/contracts/src/recording-validator/cli.ts packages/recording/fixtures/synthetic/corridor-lean
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # The tests that read this repository's index or run .githooks/pre-push, outside any package's
+      # Turborepo hash, so they are an uncached task of their own.
+      - run: pnpm test:repo
       # Builds what has a build script: the webapp (apps/web/dist, about a second) and the mapper
       # app's iOS JavaScript export (Metro and Hermes bytecode plus the map's DOM-component bundle,
       # about 17 s cold on the owner's PC).

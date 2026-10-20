@@ -53,3 +53,8 @@ services/api/test/fixtures/snapshot/*.json -text linguist-generated=true
 # Golden/): byte-exact compact JSON lines that the Swift tests compare and the contracts tests
 # validate against the schemas. No line-ending conversion.
 apps/mapper/modules/capture-native/Tests/CaptureCoreTests/Golden/* -text linguist-generated=true
+
+# Synthetic replay sets (`pnpm rec synth`, packages/recording): byte-exact generated files whose
+# sizes and SHA-256 digests are in their recording.json, so no line-ending conversion; collapsed
+# in GitHub PR views. CI regenerates them and fails on a diff.
+packages/recording/fixtures/synthetic/** -text linguist-generated=true

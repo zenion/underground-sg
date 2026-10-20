@@ -7,14 +7,14 @@
 
 export type Severity = "error" | "warning";
 
-interface CodeInfo {
+export interface CodeInfo {
   readonly severity: Severity;
   /** What the code means; README.md lists these. */
   readonly summary: string;
 }
 
-const error = (summary: string): CodeInfo => ({ severity: "error", summary });
-const warning = (summary: string): CodeInfo => ({ severity: "warning", summary });
+export const error = (summary: string): CodeInfo => ({ severity: "error", summary });
+export const warning = (summary: string): CodeInfo => ({ severity: "warning", summary });
 
 /**
  * Every problem code, in report order: problems are sorted by their code's position here, then
@@ -144,17 +144,21 @@ export const PROBLEM_CODES = {
 
 export type ProblemCode = keyof typeof PROBLEM_CODES;
 
-const CODE_RANK = new Map(Object.keys(PROBLEM_CODES).map((code, rank) => [code, rank]));
+/** A table of problem codes, in report order, like PROBLEM_CODES. */
+export type CodeTable<C extends string> = Readonly<Record<C, CodeInfo>>;
 
-const CONTAINER_PREFIXES = ["tar.", "entry.", "path.", "limits."];
+const CONTAINER_PREFIXES = ["parts.", "set.", "tar.", "entry.", "path.", "limits."];
 
-/** Whether a code is about the container (tar or directory) rather than the content. */
-export function isContainerCode(code: ProblemCode): boolean {
+/**
+ * Whether a code is about the container (the tar, the directory, or a recording's export parts
+ * and replay set) rather than the content.
+ */
+export function isContainerCode(code: string): boolean {
   return CONTAINER_PREFIXES.some((prefix) => code.startsWith(prefix));
 }
 
-export interface Problem {
-  readonly code: ProblemCode;
+export interface Problem<C extends string = ProblemCode> {
+  readonly code: C;
   readonly severity: Severity;
   /** The file, relative to the bundle directory (or the tar member name); null for the bundle. */
   readonly file: string | null;
@@ -164,8 +168,8 @@ export interface Problem {
 }
 
 /** Problems left out of the report: more than the per-file or per-code cap. */
-export interface OmittedProblems {
-  readonly code: ProblemCode;
+export interface OmittedProblems<C extends string = ProblemCode> {
+  readonly code: C;
   readonly file: string | null;
   readonly count: number;
 }
@@ -234,9 +238,13 @@ export function displayPath(name: string): string {
   return escapeText(name, MAX_DISPLAY_PATH);
 }
 
-function compareProblems(a: Problem, b: Problem): number {
+function compareProblems(
+  rank: ReadonlyMap<string, number>,
+  a: Problem<string>,
+  b: Problem<string>,
+) {
   return (
-    (CODE_RANK.get(a.code) ?? 0) - (CODE_RANK.get(b.code) ?? 0) ||
+    (rank.get(a.code) ?? 0) - (rank.get(b.code) ?? 0) ||
     (a.file ?? "").localeCompare(b.file ?? "", "en") ||
     (a.line ?? 0) - (b.line ?? 0) ||
     a.message.localeCompare(b.message, "en")
@@ -246,13 +254,21 @@ function compareProblems(a: Problem, b: Problem): number {
 /**
  * Collects problems, capping repeats so a bad file can't flood the report. Messages are escaped
  * and cut short as a backstop, so a message can't carry terminal escapes or a whole document.
+ * The codes are the bundle's PROBLEM_CODES unless another table is given (validate-recording's).
  */
-export class Reporter {
-  #problems: Problem[] = [];
+export class Reporter<C extends string = ProblemCode> {
+  readonly #codes: CodeTable<C>;
+  readonly #rank: ReadonlyMap<string, number>;
+  #problems: Problem<C>[] = [];
   #kept = new Map<string, number>();
-  #omitted = new Map<string, OmittedProblems>();
+  #omitted = new Map<string, OmittedProblems<C>>();
   /** displayPath of each file name seen, so it is worked out once per file, not per problem. */
   readonly #shownFiles = new Map<string, string>();
+
+  constructor(codes?: CodeTable<C>) {
+    this.#codes = codes ?? (PROBLEM_CODES as unknown as CodeTable<C>);
+    this.#rank = new Map(Object.keys(this.#codes).map((code, rank) => [code, rank]));
+  }
 
   #show(file: string): string {
     let shown = this.#shownFiles.get(file);
@@ -263,7 +279,7 @@ export class Reporter {
     return shown;
   }
 
-  add(code: ProblemCode, file: string | null, rawMessage: string, line?: number): void {
+  add(code: C, file: string | null, rawMessage: string, line?: number): void {
     const shownFile = file === null ? null : this.#show(file);
     const key = `${code}\u0000${shownFile ?? ""}`;
     const kept = this.#kept.get(key) ?? 0;
@@ -272,7 +288,7 @@ export class Reporter {
       return;
     }
     this.#kept.set(key, kept + 1);
-    const { severity } = PROBLEM_CODES[code];
+    const { severity } = this.#codes[code];
     const message = escapeText(rawMessage, MAX_MESSAGE);
     this.#problems.push(
       line === undefined
@@ -281,7 +297,7 @@ export class Reporter {
     );
   }
 
-  #omit(code: ProblemCode, file: string | null, count: number): void {
+  #omit(code: C, file: string | null, count: number): void {
     const key = `${code}\u0000${file ?? ""}`;
     const previous = this.#omitted.get(key);
     this.#omitted.set(key, { code, file, count: (previous?.count ?? 0) + count });
@@ -291,13 +307,13 @@ export class Reporter {
     return this.#problems.some((problem) => problem.severity === "error");
   }
 
-  has(code: ProblemCode, file?: string): boolean {
+  has(code: C, file?: string): boolean {
     return this.#problems.some(
       (problem) => problem.code === code && (file === undefined || problem.file === file),
     );
   }
 
-  /** Drops every content problem (used when the bundle is not schema_version 1). */
+  /** Drops every content problem (used when the document's version is not one this reads). */
   dropContentProblems(): void {
     this.#problems = this.#problems.filter((problem) => isContainerCode(problem.code));
     for (const [key, omitted] of this.#omitted) {
@@ -306,11 +322,12 @@ export class Reporter {
   }
 
   /** The problems in report order, with at most MAX_PER_CODE per code. */
-  finish(): { errors: Problem[]; warnings: Problem[]; omitted: OmittedProblems[] } {
-    const sorted = [...this.#problems].sort(compareProblems);
-    const perCode = new Map<ProblemCode, number>();
-    const errors: Problem[] = [];
-    const warnings: Problem[] = [];
+  finish(): { errors: Problem<C>[]; warnings: Problem<C>[]; omitted: OmittedProblems<C>[] } {
+    const rank = this.#rank;
+    const sorted = [...this.#problems].sort((a, b) => compareProblems(rank, a, b));
+    const perCode = new Map<C, number>();
+    const errors: Problem<C>[] = [];
+    const warnings: Problem<C>[] = [];
     for (const problem of sorted) {
       const count = (perCode.get(problem.code) ?? 0) + 1;
       perCode.set(problem.code, count);
@@ -324,35 +341,39 @@ export class Reporter {
     }
     const omitted = [...this.#omitted.values()].sort(
       (a, b) =>
-        (CODE_RANK.get(a.code) ?? 0) - (CODE_RANK.get(b.code) ?? 0) ||
+        (rank.get(a.code) ?? 0) - (rank.get(b.code) ?? 0) ||
         (a.file ?? "").localeCompare(b.file ?? "", "en"),
     );
     return { errors, warnings, omitted };
   }
 }
 
-function where(problem: Problem): string {
-  if (problem.file === null) return "(bundle)";
+/** Where a problem is: its file and line, or `whole` for one about the whole input. */
+export function where(problem: Problem<string>, whole = "(bundle)"): string {
+  if (problem.file === null) return whole;
   return problem.line === undefined ? problem.file : `${problem.file}:${problem.line}`;
 }
 
 /** The failure reason for captures.failure_reason: the first error, or null if there is none. */
-export function failureReason(errors: readonly Problem[]): string | null {
+export function failureReason(
+  errors: readonly Problem<string>[],
+  whole = "(bundle)",
+): string | null {
   const first = errors[0];
   if (first === undefined) return null;
   const more = errors.length > 1 ? ` (and ${errors.length - 1} more errors)` : "";
-  const text = `${first.code} ${where(first)}: ${first.message}`;
+  const text = `${first.code} ${where(first, whole)}: ${first.message}`;
   const cut = text.length > MAX_FAILURE_REASON ? `${text.slice(0, MAX_FAILURE_REASON)}...` : text;
   return `${cut}${more}`;
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-function plural(count: number, word: string, many = `${word}s`): string {
+export function plural(count: number, word: string, many = `${word}s`): string {
   return `${count} ${count === 1 ? word : many}`;
 }
 

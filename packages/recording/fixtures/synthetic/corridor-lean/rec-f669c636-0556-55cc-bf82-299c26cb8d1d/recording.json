@@ -1,0 +1,121 @@
+{
+  "recording_version": 1,
+  "recording_id": "f669c636-0556-55cc-bf82-299c26cb8d1d",
+  "origin": "synthetic",
+  "profile": "lean",
+  "rates": {
+    "frames_hz": 60,
+    "candidates_hz": 4.027,
+    "imu_hz": 100.027,
+    "motion_hz": 100,
+    "mesh_interval_s": 5.286
+  },
+  "build": {
+    "app_version": "0.1.0",
+    "git_commit": null,
+    "eas_build_id": null,
+    "profile": "synthetic"
+  },
+  "device_model": "iPhone18,2",
+  "os_version": "iOS 26.7",
+  "session_started_at": "2026-10-21T09:00:00+08:00",
+  "clocks": {
+    "system_uptime_s": 86400.5,
+    "media_time_s": 86400.5,
+    "wall_clock": "2026-10-21T09:00:00.000+08:00"
+  },
+  "window": {
+    "start_t": 4,
+    "end_t": 41,
+    "ended": "end_anchor",
+    "trimmed": false
+  },
+  "arkit": {
+    "scene_reconstruction": "meshWithClassification",
+    "frame_semantics": [
+      "smoothedSceneDepth"
+    ],
+    "video_format": {
+      "width": 1920,
+      "height": 1440,
+      "fps": 60
+    },
+    "world_alignment": "gravity"
+  },
+  "motion": {
+    "reference_frame": "xMagneticNorthZVertical"
+  },
+  "detector_versions": null,
+  "venues": [
+    "36632586-e1fa-4e10-800a-81acf0eab09a"
+  ],
+  "segments": [],
+  "closed": true,
+  "files": [
+    {
+      "path": "actions.jsonl",
+      "bytes": 542,
+      "sha256": "b816971169c62fcb67d25704ceae20415359797ecf2b884304f7b3f1207e5433"
+    },
+    {
+      "path": "altitude.jsonl",
+      "bytes": 1941,
+      "sha256": "001da14dd820fbe256c443ff2910dbe1ea88449d3478183fff99fe34405c0162"
+    },
+    {
+      "path": "anchors.jsonl",
+      "bytes": 5544,
+      "sha256": "b0054037ae1a9516977d9ada6667df764c13a41475f7560f00189007265cb631"
+    },
+    {
+      "path": "boundary.jsonl",
+      "bytes": 47015,
+      "sha256": "435eebb296d0cd938481fac55b3026d6ea62708676015e16f1cf7ead8cda3bac"
+    },
+    {
+      "path": "boundary/000165.f32",
+      "bytes": 444888,
+      "sha256": "bda91accf80c80eaec77100e45964e7d651774add4152f7918241ece321d6fb0"
+    },
+    {
+      "path": "events.jsonl",
+      "bytes": 255,
+      "sha256": "a990f77206ac8bd7f0ec949b1e355c5587f174b9a47daffb9693c31a1ae8a556"
+    },
+    {
+      "path": "frames.jsonl",
+      "bytes": 802203,
+      "sha256": "dd9990904194ee27126d77cdb1db5b38d7021ee4810fca9e31d6354c3ed00afc"
+    },
+    {
+      "path": "imu.jsonl",
+      "bytes": 257677,
+      "sha256": "77cdb625cc66ad78694cdf46081d1146801b4c7c74f180deba0fd5d1d6b54b72"
+    },
+    {
+      "path": "location.jsonl",
+      "bytes": 430,
+      "sha256": "af26300665510f695fa56325be8c3a9145cbe9a94ed13e9038ff3374dfe9d7bb"
+    },
+    {
+      "path": "mesh/history.bin",
+      "bytes": 547003,
+      "sha256": "c969953d96224f5a1b0445709cbfe08aad3157c2fd5f44e791e1e6dff41bc45d"
+    },
+    {
+      "path": "mesh/history.jsonl",
+      "bytes": 14586,
+      "sha256": "0b31d97a6d77d572bbd95142eeaf329eea1975d04d655143ee680b5a0b7e4ce2"
+    },
+    {
+      "path": "motion.jsonl",
+      "bytes": 867549,
+      "sha256": "b212f1ad5c4dbb0b2d5f18d9fe66ca6778729decabd6003caf4b923a01af6a03"
+    },
+    {
+      "path": "telemetry.jsonl",
+      "bytes": 6758,
+      "sha256": "11db3597fec71f7c45136dc0439445556c00c4aad8a36b06d0ceda189e213ee3"
+    }
+  ]
+}

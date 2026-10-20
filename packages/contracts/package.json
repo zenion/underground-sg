@@ -3,21 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "JSON Schema 2020-12 contracts for Underground SG file formats (capture bundle, public map files, change-set diff), with generated TypeScript and Swift types, the capture bundle validator and the map file validators",
+  "description": "JSON Schema 2020-12 contracts for Underground SG file formats (capture bundle, public map files, change-set diff), with generated TypeScript and Swift types, the capture bundle and session recording validators and the map file validators",
   "exports": {
     ".": "./src/index.ts",
     "./bundle-validator": "./src/bundle-validator/index.ts",
+    "./recording-validator": "./src/recording-validator/index.ts",
     "./validators": "./src/validators.ts",
     "./schemas/*": "./schemas/*"
   },
   "bin": {
-    "validate-bundle": "./src/bundle-validator/cli.ts"
+    "validate-bundle": "./src/bundle-validator/cli.ts",
+    "validate-recording": "./src/recording-validator/cli.ts"
   },
   "scripts": {
     "gen": "node scripts/gen.ts",
     "typecheck": "tsc && tsc -p tsconfig.neutral.json",
     "test": "vitest run",
-    "validate-bundle": "node src/bundle-validator/cli.ts"
+    "validate-bundle": "node src/bundle-validator/cli.ts",
+    "validate-recording": "node src/recording-validator/cli.ts"
   },
   "dependencies": {
     "ajv": "8.20.0",
