@@ -1,0 +1,4 @@
+{"anchor":"c3a1e9d2-7b54-4f08-a6e1-93d2b8f04c17","capture_id":null,"final":false,"frame":1203,"kind":"keyframe","op":"add","t":25,"transform":[0.99802876,0,-0.06275873,0,0,1,0,0,0.06275873,0,0.99802876,0,0.4,0.02,-28.098,1]}
+{"anchor":"0b4e2d8f-61a7-4c3e-9d25-7f1a8c6e3b90","capture_id":null,"final":false,"frame":null,"kind":"mesh","op":"update","t":25,"transform":[0.99950707,0,0.03139484,0,0,1,0,0,-0.03139484,0,0.99950707,0,0.1,-1.4,-27.5,1]}
+{"anchor":"0b4e2d8f-61a7-4c3e-9d25-7f1a8c6e3b90","capture_id":null,"final":false,"frame":null,"kind":"mesh","op":"remove","t":30,"transform":null}
+{"anchor":"c3a1e9d2-7b54-4f08-a6e1-93d2b8f04c17","capture_id":"8f9585da-8554-4b8a-ba4e-0f390ccd3802","final":true,"frame":1203,"kind":"keyframe","op":"update","t":412.8,"transform":[0.99802876,0,-0.06275873,0,0,1,0,0,0.06275873,0,0.99802876,0,0.4,0.02,-28.098,1]}

@@ -1,0 +1,6 @@
+{"detail":null,"kind":"recording_opened","t":3.2}
+{"detail":"fair","kind":"thermal","t":140.1}
+{"detail":"fewer_candidates","kind":"degradation","t":140.1}
+{"detail":null,"kind":"relocalization_began","t":210.4}
+{"detail":"102","kind":"session_failed","t":210.4}
+{"detail":"end_anchor","kind":"recording_closed","t":412.8}

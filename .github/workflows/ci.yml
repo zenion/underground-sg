@@ -74,12 +74,10 @@ jobs:
           xcodebuild -version
           swift --version
           ls -d /Applications/Xcode*.app
-      # CaptureCore and the other pure-Swift targets, with Swift Testing.
+      # CaptureCore (with packages/contracts' generated types) and the other pure-Swift targets,
+      # with Swift Testing.
       - name: SwiftPM tests
         run: swift test --package-path apps/mapper/modules/capture-native
-      # Nothing else compiles packages/contracts' generated Swift yet.
-      - name: Generated Swift types compile
-        run: xcrun swiftc -typecheck packages/contracts/generated/swift/Contracts.swift
       # The check must catch a planted encoder symbol and a planted CIContext writer selector.
       - name: Encoder check catches planted calls
         run: node apps/mapper/scripts/encoder-check.mts --self-test apps/mapper/modules/capture-native/ci/planted
@@ -113,7 +111,6 @@ jobs:
         with:
           persist-credentials: false
       - run: swift test --package-path apps/mapper/modules/capture-native
-      - run: swiftc -typecheck packages/contracts/generated/swift/Contracts.swift
 
   db:
     # Branch protection requires the two check names above; add this one there to require it.

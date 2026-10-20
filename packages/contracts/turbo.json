@@ -9,7 +9,11 @@
         "$TURBO_ROOT$/docs/capture-bundle.md",
         "$TURBO_ROOT$/docs/snapshot-format.md",
         "$TURBO_ROOT$/docs/diff-format.md",
-        "$TURBO_ROOT$/docs/session-recording.md"
+        "$TURBO_ROOT$/docs/session-recording.md",
+        "$TURBO_ROOT$/apps/mapper/modules/capture-native/Tests/**",
+        "$TURBO_ROOT$/apps/mapper/modules/capture-native/Package.swift",
+        "$TURBO_ROOT$/biome.json",
+        "$TURBO_ROOT$/.gitattributes"
       ]
     }
   }

@@ -1,0 +1,2 @@
+{"candidates_blurred":0,"candidates_dropped":0,"cpu":143.2,"free_disk_mb":182340,"memory_mb":612.4,"queue":0,"stage_ms":{"gate":{"p50":0.02,"p95":0.05}},"t":24,"thermal":"nominal"}
+{"candidates_blurred":0,"candidates_dropped":87,"cpu":151.8,"free_disk_mb":182311.5,"memory_mb":640,"queue":2,"stage_ms":{"gate":{"p50":0.02,"p95":0.05}},"t":140,"thermal":"fair"}

@@ -19,8 +19,11 @@ index.ts, src/types.ts    the TypeScript side: the module, the view and their ty
 ios/                      the Expo module (ARKit, RealityKit, UIKit): only the app build compiles it
 Package.swift             SwiftPM, for `swift test`; the podspecs exclude it and Tests/
 CaptureCore.podspec       CaptureCore as its own pod, so it is its own Swift module in the app too
-Sources/CaptureCore/      Foundation only: WorldTransform, CandidateGate, RateMeter
-Tests/CaptureCoreTests/   Swift Testing
+Sources/CaptureCore/      Foundation only: WorldTransform, CandidateGate, RateMeter; the recorder's pure logic
+                          (LineEncoder, RecorderWindow, GnssWindows, AnchorSampler, MeshHistorySchedule,
+                          DegradationLadder, StageTimer, FrameGap); and generated/Contracts.swift
+                          (written by `pnpm gen` from packages/contracts; do not edit)
+Tests/CaptureCoreTests/   Swift Testing, and Golden/: one file per line type, byte-exact (UPDATE_GOLDENS=1 rewrites them)
 encoder-allowlist.json    the encoder check's allowed places (empty until the blur lands)
 ci/planted/               planted encoder calls for the encoder check's self-test; in no pod
 ```
