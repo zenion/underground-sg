@@ -6,7 +6,9 @@ The mapper app ([ADR 0007](../../docs/decisions/0007-expo-mapper-app.md)): Expo 
 | --- | --- | --- |
 | Map | The published map from the API over OneMap's street map, with the webapp's style (`@usg/map-style`), a level switcher and a demo badge, and polygon and point drawing on top: maplibre-gl v6 and terra-draw in an Expo DOM component (a WebView). The count of drawn features lives in the native screen. The map is mounted only while its tab is showing, so it is gone on the Capture screen (ADR 0007) | Yes (tiles and the published map need a connection) |
 | Floor plan | Runs `@usg/floorplan` on a synthetic corridor generated on the phone (about 25k, 106k or 1.1M triangles) and shows each stage's time and the plan. This is the Hermes measurement for spike criterion 4 | Yes |
-| Capture | The `capture-native` module's checks (ARKit's LiDAR and tracking support, video formats) and a camera check: the camera with the live mesh, Start and Stop, and the module's 5 Hz status. Also the device, whether LiDAR is expected on it, and whether the map is unmounted | Explains that capture needs a development build |
+| Capture | The `capture-native` module's checks (ARKit's LiDAR and tracking support, video formats, the recorder's build profile and whether it can record) and a camera check on a `CaptureSession` with record off: the camera with the live mesh, Start and Stop, the session's 5 Hz status, a live-mesh toggle and the debug card (a build from before the native glue says to install the current one). Outside the walk build, refusal checks: a Lean start, an export and the location request, each of which must be refused. Also the device, whether LiDAR is expected on it, and whether the map is unmounted | Explains that capture needs a development build |
+| Walk | The corridor walk with the session recorder ([the walk flow](#the-capture-port-and-the-walk-flow)): venues, record Off or Lean, permissions, Start, Mark start, node tags, Mark end or Mark end and end the session here, Saving, a summary. The REC badge, a live-mesh toggle, the iOS 26.4 to 26.6.0 warning and the debug card. Only the walk build records | Explains that walks need the capture module |
+| Recordings | The recordings on the phone (ids, sizes, lengths, ages in days), Export with progress (walk build only), Delete after a confirmation, the copy-to-PC runbook, the self-test and the recovery report | Explains that recordings need the capture module |
 | About | App and SDK versions, the JavaScript engine (Hermes check), the API base URL and whether `GET /health` answers | Yes |
 
 ## Run it on the iPhone with Expo Go (from Windows)
@@ -95,7 +97,11 @@ The first walk build runs on EAS's servers, started by the owner from the PC, in
 pnpm --filter @usg/mapper exec eas build --platform ios --profile walk
 ```
 
-Answer the prompts: let EAS manage the credentials, sign in to the Apple Developer account when asked, and pick the iPhone for the profile. The install link on expo.dev stays private to the account; open it on the iPhone to install over the development build. Later walk builds can run on a GitHub macOS runner from the same credentials (the lean recorder design's `walk-build.yml`, still to come). Never share the build's log or its install link: they name the device and the team.
+Answer the prompts: let EAS manage the credentials, sign in to the Apple Developer account when asked, and pick the iPhone for the profile. The install link on expo.dev stays private to the account; open it on the iPhone to install over the development build. Never share the build's log or its install link: they name the device and the team.
+
+### Later walk builds (`walk-build.yml`)
+
+Later walk builds can run on a GitHub macOS runner from the same credentials: Actions, **Walk build**, Run workflow ([.github/workflows/walk-build.yml](../../.github/workflows/walk-build.yml)). Set up once, in the repository's settings: an environment named `walk` with the owner as its required reviewer, and an `EXPO_TOKEN` secret (an Expo access token) in that environment, not in the repository. The job runs `eas build --local` with the walk profile (eas-cli pinned in the workflow; 25.2.0 has `eas upload`), sends the build's output to a file and, on failure, prints only its error lines, masked by `scripts/walk-build-log.mts` (UUIDs, UDIDs, long hex, team ids, URLs, e-mail addresses and user names). It hands the .ipa to EAS with `eas upload`, output discarded, so the install link appears on expo.dev, private to the account. The .ipa is never an Actions artifact: `test/walk-build-yaml.test.ts` fails on `upload-artifact`, on any `eas` command whose output isn't redirected, on any other trigger than a manual start, and on write permissions. The run's log is public: review the first one before relying on it. If `eas upload` fails, build on EAS cloud instead.
 
 ## The capture port and the walk flow
 
@@ -107,6 +113,7 @@ The session recorder's TypeScript side (the lean recorder design's PR4, [ADR 001
 - **`src/capture/log-guard.ts`**: in the walk build, from launch (`_layout.tsx`), every `console` method and `nativeLoggingHook` do nothing, and an uncaught error reaches React Native's handler as "[redacted capture error]" with only its stack frames. In other builds it does nothing.
 - **The no-pose lint** (`scripts/no-pose-logging.mts`, run by `test/no-pose-logging.test.ts`): no `console.*` call, `Error` construction, `.message` or `.stack` assignment, `throw` or template literal in `src/` or the module's TypeScript may mention a pose, transform, camera, hit, position, GNSS, facing, raw or session-time name, a name declared `Redacted`, `SessionTime` or one of the module's raw `Native…` types, or `unwrap`; `console` is never read into another name; and the app never imports a `node:` module. It works on names, not inferred types, so the adapter declares its raw values with their `Native…` types. The rule is in the script's header; the test plants cases that must fail. Rename a variable that only sounds like one rather than adding an exemption.
 - **`src/walk/`**: the walk flow as a pure reducer (`flow.ts`: venues, record Off or Lean, permissions, Start, Mark start with the street-facing toggle, tags, Mark end or Mark end and end the session here after a 5 s hold-still countdown timed from the tap, Saving, the summary), the corridor's venues with the seed's ids (`venues.ts`, checked against `db/seed/core-venues.ts`) and the minimal node tag row (`tags.ts`).
+- **The screens** (the design's PR6): `src/walk/controller.ts` joins the flow to the port. It makes the call each step asks for (`walkCalls`, pure), turns the session's `recording` and `stopped` events into flow actions, keeps the latest status for the REC badge and the debug card, runs the 1 s tick and the hold-still countdown, and opens the `CaptureSession` at Ready and releases it at the summary; `test/walk-controller.test.ts` runs a whole lean walk through it over the fake module. `src/app/walk.tsx` renders it (wording in `src/walk/describe.ts`), and hides the tab bar while a session runs (`src/capture/active.ts`). `src/app/recordings.tsx` lists, exports, deletes and runs the self-test (wording and rules in `src/capture/recordings.ts`). `src/capture/figures.ts` formats the debug card's figures (design section 13): the module's `debug` keys are listed in `FIGURE_SECTIONS` and `stream.<file>.<metric>`, any other key is shown only if its name has no pose or clock word and its value is a number, a flag or a code, and strings are shown only as codes, so no time of day or coordinate can reach the screen. `src/capture/log-check.ts` is the Debug card's **Log check** for the walk build's syslog check ([docs/phone-testing.md](../../docs/phone-testing.md#w1-the-first-walk-build)). `<CaptureView showMesh>` turns the live mesh's drawing off and on (design Q15).
 
 ## Configuration
 
@@ -140,16 +147,20 @@ plugins/with-usg-recorder.ts   the recorder switch: the config plugin for the de
 native-dependencies.json   the reviewed native packages (ADR 0010), checked against autolinking
 modules/capture-native/    the Swift module: its README has the layout and how it is tested
 scripts/maplibre-worker.mts, encoder-check.mts (and -lib): the macOS CI job's encoder check;
-                           no-pose-logging.mts: the no-pose lint, run by its test
+                           no-pose-logging.mts: the no-pose lint, run by its test;
+                           walk-build-log.mts (and -lib): walk-build.yml's masked error lines
 src/
-  app/            Expo Router tabs: _layout, index (Map), floorplan, capture, about
+  app/            Expo Router tabs: _layout, index (Map), floorplan, capture, walk, recordings,
+                  about
   map/            draw-map.tsx (the DOM component), published.ts (loads and checks the published
                   map), bands.ts (the level switcher's bands), camera.ts, features.ts, worker.ts,
                   presence.ts (counts mounted maps)
   floorplan/      the on-phone benchmark and SVG paths
   capture/        device checks, the wording of the module's status, the CaptureNative port
-                  (native.ts), Redacted, the boundary trace and the walk build's log guard
-  walk/           the walk flow reducer, the corridor's venues, the tag row
+                  (native.ts, app.ts), Redacted, the boundary trace, the walk build's log guard
+                  and log check, the debug figures and card, the recordings' wording
+  walk/           the walk flow reducer and its controller, the corridor's venues, the tag row,
+                  the walk screen's wording
   about/          API URL, health check, JavaScript engine
   config.ts       reads EXPO_PUBLIC_ variables
 test/             Vitest

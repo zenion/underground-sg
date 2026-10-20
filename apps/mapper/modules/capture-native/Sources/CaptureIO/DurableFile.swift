@@ -10,8 +10,9 @@ import Foundation
 
 /// One append-only file of a recording (design 3.2 and 7): whole writes that survive EINTR and
 /// short writes, reads at an offset, fsync and full sync, truncation, nothing else. A file is
-/// only ever created through FileSecurity, with its protection class, then opened here without
-/// O_CREAT; every descriptor is O_APPEND and O_CLOEXEC.
+/// only ever created through FileSecurity, with its protection class, and the descriptor that
+/// created it is the one used here (never closed and reopened, design 7.6); an existing file is
+/// opened without O_CREAT. Every descriptor is O_APPEND and O_CLOEXEC.
 ///
 /// Confined to the queue that owns it (the I/O queue). Not gated by USG_RECORDER: bundles will be
 /// written through it too.
@@ -27,8 +28,8 @@ public final class DurableFile {
   private var fd: Int32
   private let calls: FileCalls
 
-  /// Creates the file through `security` with `protection`, then opens it. Throws if anything is
-  /// already at `url`.
+  /// Creates the file through `security` with `protection` and keeps the descriptor that created
+  /// it. Throws if anything is already at `url`.
   public static func create(
     _ url: URL, mode: Mode, protection: FileSecurityClass, security: any FileSecurity
   ) throws -> DurableFile {
@@ -40,8 +41,8 @@ public final class DurableFile {
     _ url: URL, mode: Mode, protection: FileSecurityClass, security: any FileSecurity,
     calls: FileCalls
   ) throws -> DurableFile {
-    try security.createFile(url, protection)
-    return try DurableFile(opening: url, mode: mode, calls: calls)
+    let fd = try security.createAndOpen(url, protection, flags: DurableFile.openFlags(mode))
+    return DurableFile(adopting: fd, mode: mode, calls: calls)
   }
 
   /// Opens a file that exists. Never creates one.
@@ -50,13 +51,25 @@ public final class DurableFile {
   }
 
   init(opening url: URL, mode: Mode, calls: FileCalls) throws {
-    let access = mode == .appendWriteOnly ? O_WRONLY : O_RDWR
-    let flags = access | O_APPEND | O_CLOEXEC
+    let flags = DurableFile.openFlags(mode)
     fd = try withPath(url, .open) { path in
       Int32(try retryingEINTR(.open) { .of(Int(sysOpen(path, flags))) })
     }
     self.mode = mode
     self.calls = calls
+  }
+
+  /// Takes over `fd`, opened with `openFlags(mode)`; closes it when done.
+  init(adopting fd: Int32, mode: Mode, calls: FileCalls) {
+    self.fd = fd
+    self.mode = mode
+    self.calls = calls
+  }
+
+  /// The flags every descriptor of `mode` is opened with, without O_CREAT.
+  static func openFlags(_ mode: Mode) -> Int32 {
+    let access = mode == .appendWriteOnly ? O_WRONLY : O_RDWR
+    return access | O_APPEND | O_CLOEXEC
   }
 
   deinit {

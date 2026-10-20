@@ -20,7 +20,14 @@ final class PrivacyShield: UIView {
   let secureContent: UIView?
   var onScreenshot: (() -> Void)?
   var onCoveredChange: ((Bool) -> Void)?
+  /// The shield's scene entered the background (after the cover went on), or is about to come
+  /// back: the recorder closes a recording as `background` (the lean recorder design, section 6).
+  var onBackground: (() -> Void)?
+  var onForeground: (() -> Void)?
+  /// The screen began or stopped being recorded or mirrored, for the recorder's events.
+  var onScreenCaptureChange: ((Bool) -> Void)?
   private(set) var isCovered = true
+  private var screenCaptured = false
 
   /// Kept alive: its secure-entry state is what keeps the canvas out of captures.
   private let field = UITextField()
@@ -85,7 +92,7 @@ final class PrivacyShield: UIView {
       if let old = observedScene {
         for name in [
           UIScene.willDeactivateNotification, UIScene.didEnterBackgroundNotification,
-          UIScene.didActivateNotification,
+          UIScene.didActivateNotification, UIScene.willEnterForegroundNotification,
         ] {
           center.removeObserver(self, name: name, object: old)
         }
@@ -98,10 +105,13 @@ final class PrivacyShield: UIView {
           self, selector: #selector(coverNow), name: UIScene.willDeactivateNotification,
           object: scene)
         center.addObserver(
-          self, selector: #selector(coverNow), name: UIScene.didEnterBackgroundNotification,
-          object: scene)
+          self, selector: #selector(enteredBackground),
+          name: UIScene.didEnterBackgroundNotification, object: scene)
         center.addObserver(
           self, selector: #selector(refresh), name: UIScene.didActivateNotification, object: scene)
+        center.addObserver(
+          self, selector: #selector(enteringForeground),
+          name: UIScene.willEnterForegroundNotification, object: scene)
       }
     }
     refresh()
@@ -111,13 +121,27 @@ final class PrivacyShield: UIView {
     applyCover(true)
   }
 
+  @objc private func enteredBackground() {
+    applyCover(true)
+    onBackground?()
+  }
+
+  @objc private func enteringForeground() {
+    onForeground?()
+  }
+
   /// Uncovers only in a foreground-active scene whose screen isn't being captured.
   @objc private func refresh() {
     guard let scene = observedScene else {
       applyCover(true)
       return
     }
-    applyCover(scene.activationState != .foregroundActive || isCaptured(scene))
+    let captured = isCaptured(scene)
+    applyCover(scene.activationState != .foregroundActive || captured)
+    if captured != screenCaptured {
+      screenCaptured = captured
+      onScreenCaptureChange?(captured)
+    }
   }
 
   private func isCaptured(_ scene: UIWindowScene) -> Bool {

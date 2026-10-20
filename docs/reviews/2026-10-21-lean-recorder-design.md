@@ -4,9 +4,10 @@ Date: 2026-10-21. Status: the plan the Swift spike follows from here to the firs
 
 How it was made: three independent designs, each from a different priority (crash safety first, sustained performance and heat first, fewest native builds first), scored by two judges against the docs and the code, then merged into one from the design both judges chose (crash safety), with the others' best ideas grafted in and every flaw the judges found fixed. Section 0 records the decisions that settled their disagreements.
 
-Two notes since it was written:
+Notes since it was written:
 - PR0 is done in the change that adds this file: `pnpm gen` writes `Contracts.swift` into `CaptureCore`, `packages/contracts/generated/` is gone, and `swift test` compiles the generated types, so CI needs no separate typecheck step (D22).
 - B1, the development build that checks the camera shield, was built on 2026-10-20 from main after the module skeleton (D23).
+- PR5 as built (2026-10-21) differs in three places. The mesh history's packing, fingerprinting and DEFLATE run inside `FileSink` on the I/O queue (CaptureIO's `MeshJobRunner` places each block), so there is no `usg.mesh` queue: the snapshot waits while a mesh job is in flight (`meshQueueIdle`). The ARSession's delegate stays `CaptureLoop` in `CaptureSession.swift`, since builds without the recorder need it too; `ARKitAdapter` holds the recorder's reads of ARKit. And the chained finalize (section 4) holds the finalize on the capture queue until Core Motion's queue has handed over its last batch, whose samples up to `end_t` go in through `RecorderCore.lateSamples` ahead of it.
 
 ## Defaults taken for the open questions
 
@@ -307,7 +308,7 @@ public enum SinkCommand {
 ### 3.2 CaptureIO
 
 ```swift
-final class DurableFile {   // created through FileSecurity with its class, then opened without O_CREAT
+final class DurableFile {   // created through FileSecurity with its class, keeping the descriptor that created it
   static func create(_ url: URL, mode: Mode /* .appendWriteOnly | .appendReadWrite */,
     protection: FileSecurityClass, security: any FileSecurity) throws -> DurableFile
   convenience init(opening: URL, mode: Mode) throws   // a file that exists; never creates one
@@ -325,7 +326,8 @@ final class MeshHistoryWriter { enqueue(t:, block: MeshBlockSource? /* .bytes(Da
 struct AtomicJsonWriter { static func replace(_ d: Data, at: URL, staging: URL, protection: FileSecurityClass,
   security: any FileSecurity) throws }
 protocol FileSecurity: Sendable {   // Darwin impl in ios/; creates exclusively, with the class from the first byte
-  func createFile(_ url: URL, _ cls: FileSecurityClass) throws; func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws
+  func createAndOpen(_ url: URL, _ cls: FileSecurityClass, flags: Int32) throws -> Int32   // O_CREAT|O_EXCL, one open; never reopened (7.6)
+  func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws
   func upgrade(_ url: URL) throws; func excludeFromBackup(_ url: URL) throws
   func protectionClass(_ url: URL) -> FileSecurityClass?; func isExcludedFromBackup(_ url: URL) -> Bool   // read back
   var protectedDataAvailable: Bool { get } }
@@ -357,12 +359,15 @@ Class(CaptureSession.self) {                             // no Events() here (D2
   AsyncFunction("discard")    { (s: CaptureSession, p: Promise) in s.discard(p) }
   AsyncFunction("appendBoundary") { (s: CaptureSession, lines: [String], final: Bool) in s.appendBoundary(lines, final) }
 }
-View(CaptureView.self) { Prop("session") { (v: CaptureView, s: CaptureSession?) in v.attach(s) } }
+View(CaptureView.self) {
+  Prop("session") { (v: CaptureView, s: CaptureSession?) in v.attach(s) }
+  Prop("showMesh") { (v: CaptureView, on: Bool?) in v.setShowMesh(on ?? true) }  // Q15, display only
+}
 Events("exportProgress")
 AsyncFunction("listRecordings"); AsyncFunction("exportRecording") { (id: String, p: Promise) }
 AsyncFunction("deleteRecording") { (id: String) }; AsyncFunction("recoveryStatus")
 AsyncFunction("recorderSelfTest") { (keep: Bool) }; AsyncFunction("requestRecorderPermissions")  // walk only
-OnCreate { RecorderPlumbing.shared.scheduleRecovery() }  // ioQueue, once protected data is available
+OnCreate { RecorderPlumbing.shared.scheduleRecovery() }  // store queue, once protected data is available
 ```
 
 - Without `USG_RECORDER`, the recorder functions exist and reject with `ERR_RECORDER_NOT_COMPILED`.
@@ -421,8 +426,8 @@ export interface RecordingSummary { id: string; origin: "device" | "synthetic"; 
 | `usg.capture` (serial) | userInitiated | `ARSession.delegateQueue` (D4); FrameSample build; CandidateGate; RecorderCore; RecorderWindow; MeshHistorySchedule from didAdd, didUpdate and didRemove; marks, tags and stop handled **on the next delegate frame** [perf] (`frame.raycastQuery(from: CGPoint(0.5,0.5), allowing: .estimatedPlane, alignment: .horizontal)`, then `session.raycast`; a hit adds `ARAnchor(name: "usg.marked.<role>")` and forces the gate); copying changed mesh geometry on snapshot frames (D5); status 5 Hz and telemetry 1 Hz `DispatchSourceTimer`s; 100 ms command batches to ioQueue | p95 < 0.3 ms per frame; < 4 ms on a snapshot frame |
 | `usg.capture.motion` (an OperationQueue, max 1, over a serial queue) | userInitiated | accelerometer and gyro (0.01 s) → ImuPairer; device motion (0.01 s); altimeter; 10-sample batches → `capture.async` [perf] | < 50 µs per sample |
 | `usg.mesh` (serial) | utility | pack, fingerprint, MeshLedger, `Deflate.raw`, then `io.async` with the block and line. A snapshot is taken only when this queue is idle (an atomic flag); otherwise the pending set waits | 20–120 ms per 5 s |
-| `usg.recorder.io` (serial) | utility | encoding, watermark buffers, write(2), fsync and journal checkpoints, `recording.json`, finalize, recovery | < 2 % of a core |
-| `usg.recordings.store` (serial) | utility | list, export, delete, self-test; per-recording busy flags under a lock in RecordingStore | I/O speed |
+| `usg.recorder.io` (serial) | utility | encoding, watermark buffers, write(2), fsync and journal checkpoints, `recording.json`, finalize | < 2 % of a core |
+| `usg.recordings.store` (serial) | utility | recovery at launch (first, so nothing queued after it sees a half-recovered recording; nothing records until it is done), list, export, delete, self-test; per-recording busy flags under a lock in RecordingStore | I/O speed |
 | JS | — | events (5 Hz), trace flush (1 Hz) | — |
 
 **Rules.**
@@ -526,7 +531,7 @@ A lean background close is expected to take under 1 s: no final sample, about 1.
 
 **7.6 Locked phone.**
 - Open class-B file descriptors stay writable.
-- Staging files are created while locked.
+- Staging files are created while locked. A class-B file created while locked can't be opened again until unlock, so every file is written through the descriptor that created it (`FileSecurity.createAndOpen`), never closed and reopened.
 - Finalize reads nothing.
 - The protection upgrade, recovery, export, list and self-test wait for `isProtectedDataAvailable`.
 - `start` refuses until recovery is done (`ERR_RECOVERY_PENDING`).

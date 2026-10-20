@@ -1,9 +1,11 @@
 // What the capture-native module hands JavaScript (ADR 0007, "The native boundary"): its
-// capabilities, the view's status events at about 5 Hz and warnings, and the CaptureSession shared
-// object (the lean recorder design, docs/reviews/2026-10-21-lean-recorder-design.md, 3.3 and 3.4).
-// Nothing per frame. The view's events carry counts, rates and states only. The session's events
-// and results carry session times and, for marks and tags, poses: these are the raw shapes, which
-// only src/capture/native.ts sees; it traces them, then wraps every pose and time in Redacted.
+// capabilities, the CaptureSession shared object with its events, the view that renders a session,
+// and the recorder's plumbing (the lean recorder design,
+// docs/reviews/2026-10-21-lean-recorder-design.md, 3.3 and 3.4). These types follow
+// ios/CaptureNativeModule.swift and ios/CaptureSession.swift. Nothing per frame. The session's
+// status carries counts, rates and states; its events and results carry session times and, for
+// marks and tags, poses: these are the raw shapes, which only src/capture/native.ts sees; it
+// traces them, then wraps every pose and time in Redacted.
 
 import type { RecordingEnded } from "@usg/contracts";
 import type { SharedObject } from "expo";
@@ -32,7 +34,8 @@ export interface Capabilities {
   readonly thermal: ThermalState;
   /**
    * The session recorder (ADR 0010). A boolean (whether it is compiled in) from builds before the
-   * CaptureSession glue; src/capture/native.ts reads both shapes.
+   * CaptureSession glue, which can still load this JavaScript through Metro; src/capture/native.ts
+   * reads both shapes.
    */
   readonly recorder: boolean | RecorderCapabilities;
 }
@@ -46,24 +49,7 @@ export type TrackingReason =
   | "unknown";
 export type WorldMapping = "notAvailable" | "limited" | "extending" | "mapped" | "unknown";
 
-/** `onStatus`, about 5 times a second while the session runs, and once when it stops. */
-export interface CaptureStatus {
-  readonly running: boolean;
-  /** Whether the opaque cover is over the camera (scene inactive, or the screen captured). */
-  readonly covered: boolean;
-  readonly tracking: Tracking;
-  readonly trackingReason?: TrackingReason;
-  readonly mapping: WorldMapping;
-  /** ARFrames a second over the last second. */
-  readonly fps: number;
-  /** Candidates a second over the last second (ADR 0010's candidate gate). */
-  readonly candidateHz: number;
-  readonly frames: number;
-  readonly candidates: number;
-  readonly meshAnchors: number;
-  readonly thermal: ThermalState;
-}
-
+/** A session warning's kinds; the session's `warning` event adds its time. */
 export type CaptureWarning =
   /** A screenshot was taken while the camera ran: the owner deletes it (ADR 0010). */
   | { readonly kind: "screenshot" }
@@ -72,16 +58,10 @@ export type CaptureWarning =
   | { readonly kind: "interrupted" }
   | { readonly kind: "interruptionEnded" };
 
-/** The view's functions, called through its ref. */
-export interface CaptureViewHandle {
-  /** Starts the ARSession. Rejects when ARKit can't track, or there is no way to keep the camera out of screenshots. */
-  start(): Promise<void>;
-  stop(): Promise<void>;
-}
-
 // The session recorder and the CaptureSession object (lean recorder design, 3.3). None of this
-// exists in builds before the native glue: the module then has no CaptureSession class and no
-// recorder functions, which is why CaptureNativeModule marks them optional.
+// exists in builds before the native glue (B1), which can still load this JavaScript through
+// Metro: the module then has no CaptureSession class and no recorder functions, which is why
+// CaptureNativeModule marks them optional.
 
 /** `start({ record })`: the recording profile. Only the walk build accepts anything but `off`. */
 export type RecordProfile = "off" | "lean" | "standard" | "dense";
@@ -217,16 +197,23 @@ export type DebugFigures = Readonly<Record<string, number | string | boolean | n
 // Session events. Every one carries `t`, the session time the module stamped on it, because the
 // boundary trace records each with its time.
 
-/** `status`, at 5 Hz while the session runs. */
+/** `status`, at 5 Hz while the session runs, and once when it stops. */
 export interface NativeSessionStatus {
   readonly t: number;
   readonly running: boolean;
+  /** Whether the opaque cover is over the camera (scene inactive, or the screen captured). */
   readonly covered: boolean;
   readonly tracking: Tracking;
   readonly trackingReason?: TrackingReason;
   readonly mapping: WorldMapping;
+  /** ARFrames a second over the last second. */
   readonly fps: number;
+  /** Candidates a second over the last second (ADR 0010's candidate gate). */
   readonly candidateHz: number;
+  /** ARFrames since the start. */
+  readonly frames: number;
+  /** Candidates since the start, forced ones included. */
+  readonly candidates: number;
   readonly meshAnchors: number;
   readonly thermal: ThermalState;
   readonly recorder: {
@@ -318,18 +305,34 @@ export interface ExportProgress {
 
 /** What recovery did at launch: counts only. */
 export interface RecoveryReport {
+  /** False until it has run: it waits for protected data (an unlocked phone). */
   readonly done: boolean;
+  /** Cut off and cut back: `interrupted`, `closed: false`. */
   readonly recovered: number;
+  /** Closed by the recorder but not finished: completed with `closed: true`. */
   readonly finished: number;
   readonly discarded: number;
+  /** Already final: only the protection upgrade, and the journal removed. */
   readonly swept: number;
+  /** Exports left complete before their raw files went: verified, the raw files deleted. */
+  readonly exportsCompleted: number;
+  /** Exports that failed that check: removed, the raw files kept. */
+  readonly exportsRemoved: number;
+  /** Recordings whose repair failed on an I/O error; tried again at the next launch. */
+  readonly failed: number;
 }
+
+/** A Data Protection class, read back from a file. */
+export type FileProtection = "complete" | "completeUnlessOpen";
 
 /** The on-device synthetic self-test (design D18): results and timings, never recorded data. */
 export interface SelfTestReport {
   readonly passed: boolean;
-  readonly protectionWhileWriting: string;
-  readonly protectionAfterClose: string;
+  /** The synthetic recording closed and its recording.json was written. */
+  readonly recordingFinished: boolean;
+  /** frames.jsonl's class while written (completeUnlessOpen) and after the close (complete). */
+  readonly protectionWhileWriting: FileProtection | null;
+  readonly protectionAfterClose: FileProtection | null;
   readonly excludedFromBackup: boolean;
   readonly compressionMatches: boolean;
   readonly sha256Matches: boolean;
@@ -342,12 +345,29 @@ export interface SelfTestReport {
   readonly keptId: string | null;
 }
 
+export type LocationPermission =
+  | "notDetermined"
+  | "restricted"
+  | "denied"
+  | "whenInUse"
+  | "always"
+  | "unknown";
+
+export type MotionPermission = "notDetermined" | "restricted" | "denied" | "authorized" | "unknown";
+
+/** `requestRecorderPermissions()`, in the walk build only. */
 export interface RecorderPermissions {
-  readonly location: string;
-  readonly motion: string;
+  readonly location: LocationPermission;
+  /** Precise location, not the reduced accuracy the owner can choose instead. */
+  readonly preciseLocation: boolean;
+  readonly motion: MotionPermission;
 }
 
-/** The module's functions and classes. Everything but `getCapabilities` is missing before the glue. */
+/**
+ * The module's functions and classes. Every member but `getCapabilities` is missing in builds
+ * before the native glue; from the glue on, the recorder's functions exist in every build and
+ * reject with ERR_RECORDER_NOT_COMPILED without the recorder.
+ */
 export interface CaptureNativeModule {
   getCapabilities(): Capabilities;
   getLogTail?(): string[];

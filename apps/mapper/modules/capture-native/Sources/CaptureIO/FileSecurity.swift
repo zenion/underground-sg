@@ -21,11 +21,16 @@ public enum FileSecurityClass: String, Sendable {
 /// How CaptureIO creates files and directories with a protection class, raises them to complete
 /// once a recording is closed, and keeps them out of backups.
 ///
-/// Every file CaptureIO writes is created here first and then opened without O_CREAT
-/// (DurableFile), so no file ever exists without its class.
+/// Every file CaptureIO writes is created here, with its class, and DurableFile adopts the
+/// descriptor that created it, so no file ever exists without its class. A new file is never
+/// closed and opened again: a class-B file created while the phone is locked can't be reopened
+/// until it is unlocked (design 7.6), and a background close may create staging files then.
 public protocol FileSecurity: Sendable {
-  /// Creates an empty file with `cls` from its first byte. Throws if anything is already at `url`.
-  func createFile(_ url: URL, _ cls: FileSecurityClass) throws
+  /// Creates an empty file with `cls` from its first byte and returns the descriptor that created
+  /// it, opened with `flags` (the access mode, O_APPEND and O_CLOEXEC) plus O_CREAT and O_EXCL.
+  /// Throws, leaving no file behind, if anything is already at `url` or the class can't be set.
+  /// The caller owns the descriptor.
+  func createAndOpen(_ url: URL, _ cls: FileSecurityClass, flags: Int32) throws -> Int32
   /// Creates a directory with `cls`, which files created in it inherit. Throws if anything is
   /// already at `url`.
   func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws

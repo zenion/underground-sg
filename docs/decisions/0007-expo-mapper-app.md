@@ -29,7 +29,7 @@ The floor-plan preview is TypeScript so it can be unit-tested on Windows against
 ### Module API sketch
 
 - `getCapabilities()`
-- `<CaptureView>`, with `onStatus`, `onTrackingChange` and `onWarning` events
+- `<CaptureView>`, which renders the `CaptureSession` its `session` prop names. The session, not the view, emits the events: `status` at about 5 Hz (tracking among them), `warning`, `recording` and `stopped` (amended 2026-10-21 by [the lean recorder design](../reviews/2026-10-21-lean-recorder-design.md), D4 and D20)
 - A `CaptureSession` shared object with `start`, `markAnchor`, `addTag`, `stop`, `floorTriangles`, `poseTrack` and `discard`. `floorTriangles` and `poseTrack` return compact results after the fact; they never stream per frame. In development and walk builds, `start({ record })` takes the recording profile (`off`, `lean`, `standard` or `dense`; the development build accepts only `off`), and `appendBoundary(lines)` takes the boundary trace from TypeScript.
 - In development and walk builds: `listRecordings()`, `exportRecording(id)` (refused in the development build) and `deleteRecording(id)`
 - `blurPhoto(src, dst)`

@@ -73,6 +73,8 @@ function status(t: number, state: NativeSessionStatus["recorder"]["state"]): Nat
     mapping: "extending",
     fps: 60,
     candidateHz: 5,
+    frames: Math.round(t * 60),
+    candidates: Math.round(t * 5),
     meshAnchors: 12,
     thermal: "nominal",
     recorder: { state, degradation: null, closingInS: null },

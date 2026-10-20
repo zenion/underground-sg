@@ -24,10 +24,23 @@ enum Capabilities {
       "deviceModel": hardwareModel(),
       "osVersion": "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
       "thermal": thermalStateName(ProcessInfo.processInfo.thermalState),
-      // The session recorder is compiled only into the development and walk builds (ADR 0010).
-      // It isn't written yet.
-      "recorder": false,
+      "recorder": recorder(),
     ]
+  }
+
+  /// The session recorder (ADR 0010): whether it is compiled in (the development and walk builds
+  /// only), whether `start({ record: "lean" })` would be granted now, and if not, why.
+  static func recorder() -> [String: Any] {
+    #if USG_RECORDER
+      return RecorderPlumbing.shared.recorderCapabilities()
+    #else
+      return [
+        "compiled": false,
+        "canRecord": false,
+        "refusal": "notCompiled",
+        "buildProfile": NSNull(),
+      ]
+    #endif
   }
 
   /// The hardware identifier, for example iPhone18,2, as the bundle manifest records it.

@@ -1,14 +1,23 @@
-// How the Capture screen words what the capture module reports: its capabilities, the 5 Hz status
-// and the warnings. Pure, so Vitest covers it in Node.
+// How the Capture screen words what the capture module reports: its capabilities, the session's
+// 5 Hz status and the warnings. Pure, so Vitest covers it in Node.
 
 import type {
   Capabilities,
-  CaptureStatus,
+  CaptureErrorCode,
   CaptureWarning,
   ThermalState,
+  Tracking,
+  TrackingReason,
   VideoFormat,
 } from "../../modules/capture-native/src/types.ts";
 import type { Tone } from "../ui.tsx";
+
+/** The part of a session's status that says how tracking is going. */
+export interface TrackingStatus {
+  readonly running: boolean;
+  readonly tracking: Tracking;
+  readonly trackingReason?: TrackingReason;
+}
 
 /** The largest format ARKit offers (most pixels, then the higher frame rate), or null. */
 export function bestVideoFormat(formats: readonly VideoFormat[]): VideoFormat | null {
@@ -40,7 +49,8 @@ const reasonText = {
   unknown: "unknown reason",
 } as const;
 
-export function describeTracking(status: CaptureStatus): { text: string; tone: Tone } {
+/** From a session's status, or anything else with these fields. */
+export function describeTracking(status: TrackingStatus): { text: string; tone: Tone } {
   if (!status.running) return { text: "Stopped", tone: "muted" };
   switch (status.tracking) {
     case "normal":
@@ -85,5 +95,21 @@ export function describeWarning(warning: CaptureWarning): string | null {
       return "The AR session was interrupted; it resumes when the camera is back.";
     case "interruptionEnded":
       return null;
+  }
+}
+
+/** What the camera check says when a call is refused, from the module's code (never a value). */
+export function describeCaptureError(code: CaptureErrorCode | null): string {
+  switch (code) {
+    case "ERR_NO_VIEW":
+      return "This iOS offers no way to keep the camera out of screenshots, so the camera stays off.";
+    case "ERR_TRACKING":
+      return "ARKit world tracking isn't available on this device.";
+    case "ERR_NOT_RUNNING":
+      return "The camera isn't running.";
+    case null:
+      return "The call failed.";
+    default:
+      return `The capture module refused (${code}).`;
   }
 }

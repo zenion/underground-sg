@@ -171,6 +171,9 @@ public final class RecorderCore {
   /// The window as it stands, for the status event.
   public var windowState: RecorderWindowState { window.state }
 
+  /// The degradation steps entered so far, in order, for the status event.
+  public var degradationSteps: [DegradationStep] { ladder.steps }
+
   // MARK: - Frames, marks and stop
 
   /// A delegate frame. While armed it is only remembered (a mark may open the window on it).
@@ -361,6 +364,28 @@ public final class RecorderCore {
     guard isLive else { return [] }
     var lines: [PendingLine] = []
     appendAltitude(sample, to: &lines)
+    return lines.isEmpty ? [] : [.lines(lines)]
+  }
+
+  /// Sensor samples taken inside the window that reach the capture queue only after it closed
+  /// (design section 4, the chained finalize): Core Motion's last batch was still on its queue
+  /// when the frame that closed the window came. The host holds the finalize, lets the motion
+  /// queue hand over what it has, passes those samples here and only then gives the sink the
+  /// finalize, so every sample up to `end_t` lands. Only while finalizing; samples past the
+  /// window's end, or out of order in their file, are dropped and counted as everywhere else.
+  /// `imu`, `motion` and `altitude` refuse samples once the window has closed.
+  public func lateSamples(
+    imu: [ImuSample], motion: [MotionSample], altitude: [AltitudeSample]
+  ) -> [SinkCommand] {
+    guard case .finalizing = phase else { return [] }
+    var lines: [PendingLine] = []
+    for sample in imu { admit(.imu(sample), to: &lines) }
+    if manifestBase.motionFrame != nil {
+      for sample in motion { appendMotion(sample, to: &lines) }
+    }
+    if manifestBase.altimeter == .available {
+      for sample in altitude { appendAltitude(sample, to: &lines) }
+    }
     return lines.isEmpty ? [] : [.lines(lines)]
   }
 

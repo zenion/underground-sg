@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   HOLD_STILL_S,
   initialWalkState,
+  isWalkActive,
   type WalkAction,
   type WalkState,
   walkMarkOptions,
@@ -16,7 +17,7 @@ import { CORRIDOR_VENUES } from "../src/walk/venues.ts";
 
 const SOUTH_BEACH = CORRIDOR_VENUES[0]?.id ?? "";
 const ESPLANADE = CORRIDOR_VENUES[1]?.id ?? "";
-const PERMISSIONS = { location: "granted", motion: "granted" };
+const PERMISSIONS = { location: "whenInUse", preciseLocation: true, motion: "authorized" } as const;
 
 function run(state: WalkState, ...actions: WalkAction[]): WalkState {
   return actions.reduce(walkReducer, state);
@@ -136,9 +137,11 @@ describe("a lean walk, ending with End the session here", () => {
       sessionS: 60 + HOLD_STILL_S + 5,
       recordingS: 60 + HOLD_STILL_S + 5,
       recording: { phase: "closed", ended: "end_anchor", trimmed: false, closed: true },
+      windowOpened: true,
     });
 
     state = run(state, { type: "newSession" });
+    expect(state.windowOpened).toBe(false);
     expect(state.step).toBe("ready");
     expect(state.venues).toEqual([SOUTH_BEACH]);
     expect(state.record).toBe("lean");
@@ -379,6 +382,81 @@ describe("refusals and early ends", () => {
     expect(run(state, ...ticks(3)).recordingS).toBe(0);
   });
 
+  test("a recording dropped while armed is shown, and a start mark then stays armed", () => {
+    // Backgrounded or too hot on the way to the start door: the module discards the armed
+    // recording while the session keeps running.
+    const dropped = run(armed(), { type: "recording", phase: "discarded" });
+    expect(dropped.step).toBe("armed");
+    expect(dropped.sessionRunning).toBe(true);
+    expect(dropped.error).toEqual({ source: "recorder", code: null, dropped: "beforeStart" });
+
+    // The walker dismisses it (or never saw it) and marks the start: the anchor is made, but the
+    // window is "not_open", so the flow stays armed and says so again rather than walking.
+    const marked = run(
+      dropped,
+      { type: "dismissError" },
+      { type: "markStart" },
+      { type: "marked", window: "not_open" },
+    );
+    expect(marked.step).toBe("armed");
+    expect(marked.startMarks).toBe(1);
+    expect(marked.error).toEqual({ source: "recorder", code: null, dropped: "beforeStart" });
+    expect(run(marked, { type: "markEnd" }).step).toBe("armed");
+
+    const done = run(marked, { type: "stop" }, { type: "stopped", recording: null });
+    expect(done.step).toBe("summary");
+    expect(walkSummary(done)).toMatchObject({
+      windowOpened: false,
+      recordingS: 0,
+      recording: { phase: "discarded" },
+    });
+  });
+
+  test("a start mark's not_open with no discard event yet still stays armed", () => {
+    const state = run(armed(), { type: "markStart" }, { type: "marked", window: "not_open" });
+    expect(state.step).toBe("armed");
+    expect(state.error).toEqual({ source: "recorder", code: null, dropped: "beforeStart" });
+  });
+
+  test("record off: a start mark's not_open is expected and walks on", () => {
+    const state = run(
+      initialWalkState(false),
+      { type: "toggleVenue", id: SOUTH_BEACH },
+      { type: "confirmVenues" },
+      { type: "confirmRecord" },
+      { type: "start" },
+      { type: "started" },
+      { type: "markStart" },
+      { type: "marked", window: "not_open" },
+    );
+    expect(state.step).toBe("walking");
+    expect(state.error).toBe(null);
+  });
+
+  test("a recording dropped after it opened, without Stop, is shown too", () => {
+    const state = run(walking(), { type: "recording", phase: "discarded" });
+    expect(state.step).toBe("walking");
+    expect(state.error).toEqual({ source: "recorder", code: null, dropped: "beforeEnd" });
+    expect(walkSummary(state).windowOpened).toBe(true);
+  });
+
+  test("Stop before the start mark discards quietly", () => {
+    const state = run(
+      armed(),
+      { type: "stop" },
+      { type: "recording", phase: "discarded" },
+      { type: "stopped", recording: null },
+    );
+    expect(state.step).toBe("summary");
+    expect(state.error).toBe(null);
+    expect(walkSummary(state)).toMatchObject({
+      windowOpened: false,
+      recording: { phase: "discarded" },
+    });
+    const stopOpen = run(walking(), { type: "stop" }, { type: "recording", phase: "discarded" });
+    expect(stopOpen.error).toBe(null);
+  });
+
   test("a recorder failure is shown; ticks stop counting the window", () => {
     const state = run(walking(), { type: "recording", phase: "failed", code: "ERR_IO" });
     expect(state.error).toEqual({ source: "recorder", code: "ERR_IO" });
@@ -410,5 +488,76 @@ describe("venues", () => {
     expect(run(ready, { type: "back" }).step).toBe("record");
     expect(run(ready, { type: "back" }, { type: "back" }).step).toBe("venues");
     expect(run(walking(), { type: "back" }).step).toBe("walking");
+  });
+});
+
+describe("isWalkActive (the tab bar is hidden and tab presses refused while true)", () => {
+  /** Ready to start a record-off desk check. */
+  function ready(): WalkState {
+    return run(
+      initialWalkState(false),
+      { type: "toggleVenue", id: SOUTH_BEACH },
+      { type: "confirmVenues" },
+      { type: "confirmRecord" },
+    );
+  }
+
+  test("is off before Start", () => {
+    expect(isWalkActive(initialWalkState(true))).toBe(false);
+    expect(ready().step).toBe("ready");
+    expect(isWalkActive(ready())).toBe(false);
+  });
+
+  test("is on from the Start tap, before the session has started", () => {
+    const starting = run(ready(), { type: "start" });
+    expect(starting.step).toBe("starting");
+    expect(starting.sessionRunning).toBe(false);
+    expect(isWalkActive(starting)).toBe(true);
+  });
+
+  test("is off again when start fails", () => {
+    const refused = run(
+      ready(),
+      { type: "start" },
+      { type: "callFailed", call: "start", code: "ERR_RECORD_REFUSED" },
+    );
+    expect(refused.step).toBe("ready");
+    expect(isWalkActive(refused)).toBe(false);
+  });
+
+  test("stays on through every session step and Saving, and goes off at the summary", () => {
+    const steps: string[] = [];
+    let state = armed();
+    const check = (next: WalkState) => {
+      steps.push(next.step);
+      expect(isWalkActive(next)).toBe(true);
+      state = next;
+    };
+    check(state);
+    check(walking());
+    check(run(state, { type: "holdStill" }));
+    check(run(state, ...heldSeconds(HOLD_STILL_S)));
+    check(run(state, { type: "marked", window: "open" }, { type: "recording", phase: "closing" }));
+    check(run(state, { type: "recording", phase: "finalizing" }));
+    check(run(state, { type: "stopped", recording: null }));
+    expect(state.sessionRunning).toBe(false);
+    expect(state.step).toBe("saving");
+    const done = run(state, {
+      type: "recording",
+      phase: "closed",
+      ended: "end_anchor",
+      trimmed: false,
+      closed: true,
+    });
+    expect(done.step).toBe("summary");
+    expect(isWalkActive(done)).toBe(false);
+    expect(steps).toEqual(
+      expect.arrayContaining(["armed", "walking", "holding", "marking", "closing", "saving"]),
+    );
+
+    const stopping = run(walking(), { type: "stop" });
+    expect(stopping.step).toBe("stopping");
+    expect(isWalkActive(stopping)).toBe(true);
+    expect(isWalkActive(run(stopping, { type: "stopped", recording: null }))).toBe(true);
   });
 });

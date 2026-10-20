@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { CaptureStatus } from "../modules/capture-native/src/types.ts";
+import type { NativeSessionStatus } from "../modules/capture-native/src/types.ts";
 import {
   bestVideoFormat,
   captureReady,
+  describeCaptureError,
   describeRate,
   describeTracking,
   describeVideoFormat,
@@ -10,7 +11,10 @@ import {
   thermalTone,
 } from "../src/capture/status.ts";
 
-const status = (overrides: Partial<CaptureStatus> = {}): CaptureStatus => ({
+// A session's raw status, as the module emits it: describeTracking takes any status with the
+// tracking fields, the port's redacted one included.
+const status = (overrides: Partial<NativeSessionStatus> = {}): NativeSessionStatus => ({
+  t: 20,
   running: true,
   covered: false,
   tracking: "normal",
@@ -21,6 +25,7 @@ const status = (overrides: Partial<CaptureStatus> = {}): CaptureStatus => ({
   candidates: 90,
   meshAnchors: 12,
   thermal: "nominal",
+  recorder: { state: "off", degradation: null, closingInS: null },
   ...overrides,
 });
 
@@ -87,5 +92,15 @@ describe("status", () => {
     expect(describeWarning({ kind: "sessionFailed", code: 102 })).toMatch(/ARKit error 102/);
     expect(describeWarning({ kind: "interrupted" })).toMatch(/interrupted/);
     expect(describeWarning({ kind: "interruptionEnded" })).toBeNull();
+  });
+
+  test("refusals are worded from the code alone", () => {
+    expect(describeCaptureError("ERR_NO_VIEW")).toMatch(/out of screenshots/);
+    expect(describeCaptureError("ERR_TRACKING")).toMatch(/world tracking/);
+    expect(describeCaptureError("ERR_NOT_RUNNING")).toMatch(/isn't running/);
+    expect(describeCaptureError("ERR_RECORD_REFUSED")).toBe(
+      "The capture module refused (ERR_RECORD_REFUSED).",
+    );
+    expect(describeCaptureError(null)).toBe("The call failed.");
   });
 });
