@@ -114,7 +114,9 @@ pnpm --filter @usg/floorplan bench --jitless  # interpreter only
 - `*.ply` (preferred): a bundle's `mesh/scene.ply` in the layout of [capture-bundle.md](../../docs/capture-bundle.md#meshsceneply); its floor faces are projected onto x/z, as `floorTriangles` does. It keeps the heights and every face's classification, so the same fixtures can tune a height filter later; or
 - `*.f32`: a `floorTriangles` result saved as raw little-endian float32 x,z pairs. It has lost the heights, so save the `.ply` as well when you can.
 
-The test checks the output's invariants and prints each mesh's counts and timings. With no files it reports one skipped test.
+The test checks the output's invariants and prints each mesh's counts, areas and timings. With no files it reports one skipped test.
+
+The venue tests print no values, so an AI agent may run them (CLAUDE.md: aggregate results only). They assert through `check(condition, message)` and `checkWellFormed(polygons, what)` in `test/check.ts`, which throw a plain `CheckError` whose message names only the file and the item ("station.ply polygons: outer ring of polygon 3 is not closed"). They never use Vitest's matchers, whose failure diffs print both values, or snapshot matchers. A pipeline error is rethrown with only its `code` or name, since `FloorplanExtentError` carries the mesh's extent, and the log leaves out the grid angle, which is the corridor's heading in the session frame. `test/value-free.test.ts`, in the `unit` project, reads every file in `test/venue/` and every file they import, and fails on `expect`, `assert` or a snapshot matcher anywhere but in a comment that starts a line; planted sources show it catching each, through an imported helper and the test context too. The unit tests' `expectWellFormed` runs the same `checkWellFormed`.
 
 ## Environment neutrality
 
