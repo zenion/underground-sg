@@ -90,6 +90,19 @@ jobs:
       # with Swift Testing.
       - name: SwiftPM tests
         run: swift test --package-path apps/mapper/modules/capture-native
+      # Synthetic recordings written by the recorder's real code (FileSink with Compression and
+      # CryptoKit, TarExporter, and RecoveryRunner after a simulated crash), checked by
+      # validate-recording as directories and as an export's parts (design D13). Under
+      # $RUNNER_TEMP and never committed; the 400 s one splits into two parts.
+      - name: Synthetic recordings through the recorder
+        run: |
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth" --export
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth-interrupted" --interrupt 55 --export
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth-long" --duration 400 --seed 2 --export
+          for set in synth synth-interrupted synth-long; do
+            node packages/contracts/src/recording-validator/cli.ts "$RUNNER_TEMP/$set"/rec-*
+            node packages/contracts/src/recording-validator/cli.ts --parts "$RUNNER_TEMP/$set"/replay-*
+          done
       # The check must catch a planted encoder symbol and a planted CIContext writer selector.
       - name: Encoder check catches planted calls
         run: node apps/mapper/scripts/encoder-check.mts --self-test apps/mapper/modules/capture-native/ci/planted
@@ -110,7 +123,7 @@ jobs:
       - name: The module's pods have the recorder switch
         working-directory: apps/mapper/ios/Pods/Target Support Files
         run: |
-          for pod in CaptureCore CaptureNative; do
+          for pod in CaptureCore CaptureIO CaptureNative; do
             grep -l 'USG_RECORDER' "$pod/$pod.release.xcconfig"
           done
       # What EAS Build runs after installing (package.json's eas-build-post-install): the map's
@@ -141,7 +154,8 @@ jobs:
       - name: Encoder check on the capture module
         run: node apps/mapper/scripts/encoder-check.mts --derived-data "$RUNNER_TEMP/dd"
       # A silent compile-out must fail the job (the lean recorder design, section 2): with the
-      # switch on, CaptureCore's objects define RecorderCore's symbols, and CaptureNative's objects
+      # switch on, CaptureCore's objects define RecorderCore's symbols, CaptureIO's define FileSink's,
+      # and CaptureNative's objects
       # reference React's RCTSetLogFunction from the React import probe
       # (ios/Recorder/ReactLogProbe.swift), which also proves that the pod can import React for
       # LogGuard. nm prints symbol names only.
@@ -152,13 +166,17 @@ jobs:
           core=$(objects CaptureCore | xargs xcrun nm -U -j | xcrun swift-demangle | grep -cF 'CaptureCore.RecorderCore' || true)
           echo "CaptureCore: ${core:-0} RecorderCore symbols"
           test "${core:-0}" -gt 0
+          io=$(objects CaptureIO | xargs xcrun nm -U -j | xcrun swift-demangle | grep -cF 'CaptureIO.FileSink' || true)
+          echo "CaptureIO: ${io:-0} FileSink symbols"
+          test "${io:-0}" -gt 0
           probe=$(objects CaptureNative | xargs xcrun nm -u -j | grep -cxF '_RCTSetLogFunction' || true)
           echo "CaptureNative: ${probe:-0} references to RCTSetLogFunction"
           test "${probe:-0}" -gt 0
 
   swift-linux:
     # CaptureCore is Foundation only, so it must also build and pass its tests with the Swift
-    # toolchain on Linux (ADR 0010), the toolchain Windows and WSL would use.
+    # toolchain on Linux (ADR 0010), the toolchain Windows and WSL would use. So must CaptureIO,
+    # with its pure-Swift SHA-256 and DEFLATE in place of CryptoKit and Compression (design D17).
     name: Swift on Linux
     runs-on: ubuntu-latest
     container:
@@ -168,6 +186,13 @@ jobs:
         with:
           persist-credentials: false
       - run: swift test --package-path apps/mapper/modules/capture-native
+      # The synthetic recordings through the fallbacks. This container has no Node, so
+      # validate-recording checks them only on macOS; here capture-synth's own checks must pass
+      # (the recorder finished, recovery kept the interrupted one, the export wrote its parts).
+      - name: Synthetic recordings through the recorder
+        run: |
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth" --export
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth-interrupted" --interrupt 55 --export
       # Without the recorder, as a contributor build compiles CaptureCore: nothing outside the
       # recorder may need its code (the USG_RECORDER condition, design D12).
       - name: Build without the recorder

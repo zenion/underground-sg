@@ -29,6 +29,8 @@ public struct JsonlScan: Equatable, Sendable {
   /// The `t` of the last line kept, or nil for none.
   public var lastT: Double?
   public var stop: Stop
+  /// The lines kept whose `candidate` is set (frames.jsonl), for `candidates_hz`.
+  public var candidates = 0
 }
 
 /// Streams a JSONL file in chunks of any size and finds the last valid line. A line is valid
@@ -87,6 +89,7 @@ public struct JsonlScanner: Sendable {
     result.keepBytes += line.count + 1
     result.lines += 1
     result.lastT = fields.t
+    if fields.candidate != nil { result.candidates += 1 }
   }
 
   private mutating func stop(_ reason: JsonlScan.Stop) {
@@ -103,6 +106,8 @@ public struct MeshHistoryScan: Equatable, Sendable {
   public var lines: Int
   public var lastT: Double?
   public var stop: JsonlScan.Stop
+  /// The distinct `t` of the lines kept, in order: the snapshots, for `mesh_interval_s`.
+  public var snapshotTs: [Double] = []
 }
 
 public enum RecoveryScan {
@@ -182,6 +187,7 @@ public enum RecoveryScan {
       scan.indexKeepBytes += line.count + 1
       scan.lines += 1
       scan.lastT = fields.t
+      if scan.snapshotTs.last != fields.t { scan.snapshotTs.append(fields.t) }
       start = index.index(after: newline)
     }
     return scan
@@ -194,9 +200,11 @@ private struct ScanFields: Decodable {
   let t: Double
   let isFinal: Bool?
   let kind: String?
+  /// frames.jsonl's candidate mark, when it is a string.
+  let candidate: String?
 
   enum CodingKeys: String, CodingKey {
-    case t, kind
+    case t, kind, candidate
     case isFinal = "final"
   }
 
@@ -205,6 +213,7 @@ private struct ScanFields: Decodable {
     t = try container.decode(Double.self, forKey: .t)
     isFinal = try container.decodeIfPresent(Bool.self, forKey: .isFinal)
     kind = try? container.decodeIfPresent(String.self, forKey: .kind)
+    candidate = try? container.decodeIfPresent(String.self, forKey: .candidate)
   }
 }
 

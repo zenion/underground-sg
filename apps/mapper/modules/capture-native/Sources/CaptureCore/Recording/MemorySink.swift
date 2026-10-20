@@ -48,8 +48,8 @@ public final class MemorySink {
 
   /// The files a recording has from its open, empty or not (docs/session-recording.md,
   /// "Layout"). altitude.jsonl and location.jsonl appear with their first line, the mesh history
-  /// with its first snapshot.
-  static let createdAtOpen: [RecordingFilePath] = [
+  /// with its first snapshot. FileSink creates the same.
+  public static let createdAtOpen: [RecordingFilePath] = [
     .frames, .imu, .motion, .anchors, .events, .actions, .telemetry, .boundary,
   ]
 
