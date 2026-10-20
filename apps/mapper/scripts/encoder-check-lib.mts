@@ -115,12 +115,17 @@ export function findViolations(contents: ObjectContents, allow: AllowList = {}):
   return [...findings.values()];
 }
 
-/** `nm -u -j`: one undefined symbol per line. */
+/**
+ * `nm -u -j` on one object file: one undefined symbol per line, with no file-name header. A
+ * symbol can end in a colon: Xcode 26's Swift calls Objective-C methods through selector stubs,
+ * `_objc_msgSend$getBytes:bytesPerRow:fromRegion:mipmapLevel:`, and its objects then have no
+ * `__objc_methname` section at all.
+ */
 export function parseSymbols(output: string): string[] {
   return output
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.endsWith(":"));
+    .filter((line) => line.length > 0);
 }
 
 const MH_MAGIC_64 = 0xfeedfacf;

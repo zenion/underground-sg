@@ -139,6 +139,21 @@ describe("parsers", () => {
     ]);
   });
 
+  test("keeps selector stubs, which end in a colon", () => {
+    // What Xcode 26's Swift left in the planted MTLTexture.getBytes object, as nm printed it.
+    const output = [
+      "__swift_FORCE_LOAD_$_swiftMetal",
+      "_objc_msgSend$getBytes:bytesPerRow:fromRegion:mipmapLevel:",
+      "_objc_msgSend$height",
+      "_objc_msgSend$width",
+    ].join("\n");
+    const symbols = parseSymbols(output);
+    expect(symbols).toHaveLength(4);
+    expect(rules(object({ undefinedSymbols: symbols, demangled: symbols }))).toEqual([
+      "MTLTexture getBytes:",
+    ]);
+  });
+
   test("the Objective-C method names of a Mach-O object file", () => {
     const strings =
       "init\0runWithConfiguration:options:\0JPEGRepresentationOfImage:colorSpace:options:\0";
