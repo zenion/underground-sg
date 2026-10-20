@@ -19,7 +19,10 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'CaptureCore'
-  s.frameworks     = 'Compression', 'CryptoKit'
+  # Compression is a library on iOS (libcompression), not a framework: listing it as a framework
+  # fails the link ("framework 'Compression' not found").
+  s.frameworks     = 'CryptoKit'
+  s.libraries      = 'compression'
 
   s.source_files   = 'Sources/CaptureIO/**/*.swift'
   s.exclude_files  = ['Package.swift', 'Tests/**/*', 'Sources/capture-synth/**/*']

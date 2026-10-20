@@ -182,7 +182,7 @@ end
 ```
 
 Each podspec sets `require_relative` and `s.pod_target_xcconfig = usg_xcconfig`.
-- `CaptureIO.podspec`: `swift_version 6.0`, `dependency 'CaptureCore'`, `frameworks 'Compression', 'CryptoKit'`, excludes `Package.swift`, `Tests/` and `Sources/capture-synth`.
+- `CaptureIO.podspec`: `swift_version 6.0`, `dependency 'CaptureCore'`, `frameworks 'CryptoKit'` and `libraries 'compression'` (on iOS Compression is a library, not a framework), excludes `Package.swift`, `Tests/` and `Sources/capture-synth`.
 - `CaptureNative.podspec` adds `dependency 'CaptureIO'` and the frameworks `CoreMotion`, `CoreLocation` and `Metal`.
 
 A CI assertion catches a silent compile-out: after the Release build with the switch, `nm` over the CaptureIO objects must find `RecorderHost` and `FileSink` symbols.
