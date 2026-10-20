@@ -362,7 +362,7 @@ Events("exportProgress")
 AsyncFunction("listRecordings"); AsyncFunction("exportRecording") { (id: String, p: Promise) }
 AsyncFunction("deleteRecording") { (id: String) }; AsyncFunction("recoveryStatus")
 AsyncFunction("recorderSelfTest") { (keep: Bool) }; AsyncFunction("requestRecorderPermissions")  // walk only
-OnCreate { RecorderPlumbing.shared.scheduleRecovery() }  // ioQueue, once protected data is available
+OnCreate { RecorderPlumbing.shared.scheduleRecovery() }  // store queue, once protected data is available
 ```
 
 - Without `USG_RECORDER`, the recorder functions exist and reject with `ERR_RECORDER_NOT_COMPILED`.
@@ -421,8 +421,8 @@ export interface RecordingSummary { id: string; origin: "device" | "synthetic"; 
 | `usg.capture` (serial) | userInitiated | `ARSession.delegateQueue` (D4); FrameSample build; CandidateGate; RecorderCore; RecorderWindow; MeshHistorySchedule from didAdd, didUpdate and didRemove; marks, tags and stop handled **on the next delegate frame** [perf] (`frame.raycastQuery(from: CGPoint(0.5,0.5), allowing: .estimatedPlane, alignment: .horizontal)`, then `session.raycast`; a hit adds `ARAnchor(name: "usg.marked.<role>")` and forces the gate); copying changed mesh geometry on snapshot frames (D5); status 5 Hz and telemetry 1 Hz `DispatchSourceTimer`s; 100 ms command batches to ioQueue | p95 < 0.3 ms per frame; < 4 ms on a snapshot frame |
 | `usg.capture.motion` (an OperationQueue, max 1, over a serial queue) | userInitiated | accelerometer and gyro (0.01 s) → ImuPairer; device motion (0.01 s); altimeter; 10-sample batches → `capture.async` [perf] | < 50 µs per sample |
 | `usg.mesh` (serial) | utility | pack, fingerprint, MeshLedger, `Deflate.raw`, then `io.async` with the block and line. A snapshot is taken only when this queue is idle (an atomic flag); otherwise the pending set waits | 20–120 ms per 5 s |
-| `usg.recorder.io` (serial) | utility | encoding, watermark buffers, write(2), fsync and journal checkpoints, `recording.json`, finalize, recovery | < 2 % of a core |
-| `usg.recordings.store` (serial) | utility | list, export, delete, self-test; per-recording busy flags under a lock in RecordingStore | I/O speed |
+| `usg.recorder.io` (serial) | utility | encoding, watermark buffers, write(2), fsync and journal checkpoints, `recording.json`, finalize | < 2 % of a core |
+| `usg.recordings.store` (serial) | utility | recovery at launch (first, so nothing queued after it sees a half-recovered recording; nothing records until it is done), list, export, delete, self-test; per-recording busy flags under a lock in RecordingStore | I/O speed |
 | JS | — | events (5 Hz), trace flush (1 Hz) | — |
 
 **Rules.**

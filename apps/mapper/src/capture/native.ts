@@ -333,6 +333,8 @@ function wrapStatus(raw: NativeSessionStatus): SessionStatus {
     mapping: raw.mapping,
     fps: raw.fps,
     candidateHz: raw.candidateHz,
+    frames: raw.frames,
+    candidates: raw.candidates,
     meshAnchors: raw.meshAnchors,
     thermal: raw.thermal,
     recorder: {

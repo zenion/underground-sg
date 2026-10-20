@@ -155,10 +155,9 @@ jobs:
         run: node apps/mapper/scripts/encoder-check.mts --derived-data "$RUNNER_TEMP/dd"
       # A silent compile-out must fail the job (the lean recorder design, section 2): with the
       # switch on, CaptureCore's objects define RecorderCore's symbols, CaptureIO's define FileSink's,
-      # and CaptureNative's objects
-      # reference React's RCTSetLogFunction from the React import probe
-      # (ios/Recorder/ReactLogProbe.swift), which also proves that the pod can import React for
-      # LogGuard. nm prints symbol names only.
+      # and CaptureNative's objects reference React's RCTSetLogFunction from the walk build's log
+      # guard (ios/Recorder/LogGuard.swift), which also proves that the pod can import React.
+      # nm prints symbol names only.
       - name: The recorder is compiled in
         run: |
           root="$RUNNER_TEMP/dd/Build/Intermediates.noindex"

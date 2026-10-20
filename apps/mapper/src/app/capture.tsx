@@ -2,27 +2,33 @@
 // module can never load (Expo Go runs only its own native code), so the screen explains what is
 // needed and shows what it can about the device.
 //
-// The camera check starts an ARSession only when Start is tapped, writes nothing, and unmounts the
-// view (stopping the session) whenever this tab isn't showing. The module keeps the camera out of
-// screenshots and covers it before iOS takes its app-switcher snapshot (ADR 0010).
+// The camera check runs a CaptureSession with `record: off` (the lean recorder design, 3.3): the
+// ARSession starts only when Start is tapped, nothing is written, and the view unmounts (stopping
+// the session) whenever this tab isn't showing. The module keeps the camera out of screenshots and
+// covers it before iOS takes its app-switcher snapshot (ADR 0010).
 
 import * as Device from "expo-device";
 import { useIsFocused } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
   type Capabilities,
   CaptureNative,
-  type CaptureStatus,
   CaptureView,
-  type CaptureViewHandle,
   type CaptureWarning,
 } from "../../modules/capture-native/index.ts";
 import { iosDriftWarning, lidarExpectation } from "../capture/device.ts";
-import { recorderCapabilities } from "../capture/native.ts";
+import {
+  type CaptureSessionPort,
+  captureErrorCode,
+  moduleCaptureNative,
+  recorderCapabilities,
+  type SessionStatus,
+} from "../capture/native.ts";
 import {
   bestVideoFormat,
   captureReady,
+  describeCaptureError,
   describeRate,
   describeTracking,
   describeVideoFormat,
@@ -145,32 +151,49 @@ export default function CaptureScreen() {
   );
 }
 
-/** The camera with the live mesh, Start and Stop, and the module's 5 Hz status. */
+/** The camera with the live mesh, Start and Stop, and the session's 5 Hz status. */
 function CameraCheck({ focused }: { focused: boolean }) {
-  const view = useRef<CaptureViewHandle>(null);
-  const [status, setStatus] = useState<CaptureStatus | null>(null);
+  const port = useMemo(() => moduleCaptureNative(CaptureNative), []);
+  const [session, setSession] = useState<CaptureSessionPort | null>(null);
+  const [status, setStatus] = useState<SessionStatus | null>(null);
   const [warning, setWarning] = useState<CaptureWarning | null>(null);
   const [screenshot, setScreenshot] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Leaving the tab unmounts the view, which stops the session: what it reported is over. The
-  // screenshot reminder stays until the owner says it's deleted.
+  // One session while the tab shows. Leaving the tab unmounts the view, which stops the camera,
+  // and releases the session: what it reported is over. The screenshot reminder stays until the
+  // owner says it's deleted.
   useEffect(() => {
-    if (!focused) {
+    const opened = focused && port ? port.openSession() : null;
+    setSession(opened);
+    if (!opened) return undefined;
+    const unsubscribe = [
+      opened.on("status", (next) => setStatus(next)),
+      opened.on("warning", (next) => {
+        if (next.kind === "screenshot") setScreenshot(true);
+        else setWarning(next);
+      }),
+    ];
+    return () => {
+      for (const off of unsubscribe) off();
+      opened.release();
+      setSession(null);
       setStatus(null);
       setWarning(null);
-    }
-  }, [focused]);
+      setBusy(false);
+    };
+  }, [focused, port]);
 
   const run = (action: "start" | "stop") => {
-    const handle = view.current;
-    if (!handle) return;
+    if (!session) return;
     setBusy(true);
     setError(null);
     if (action === "start") setWarning(null);
-    handle[action]()
-      .catch((reason: unknown) => setError(String(reason)))
+    const call: Promise<unknown> =
+      action === "start" ? session.start({ record: "off", venues: [] }) : session.stop();
+    call
+      .catch((reason: unknown) => setError(describeCaptureError(captureErrorCode(reason))))
       .finally(() => setBusy(false));
   };
 
@@ -179,6 +202,16 @@ function CameraCheck({ focused }: { focused: boolean }) {
   const warningText = warning ? describeWarning(warning) : null;
   const NativeView = CaptureView;
   if (!NativeView) return null;
+  if (!CaptureNative?.CaptureSession) {
+    return (
+      <Card title="Camera check">
+        <Note tone="warn">
+          This development build was made before the CaptureSession glue. Install the current
+          development build to run the camera check.
+        </Note>
+      </Card>
+    );
+  }
 
   return (
     <Card title="Camera check">
@@ -189,17 +222,8 @@ function CameraCheck({ focused }: { focused: boolean }) {
         </>
       ) : null}
       <View style={styles.camera}>
-        {focused ? (
-          <NativeView
-            ref={view}
-            style={StyleSheet.absoluteFill}
-            onStatus={(event) => setStatus(event.nativeEvent)}
-            onWarning={(event) => {
-              const next = event.nativeEvent;
-              if (next.kind === "screenshot") setScreenshot(true);
-              else setWarning(next);
-            }}
-          />
+        {focused && session ? (
+          <NativeView session={session.native} style={StyleSheet.absoluteFill} />
         ) : null}
       </View>
       <View style={styles.buttons}>

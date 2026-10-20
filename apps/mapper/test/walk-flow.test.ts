@@ -16,7 +16,7 @@ import { CORRIDOR_VENUES } from "../src/walk/venues.ts";
 
 const SOUTH_BEACH = CORRIDOR_VENUES[0]?.id ?? "";
 const ESPLANADE = CORRIDOR_VENUES[1]?.id ?? "";
-const PERMISSIONS = { location: "granted", motion: "granted" };
+const PERMISSIONS = { location: "whenInUse", preciseLocation: true, motion: "authorized" } as const;
 
 function run(state: WalkState, ...actions: WalkAction[]): WalkState {
   return actions.reduce(walkReducer, state);

@@ -1,113 +1,97 @@
 import ARKit
-import CaptureCore
 import ExpoModulesCore
 import RealityKit
 import UIKit
 
-/// `<CaptureView>`: the camera with the live mesh over it, inside the privacy shield, and the
-/// ARSession behind it (ADR 0007). The session starts on `start()`, when the mapper taps Start,
-/// never when the view mounts, and stops on `stop()` or when the view leaves the window.
-///
-/// Every frame goes through the candidate gate here, as in every capture (ADR 0010), but nothing
-/// is written yet and nothing per frame crosses into JavaScript: `onStatus` sends counts, rates
-/// and states at 5 Hz, never a pose. The `ARFrame` is read and released within the delegate call.
-final class CaptureView: ExpoView, ARSessionDelegate {
-  let onStatus = EventDispatcher()
-  let onWarning = EventDispatcher()
-
+/// `<CaptureView>`: renders the camera with the live mesh over it, inside the privacy shield, for
+/// the CaptureSession its `session` prop names (the lean recorder design, D4). The view only
+/// renders and attaches: the session runs the ARView's own ARSession, starts it on `start`, never
+/// when the view mounts, and stops it on `stop`, when the prop changes or when the view leaves
+/// its window. A red REC badge, driven on the main queue from the session's recorder state,
+/// mirrors the walk screen's.
+final class CaptureView: ExpoView {
   private let shield = PrivacyShield(frame: .zero)
+  private let badge = RecordingBadge()
   private var arView: ARView?
-  private var running = false
-  private var statusTimer: Timer?
-  private var gate = CandidateGate()
-  private var frameRate = RateMeter()
-  private var candidateRate = RateMeter()
-  private var frames = 0
-  private var candidates = 0
-  /// Mesh anchors by identity, so a removal reported for the previous run can't skew the count.
-  private var meshAnchorIDs = Set<UUID>()
-  /// What `isIdleTimerDisabled` was before `start()`, restored by `stop()`: the dev client's
-  /// keep-awake sets it too.
-  private var idleTimerWasDisabled = false
-  private var tracking = "notAvailable"
-  private var trackingReason: String?
-  private var mapping = "notAvailable"
+  /// The session the `session` prop names. The session holds this view weakly.
+  private var session: CaptureSession?
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     clipsToBounds = true
     backgroundColor = .black
     addSubview(shield)
+    addSubview(badge)
+    badge.isHidden = true
     shield.onScreenshot = { [weak self] in self?.screenshotTaken() }
-    shield.onCoveredChange = { [weak self] _ in self?.emitStatus() }
+    shield.onCoveredChange = { [weak self] covered in self?.session?.coverChanged(covered) }
   }
 
   override func layoutSubviews() {
     super.layoutSubviews()
     shield.frame = bounds
+    let size = badge.intrinsicContentSize
+    badge.frame = CGRect(x: 8, y: 8, width: size.width, height: size.height)
   }
 
   override func didMoveToWindow() {
     super.didMoveToWindow()
     if window == nil {
-      stop()
+      session?.viewLeftWindow(self)
       tearDown()
     }
   }
 
-  func start() throws {
-    if running { return }
-    guard ARWorldTrackingConfiguration.isSupported else {
-      throw WorldTrackingUnsupportedException()
-    }
-    guard let container = shield.secureContent else {
-      throw ScreenshotShieldUnavailableException()
-    }
-    let view = arView ?? makeARView(in: container)
+  // MARK: The session prop
 
-    let configuration = ARWorldTrackingConfiguration()
-    configuration.worldAlignment = .gravity
-    configuration.environmentTexturing = .none
-    configuration.providesAudioData = false
-    if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
-      configuration.sceneReconstruction = .meshWithClassification
+  /// The `session` prop: attaches the named session, detaching the one before.
+  func attach(_ next: CaptureSession?) {
+    if next === session { return }
+    let previous = session
+    session = next
+    previous?.detach(view: self)
+    if let next {
+      next.attach(view: self)
+    } else {
+      showRecorderState("off")
     }
-    if ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
-      configuration.frameSemantics.insert(.smoothedSceneDepth)
-    }
-
-    gate = CandidateGate()
-    frameRate = RateMeter()
-    candidateRate = RateMeter()
-    frames = 0
-    candidates = 0
-    meshAnchorIDs.removeAll()
-    tracking = "notAvailable"
-    trackingReason = nil
-    mapping = "notAvailable"
-    view.session.delegate = self
-    view.session.run(
-      configuration, options: [.resetTracking, .removeExistingAnchors, .resetSceneReconstruction])
-    view.isHidden = false
-    running = true
-    idleTimerWasDisabled = UIApplication.shared.isIdleTimerDisabled
-    UIApplication.shared.isIdleTimerDisabled = true
-    startStatusTimer()
-    captureLog.info("session started")
   }
 
-  func stop() {
-    guard running else { return }
-    arView?.session.pause()
-    // A paused ARView keeps showing its last camera frame: hide it until the next start().
+  /// The session was attached to another view.
+  func sessionWasDetached(_ old: CaptureSession) {
+    guard session === old else { return }
+    session = nil
+    showRecorderState("off")
+  }
+
+  // MARK: For the session (main)
+
+  /// Whether the shield's cover is over the camera.
+  var isCovered: Bool { shield.isCovered }
+
+  /// The ARView inside the shield's secure canvas, made on first use, or nil when this iOS has
+  /// no secure canvas: there is then nowhere safe to show the camera (ADR 0010).
+  func prepareCamera() -> ARView? {
+    if let arView { return arView }
+    guard let container = shield.secureContent else { return nil }
+    return makeARView(in: container)
+  }
+
+  func cameraStarted() {
+    arView?.isHidden = false
+  }
+
+  /// A paused ARView keeps showing its last camera frame: hidden until the next start.
+  func cameraStopped() {
     arView?.isHidden = true
-    running = false
-    UIApplication.shared.isIdleTimerDisabled = idleTimerWasDisabled
-    statusTimer?.invalidate()
-    statusTimer = nil
-    emitStatus()
-    captureLog.info("session stopped")
   }
+
+  /// REC while a recording window is open, closing or being saved.
+  func showRecorderState(_ state: String) {
+    badge.isHidden = !(state == "open" || state == "closing" || state == "finalizing")
+  }
+
+  // MARK: Private
 
   private func tearDown() {
     arView?.session.delegate = nil
@@ -125,150 +109,43 @@ final class CaptureView: ExpoView, ARSessionDelegate {
     ]
     // The live mesh: RealityKit draws the reconstructed mesh over the camera.
     view.debugOptions = [.showSceneUnderstanding]
+    view.isHidden = true
     container.addSubview(view)
     arView = view
     return view
-  }
-
-  // MARK: - ARSessionDelegate (on the main queue: the session's delegateQueue is nil)
-
-  func session(_ session: ARSession, didUpdate frame: ARFrame) {
-    guard running else { return }
-    let t = frame.timestamp
-    frames += 1
-    frameRate.tick(t)
-    let camera = frame.camera
-    var normal = false
-    switch camera.trackingState {
-    case .normal:
-      tracking = "normal"
-      trackingReason = nil
-      normal = true
-    case .notAvailable:
-      tracking = "notAvailable"
-      trackingReason = nil
-    case .limited(let reason):
-      tracking = "limited"
-      trackingReason = trackingReasonName(reason)
-    }
-    mapping = mappingName(frame.worldMappingStatus)
-    if gate.offer(t: t, transform: WorldTransform(camera.transform), trackingNormal: normal) != nil {
-      candidates += 1
-      candidateRate.tick(t)
-    }
-  }
-
-  func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
-    guard running else { return }
-    for anchor in anchors where anchor is ARMeshAnchor {
-      meshAnchorIDs.insert(anchor.identifier)
-    }
-  }
-
-  func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
-    for anchor in anchors {
-      meshAnchorIDs.remove(anchor.identifier)
-    }
-  }
-
-  func session(_ session: ARSession, didFailWithError error: Error) {
-    let code = (error as NSError).code
-    captureLog.error("session failed with ARKit error \(code, privacy: .public)")
-    stop()
-    onWarning(["kind": "sessionFailed", "code": code])
-  }
-
-  func sessionWasInterrupted(_ session: ARSession) {
-    onWarning(["kind": "interrupted"])
-  }
-
-  func sessionInterruptionEnded(_ session: ARSession) {
-    onWarning(["kind": "interruptionEnded"])
-  }
-
-  // MARK: - Status and warnings
-
-  private func startStatusTimer() {
-    statusTimer?.invalidate()
-    let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
-      self?.emitStatus()
-    }
-    RunLoop.main.add(timer, forMode: .common)
-    statusTimer = timer
-  }
-
-  private func emitStatus() {
-    // ARFrame times are on the system uptime clock.
-    let now = ProcessInfo.processInfo.systemUptime
-    var status: [String: Any] = [
-      "running": running,
-      "covered": shield.isCovered,
-      "tracking": tracking,
-      "mapping": mapping,
-      // A stopped session has no rate, whatever the last second held.
-      "fps": running ? frameRate.rate(at: now) : 0,
-      "candidateHz": running ? candidateRate.rate(at: now) : 0,
-      "frames": frames,
-      "candidates": candidates,
-      "meshAnchors": meshAnchorIDs.count,
-      "thermal": thermalStateName(ProcessInfo.processInfo.thermalState),
-    ]
-    if let trackingReason {
-      status["trackingReason"] = trackingReason
-    }
-    onStatus(status)
   }
 
   private func screenshotTaken() {
     // Only a screenshot taken while camera pixels were on screen could hold them: the ARView is
     // shown (it is hidden whenever the session is stopped) and not under the cover.
     guard let arView, !arView.isHidden, !shield.isCovered else { return }
-    captureLog.notice("screenshot taken during a capture")
-    onWarning(["kind": "screenshot"])
+    captureNote("screenshot_during_capture")
+    session?.screenshotTaken()
   }
 }
 
-extension WorldTransform {
-  /// ARKit's column-major matrix as CaptureCore's 16 floats.
-  init(_ matrix: simd_float4x4) {
-    let c = matrix.columns
-    self.init(columnMajor: [
-      c.0.x, c.0.y, c.0.z, c.0.w,
-      c.1.x, c.1.y, c.1.z, c.1.w,
-      c.2.x, c.2.y, c.2.z, c.2.w,
-      c.3.x, c.3.y, c.3.z, c.3.w,
-    ])
+/// The native REC badge: white on red, in the top-left corner, above the cover.
+private final class RecordingBadge: UILabel {
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    text = "REC"
+    textColor = .white
+    backgroundColor = .systemRed
+    font = .boldSystemFont(ofSize: 12)
+    textAlignment = .center
+    layer.cornerRadius = 4
+    layer.masksToBounds = true
+    isUserInteractionEnabled = false
+    accessibilityLabel = "Recording"
   }
-}
 
-private func trackingReasonName(_ reason: ARCamera.TrackingState.Reason) -> String {
-  switch reason {
-  case .initializing: return "initializing"
-  case .excessiveMotion: return "excessiveMotion"
-  case .insufficientFeatures: return "insufficientFeatures"
-  case .relocalizing: return "relocalizing"
-  @unknown default: return "unknown"
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
   }
-}
 
-private func mappingName(_ status: ARFrame.WorldMappingStatus) -> String {
-  switch status {
-  case .notAvailable: return "notAvailable"
-  case .limited: return "limited"
-  case .extending: return "extending"
-  case .mapped: return "mapped"
-  @unknown default: return "unknown"
-  }
-}
-
-final class WorldTrackingUnsupportedException: Exception, @unchecked Sendable {
-  override var reason: String {
-    "ARKit world tracking isn't supported on this device"
-  }
-}
-
-final class ScreenshotShieldUnavailableException: Exception, @unchecked Sendable {
-  override var reason: String {
-    "This iOS version offers no way to keep the camera out of screenshots, so the camera stays off"
+  override var intrinsicContentSize: CGSize {
+    let size = super.intrinsicContentSize
+    return CGSize(width: size.width + 12, height: size.height + 6)
   }
 }
