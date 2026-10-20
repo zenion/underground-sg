@@ -41,6 +41,7 @@ import type {
   RecordingEnded,
   RecordingOutcome,
   RecordingSummary,
+  RecordRefusal,
   RecoveryReport,
   SelfTestReport,
   StartOptions,
@@ -180,6 +181,29 @@ export function captureErrorCode(error: unknown): CaptureErrorCode | null {
   if (typeof error !== "object" || error === null) return null;
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" && ERROR_CODES.has(code) ? (code as CaptureErrorCode) : null;
+}
+
+const REFUSALS: ReadonlySet<string> = new Set<RecordRefusal>([
+  "notCompiled",
+  "notWalkBuild",
+  "debugBuild",
+  "notEmbedded",
+  "devClient",
+  "profileUnavailable",
+  "invalidVenues",
+  "lowDisk",
+]);
+
+/**
+ * The refusal code of an `ERR_RECORD_REFUSED` rejection (its reason; Expo may put it after its
+ * own "Calling the … function has failed" text), or null for anything else.
+ */
+export function recordRefusalOf(error: unknown): RecordRefusal | null {
+  if (captureErrorCode(error) !== "ERR_RECORD_REFUSED") return null;
+  const message = (error as { message?: unknown }).message;
+  if (typeof message !== "string") return null;
+  const word = message.split(/[^A-Za-z]+/).find((part) => REFUSALS.has(part));
+  return word === undefined ? null : (word as RecordRefusal);
 }
 
 /** The recorder's capabilities from either shape `getCapabilities()` has had. */

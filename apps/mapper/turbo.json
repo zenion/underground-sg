@@ -30,7 +30,9 @@
         "$TURBO_ROOT$/db/seed/**",
         "$TURBO_ROOT$/packages/map-style/src/**",
         "$TURBO_ROOT$/packages/floorplan/src/**",
-        "$TURBO_ROOT$/services/api/test/fixtures/snapshot/**"
+        "$TURBO_ROOT$/services/api/test/fixtures/snapshot/**",
+        "$TURBO_ROOT$/.github/workflows/walk-build.yml",
+        "$TURBO_ROOT$/.github/workflows/ci.yml"
       ]
     }
   }

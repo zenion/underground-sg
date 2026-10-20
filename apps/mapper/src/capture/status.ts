@@ -40,7 +40,10 @@ const reasonText = {
   unknown: "unknown reason",
 } as const;
 
-export function describeTracking(status: CaptureStatus): { text: string; tone: Tone } {
+/** From the view's status or the session's (they share these fields). */
+export function describeTracking(
+  status: Pick<CaptureStatus, "running" | "tracking" | "trackingReason">,
+): { text: string; tone: Tone } {
   if (!status.running) return { text: "Stopped", tone: "muted" };
   switch (status.tracking) {
     case "normal":

@@ -21,6 +21,11 @@ export interface CaptureViewProps extends ViewProps {
   onWarning?: (event: NativeSyntheticEvent<CaptureWarning>) => void;
   /** The CaptureSession that runs in this view (design 3.3); builds before the glue ignore it. */
   session?: CaptureSession | null;
+  /**
+   * Draws the live mesh over the camera (design Q15; default on). Display only: it changes no
+   * ARKit configuration and nothing that is recorded. Builds without the prop ignore it.
+   */
+  showMesh?: boolean;
   ref?: Ref<CaptureViewHandle>;
 }
 
