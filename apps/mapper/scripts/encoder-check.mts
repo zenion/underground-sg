@@ -2,10 +2,12 @@
 // after the unsigned app build. macOS only: it uses Xcode's nm and swift-demangle, and reads the
 // Objective-C method names from each object file itself.
 //
-//   node scripts/encoder-check.mts --derived-data <dir> --module CaptureNative --module CaptureCore
-//       Checks every object file of each module's build directory in the app build's DerivedData,
-//       against modules/capture-native/encoder-allowlist.json. Fails on any finding, and when a
-//       module has no objects (so a moved build directory can't pass by checking nothing).
+//   node scripts/encoder-check.mts --derived-data <dir>
+//       Checks every object file of each of the module's pods (the podspecs listed in
+//       modules/capture-native/expo-module.config.json) in the app build's DerivedData, against
+//       modules/capture-native/encoder-allowlist.json. Fails on any finding, when a pod has no
+//       objects (so a moved build directory can't pass by checking nothing), and when the
+//       allow-list names a pod that isn't checked.
 //   node scripts/encoder-check.mts --self-test <dir>
 //       Compiles each Swift file in <dir> for iOS and checks it with an empty allow-list. A file
 //       whose first line is `// expect: <rule> | <rule>` must be caught by one of those rules;
@@ -19,16 +21,22 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
   type AllowList,
+  allowListKeysOutside,
   describeFinding,
   type Finding,
   findViolations,
   machOSections,
   methodNames,
   parseSymbols,
+  podNames,
 } from "./encoder-check-lib.mts";
 
 const ALLOW_LIST = fileURLToPath(
   new URL("../modules/capture-native/encoder-allowlist.json", import.meta.url),
+);
+/** Lists the module's pods: each is checked, so a new pod can't be left out. */
+const MODULE_CONFIG = fileURLToPath(
+  new URL("../modules/capture-native/expo-module.config.json", import.meta.url),
 );
 // The module's deployment target is 16.4; 17.0 lets the planted files use newer API too.
 const PLANTED_TARGET = "arm64-apple-ios17.0";
@@ -99,6 +107,10 @@ function moduleObjects(root: string, module: string): string[] {
 function checkBuild(derivedData: string, modules: string[]): number {
   const root = join(derivedData, "Build", "Intermediates.noindex");
   let failures = 0;
+  for (const key of allowListKeysOutside(loadAllowList(), modules)) {
+    console.error(`${key}: the allow-list names an object of a pod that isn't checked`);
+    failures++;
+  }
   for (const module of modules) {
     const objects = moduleObjects(root, module);
     if (objects.length === 0) {
@@ -156,7 +168,6 @@ function selfTest(dir: string): number {
 const { values } = parseArgs({
   options: {
     "derived-data": { type: "string" },
-    module: { type: "string", multiple: true },
     "self-test": { type: "string" },
   },
 });
@@ -165,12 +176,11 @@ let failures: number;
 if (values["self-test"]) {
   allowList = {};
   failures = selfTest(values["self-test"]);
-} else if (values["derived-data"] && values.module?.length) {
-  failures = checkBuild(values["derived-data"], values.module);
+} else if (values["derived-data"]) {
+  const config = JSON.parse(readFileSync(MODULE_CONFIG, "utf8")) as unknown;
+  failures = checkBuild(values["derived-data"], podNames(config));
 } else {
-  console.error(
-    "usage: encoder-check.mts --derived-data <dir> --module <name>... | --self-test <dir>",
-  );
+  console.error("usage: encoder-check.mts --derived-data <dir> | --self-test <dir>");
   process.exit(2);
 }
 process.exit(failures > 0 ? 1 : 0);

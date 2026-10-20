@@ -24,7 +24,11 @@ final class CaptureView: ExpoView, ARSessionDelegate {
   private var candidateRate = RateMeter()
   private var frames = 0
   private var candidates = 0
-  private var meshAnchors = 0
+  /// Mesh anchors by identity, so a removal reported for the previous run can't skew the count.
+  private var meshAnchorIDs = Set<UUID>()
+  /// What `isIdleTimerDisabled` was before `start()`, restored by `stop()`: the dev client's
+  /// keep-awake sets it too.
+  private var idleTimerWasDisabled = false
   private var tracking = "notAvailable"
   private var trackingReason: String?
   private var mapping = "notAvailable"
@@ -77,10 +81,16 @@ final class CaptureView: ExpoView, ARSessionDelegate {
     candidateRate = RateMeter()
     frames = 0
     candidates = 0
-    meshAnchors = 0
+    meshAnchorIDs.removeAll()
+    tracking = "notAvailable"
+    trackingReason = nil
+    mapping = "notAvailable"
     view.session.delegate = self
-    view.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+    view.session.run(
+      configuration, options: [.resetTracking, .removeExistingAnchors, .resetSceneReconstruction])
+    view.isHidden = false
     running = true
+    idleTimerWasDisabled = UIApplication.shared.isIdleTimerDisabled
     UIApplication.shared.isIdleTimerDisabled = true
     startStatusTimer()
     captureLog.info("session started")
@@ -89,8 +99,10 @@ final class CaptureView: ExpoView, ARSessionDelegate {
   func stop() {
     guard running else { return }
     arView?.session.pause()
+    // A paused ARView keeps showing its last camera frame: hide it until the next start().
+    arView?.isHidden = true
     running = false
-    UIApplication.shared.isIdleTimerDisabled = false
+    UIApplication.shared.isIdleTimerDisabled = idleTimerWasDisabled
     statusTimer?.invalidate()
     statusTimer = nil
     emitStatus()
@@ -121,6 +133,7 @@ final class CaptureView: ExpoView, ARSessionDelegate {
   // MARK: - ARSessionDelegate (on the main queue: the session's delegateQueue is nil)
 
   func session(_ session: ARSession, didUpdate frame: ARFrame) {
+    guard running else { return }
     let t = frame.timestamp
     frames += 1
     frameRate.tick(t)
@@ -146,11 +159,16 @@ final class CaptureView: ExpoView, ARSessionDelegate {
   }
 
   func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
-    meshAnchors += anchors.reduce(0) { $0 + ($1 is ARMeshAnchor ? 1 : 0) }
+    guard running else { return }
+    for anchor in anchors where anchor is ARMeshAnchor {
+      meshAnchorIDs.insert(anchor.identifier)
+    }
   }
 
   func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
-    meshAnchors -= anchors.reduce(0) { $0 + ($1 is ARMeshAnchor ? 1 : 0) }
+    for anchor in anchors {
+      meshAnchorIDs.remove(anchor.identifier)
+    }
   }
 
   func session(_ session: ARSession, didFailWithError error: Error) {
@@ -187,11 +205,12 @@ final class CaptureView: ExpoView, ARSessionDelegate {
       "covered": shield.isCovered,
       "tracking": tracking,
       "mapping": mapping,
-      "fps": frameRate.rate(at: now),
-      "candidateHz": candidateRate.rate(at: now),
+      // A stopped session has no rate, whatever the last second held.
+      "fps": running ? frameRate.rate(at: now) : 0,
+      "candidateHz": running ? candidateRate.rate(at: now) : 0,
       "frames": frames,
       "candidates": candidates,
-      "meshAnchors": meshAnchors,
+      "meshAnchors": meshAnchorIDs.count,
       "thermal": thermalStateName(ProcessInfo.processInfo.thermalState),
     ]
     if let trackingReason {
@@ -201,8 +220,9 @@ final class CaptureView: ExpoView, ARSessionDelegate {
   }
 
   private func screenshotTaken() {
-    // Only a screenshot taken while the camera runs could have caught it.
-    guard running else { return }
+    // Only a screenshot taken while camera pixels were on screen could hold them: the ARView is
+    // shown (it is hidden whenever the session is stopped) and not under the cover.
+    guard let arView, !arView.isHidden, !shield.isCovered else { return }
     captureLog.notice("screenshot taken during a capture")
     onWarning(["kind": "screenshot"])
   }

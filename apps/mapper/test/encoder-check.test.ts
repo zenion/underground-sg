@@ -1,14 +1,57 @@
 // The encoder check's rules and parsers (scripts/encoder-check-lib.mts). The macOS CI job runs
 // the check itself on the compiled module and on planted calls; this covers the matching on any OS.
 
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
+  allowListKeysOutside,
   findViolations,
   machOSection,
   methodNames,
   type ObjectContents,
   parseSymbols,
+  podNames,
 } from "../scripts/encoder-check-lib.mts";
+
+describe("which pods are checked", () => {
+  test("every pod the capture module lists", () => {
+    const config = JSON.parse(
+      readFileSync(
+        new URL("../modules/capture-native/expo-module.config.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    expect(podNames(config)).toEqual(["CaptureNative", "CaptureCore"]);
+    expect(podNames({ apple: { podspecPath: "ios/Only.podspec" } })).toEqual(["Only"]);
+    expect(() => podNames({ apple: {} })).toThrow(/podspecPath/);
+  });
+
+  test("an allow-list entry for a pod that isn't checked is reported", () => {
+    const allow = { "CaptureBlur/Blur.o": ["CGImageDestination"], "CaptureNative/A.o": [] };
+    expect(allowListKeysOutside(allow, ["CaptureNative", "CaptureCore"])).toEqual([
+      "CaptureBlur/Blur.o",
+    ]);
+  });
+
+  test("the committed allow-list names only checked pods", () => {
+    const config = JSON.parse(
+      readFileSync(
+        new URL("../modules/capture-native/expo-module.config.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    const allow = JSON.parse(
+      readFileSync(
+        new URL("../modules/capture-native/encoder-allowlist.json", import.meta.url),
+        "utf8",
+      ),
+    ) as Record<string, string[]>;
+    const entries = Object.fromEntries(
+      Object.entries(allow).filter(([key]) => !key.startsWith("$")),
+    );
+    expect(allowListKeysOutside(entries, podNames(config))).toEqual([]);
+  });
+});
 
 const object = (overrides: Partial<ObjectContents>): ObjectContents => ({
   object: "CaptureNative/CaptureView.o",

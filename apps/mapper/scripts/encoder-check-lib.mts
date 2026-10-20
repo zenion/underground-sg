@@ -83,6 +83,24 @@ export interface Finding {
 /** Allowed rules per object: `{ "CaptureBlur/Blur.o": ["CGImageDestination", ...] }`. */
 export type AllowList = Readonly<Record<string, readonly string[]>>;
 
+/**
+ * The pods of a local Expo module, from its expo-module.config.json: each podspec's file name,
+ * which autolinking uses as the pod name and so as the `<pod>.build` directory in DerivedData.
+ */
+export function podNames(config: unknown): string[] {
+  const paths = (config as { apple?: { podspecPath?: unknown } }).apple?.podspecPath;
+  const list = typeof paths === "string" ? [paths] : paths;
+  if (!Array.isArray(list) || list.length === 0 || !list.every((p) => typeof p === "string")) {
+    throw new Error("expo-module.config.json lists no apple.podspecPath");
+  }
+  return list.map((path: string) => path.replace(/^.*\//, "").replace(/\.podspec$/, ""));
+}
+
+/** Allow-list keys whose pod isn't among those checked, so they could never apply. */
+export function allowListKeysOutside(allow: AllowList, pods: readonly string[]): string[] {
+  return Object.keys(allow).filter((key) => !pods.includes(key.split("/")[0] ?? ""));
+}
+
 export function findViolations(contents: ObjectContents, allow: AllowList = {}): Finding[] {
   const allowed = new Set(allow[contents.object] ?? []);
   const findings = new Map<string, Finding>();

@@ -151,9 +151,13 @@ function CameraCheck({ focused }: { focused: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Leaving the tab unmounts the view, which stops the session.
+  // Leaving the tab unmounts the view, which stops the session: what it reported is over. The
+  // screenshot reminder stays until the owner says it's deleted.
   useEffect(() => {
-    if (!focused) setStatus(null);
+    if (!focused) {
+      setStatus(null);
+      setWarning(null);
+    }
   }, [focused]);
 
   const run = (action: "start" | "stop") => {
@@ -161,6 +165,7 @@ function CameraCheck({ focused }: { focused: boolean }) {
     if (!handle) return;
     setBusy(true);
     setError(null);
+    if (action === "start") setWarning(null);
     handle[action]()
       .catch((reason: unknown) => setError(String(reason)))
       .finally(() => setBusy(false));
