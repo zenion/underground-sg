@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/import.schema.json",
   "title": "RecordingImport",
-  "description": "import.json of an imported replay set on the PC, recording_version 1 (docs/session-recording.md): written by pnpm rec import in .data/fixtures/recordings/<recording_id>/, and updated by pnpm rec review and when a quarantine is carried over. Never leaves the PC.",
+  "description": "import.json of an imported replay set on the PC, recording_version 1 (docs/session-recording.md): written by pnpm rec import in .data/fixtures/recordings/<recording_id>/, and updated by pnpm rec review and when a quarantine is carried over. Never leaves the PC. Checked by pnpm rec import, not by this schema: each deletion's id is the recording's or one of the session's capture ids, frame is the file's frame, and the file is gone.",
   "type": "object",
   "properties": {
     "recording_version": {
@@ -98,9 +98,9 @@
       "type": "object",
       "properties": {
         "path": {
-          "description": "Its path in the replay set: a recording's candidate or a bundle's keyframe, with its depth and confidence.",
+          "description": "Its path in the replay set: a recording's candidate, depth or confidence image, or a bundle's keyframe, depth or confidence image.",
           "type": "string",
-          "pattern": "^(rec|capture)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(candidates|keyframes|depth|confidence)/[0-9]{6}\\.(jpg|png)$"
+          "pattern": "^(rec-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(candidates/[0-9]{6}\\.jpg|(depth|confidence)/[0-9]{6}\\.png)|capture-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/(keyframes/[0-9]{6}\\.jpg|(depth|confidence)/[0-9]{6}\\.png))$"
         },
         "frame": {
           "$ref": "../capture-bundle/defs.schema.json#/$defs/frameIndex"

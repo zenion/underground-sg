@@ -32,12 +32,12 @@
       ]
     },
     "parts": {
-      "description": "The parts in order. At most 512 (8 GiB in 16 MiB parts).",
+      "description": "The parts in order. At most 4096 (DEFAULT_RECORDING_LIMITS.maxExportParts, 64 GiB in 16 MiB parts).",
       "type": "array",
       "items": {
         "$ref": "#/$defs/part"
       },
-      "maxItems": 512
+      "maxItems": 4096
     }
   },
   "required": ["recording_version", "recording_id", "tar_bytes", "tar_sha256", "parts"],

@@ -10,7 +10,7 @@ A recording is never part of a bundle, never uploaded to ingest, and no bundle d
 
 - There is one recording per ARKit session: the directory `rec-<recording_id>/`, where `recording_id` is the session's lowercase UUID.
 - A **replay set** is a recording plus the session's bundles (`capture-<capture_id>/`). A `lean` recording made before the blur passes `privacySelfTest()` has no bundles: a bundle needs blurred keyframes.
-- A recording opens at the session's first start-anchor mark. It closes a set margin after the owner marks an end anchor with **End the session here**, after an idle timeout, when the app goes to the background (a locked screen included), or at its limits; nothing more of that session is recorded. A recording still open when the session closes, or found cut off at the next launch, is cut back to its last end anchor plus the margin, and the tail is deleted. Sessions start and stop at a public anchor. Nothing outside the window is written.
+- A recording opens at the session's first start-anchor mark. It closes a set margin after the owner marks an end anchor with **End the session here** (which also stops the session then), after an idle timeout, when the app goes to the background (a locked screen included), or at its limits; nothing more of that session is recorded. A recording still open when the session closes, or found cut off at the next launch, is cut back to its last end anchor plus the margin, and the tail is deleted. Sessions start and stop at a public anchor. Nothing outside the window is written.
 
 ## Profiles
 
@@ -19,8 +19,8 @@ A recording is never part of a bundle, never uploaded to ingest, and no bundle d
 | `frames.jsonl` | Every ARFrame (about 60 Hz) | Same | Same |
 | `imu.jsonl`, `motion.jsonl` | 100 Hz | Same | Same |
 | `altitude.jsonl` | As Core Motion delivers it | Same | Same |
-| Mesh history | Every 5 s, and at stop | Every 5 s, and at stop | Every 2 s, and at stop |
-| `anchors.jsonl` | With each mesh snapshot, and at stop | Same | Same |
+| Mesh history | At open, every 5 s and at close | At open, every 5 s and at close | At open, every 2 s and at close |
+| `anchors.jsonl` | With each mesh snapshot, at open and at close | Same | Same |
 | `telemetry.jsonl` | 1 Hz | Same | Same |
 | `location.jsonl` | 1 Hz, in windows | Same | Same |
 | Candidates (JPEG, depth, confidence, blur line) | None | About 5 Hz | Up to 10 Hz |
@@ -61,12 +61,12 @@ Files outside this layout are rejected. Frame names are six-digit session frame 
 - Space is the session's ARKit world frame and time its `t`, seconds since the ARKit session started ([capture-bundle.md](capture-bundle.md#coordinate-frame-and-time-base)). Transforms are 16 floats, column-major. Device-frame vectors (IMU and device motion) use Core Motion's axes, as the bundle's `imu.jsonl` does.
 - Frames are numbered across the whole session. A bundle's frame is the session frame minus its segment's `frame_offset` (`recording.json`).
 - In each JSONL file `t` never decreases from line to line, and in the sample streams (`frames.jsonl`, `imu.jsonl`, `motion.jsonl`, `altitude.jsonl`, `telemetry.jsonl`, `location.jsonl`) it strictly increases. `frame` (where a line has one, except `anchors.jsonl`) and `seq` strictly increase. Values in different files are not compared.
-- **JSON text.** Some fields carry what JavaScript passed or received, whose shape the module doesn't fix (`args` and `result` in `actions.jsonl`, `value` in `boundary.jsonl`). They hold it as JSON text: a string that parses as one JSON value, at most 16 KiB. Readers parse it; the schemas only bound its length.
+- **JSON text.** Some fields carry what JavaScript passed or received, whose shape the module doesn't fix (`args` and `result` in `actions.jsonl`, `value` in `boundary.jsonl`). They hold it as JSON text: a string that parses as one JSON value, at most 16,384 characters (Unicode code points, as JSON Schema's `maxLength` counts). Readers parse it; the schemas only bound its length. A value that would pass that bound, or make its line pass `maxJsonlLineBytes`, is never truncated: the writer puts the marker `{"omitted":"too_large","bytes":<its UTF-8 size>}` in its place, which `validate-recording` reports as a warning.
 - JSON is UTF-8 without a byte order mark; a blank JSONL line is invalid.
 
 ## recording.json
 
-Written when the recording opens and rewritten when it closes. Until then `window.end_t`, `window.ended` and `rates` are `null`, `closed` is `false` and `files` is empty.
+Written when the recording opens, rewritten when it closes, and rewritten again when a segment listed in it finishes or is discarded after the close (that changes only `segments`). Until it closes, `window.end_t`, `window.ended` and `rates` are `null`, `closed` is `false` and `files` is empty. `recording.json` isn't in `files`, so rewriting it breaks no hash.
 
 | Field | Notes |
 | --- | --- |
@@ -81,11 +81,12 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 | `clocks` | `system_uptime_s` (`ProcessInfo.systemUptime`), `media_time_s` (`CACurrentMediaTime()`) and `wall_clock` (`Date()`), read together at session start |
 | `window` | `start_t` and `end_t` of the recording; `ended`, why it closed: `end_anchor` (End the session here), `stop`, `idle`, `background`, `heat`, `disk`, `limit` or `interrupted`; and `trimmed`, `true` when it was cut back to its last end anchor |
 | `arkit` | The configuration: `scene_reconstruction` (`meshWithClassification`, `mesh` or `none`), `frame_semantics` (a list of `sceneDepth` and `smoothedSceneDepth`), `video_format` (`width`, `height` and `fps`; the image size `intrinsics` refer to, landscape) and `world_alignment` (`gravity`, `gravityAndHeading` or `camera`) |
+| `motion` | Device motion's configuration: `reference_frame`, the Core Motion reference frame `motion.jsonl`'s attitude and heading use (`xArbitraryZVertical`, `xArbitraryCorrectedZVertical`, `xMagneticNorthZVertical` or `xTrueNorthZVertical`), or `null` when device motion is unavailable. The spike chooses the frame |
 | `detector_versions` | As the bundle manifest's `privacy.detector_versions`; `null` in `lean` |
-| `venues` | Ids of the seeded venues walked (at most 20), chosen before the start, so a recording can be found and deleted on request |
-| `segments` | One per bundle (at most 200): `capture_id`, `manifest_sha256` (SHA-256 of that bundle's `manifest.json` bytes), `start_t`, `end_t`, `frame_offset`, and `kept` (`false` for a discarded segment, whose bundle is gone) |
+| `venues` | Ids of the seeded venues walked (at most 50), chosen before the start, so a recording can be found and deleted on request |
+| `segments` | One per bundle the session started while the recording was open, in order, listed when it starts (at most 200): `capture_id`; `manifest_sha256`, the SHA-256 of that bundle's `manifest.json` bytes, or `null` while it has none (still open, or discarded before it got one); `start_t`; `end_t`, or `null` until the segment ends; `frame_offset`; and `kept` (`false` for a discarded segment, whose bundle is gone). A kept segment has a non-null `end_t` and `manifest_sha256` once the session has stopped. A segment's frames are in the recording only within the window, so `deriveBundle` refuses a segment that isn't wholly inside it. Recovery at the next launch rebuilds `segments` from the bundles on disk before it trims |
 | `closed` | `true` once the recorder closed cleanly; a recording left `false` was cut off |
-| `files` | Every other file: path, bytes and lowercase hex SHA-256, as in the bundle manifest |
+| `files` | Every other file (at most 60,000): path, bytes and lowercase hex SHA-256, as in the bundle manifest |
 
 ## Streams
 
@@ -110,15 +111,15 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 | Field | Notes |
 | --- | --- |
 | `t` | |
-| `attitude` | The attitude quaternion `[x, y, z, w]`, in Core Motion's reference frame |
+| `attitude` | The attitude quaternion `[x, y, z, w]` in `motion.reference_frame`, as Core Motion reports it: not renormalised, so a component can round just past 1. `validate-recording` checks its norm within 1e-3 |
 | `gravity`, `user_accel` | Gravity and the user's acceleration in m/s² (converted from g, 1 g = 9.80665 m/s²) |
 | `rotation` | Rotation rate in rad/s |
 | `magnetic` | `field`, the calibrated magnetic field in µT, and `accuracy`: `uncalibrated`, `low`, `medium` or `high` |
-| `heading` | Degrees from north, 0 to 360, or `null` when Core Motion gives none |
+| `heading` | Degrees clockwise from the north of `motion.reference_frame` (magnetic or true), from 0 up to 360; always `null` in the two arbitrary frames, and `null` when Core Motion gives none |
 
 **`altitude.jsonl`**, as Core Motion delivers it: `t`, `relative_m` (metres since the first sample) and `pressure_kpa`. Never absolute altitude.
 
-**`anchors.jsonl`**, one line per anchor change, sampled with each mesh snapshot and at stop:
+**`anchors.jsonl`**, one line per anchor change, sampled with each mesh snapshot. The first sample, when the recording opens, writes every anchor the session already has as `add` (a baseline: the session started before the recording opened), and an anchor's first line is always an `add`. The final sample, when the recording closes (below), writes every keyframe, image and marked anchor that exists, whether or not it moved:
 
 | Field | Notes |
 | --- | --- |
@@ -128,15 +129,21 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 | `op` | `add`, `update` (moved more than about 1 mm or 0.05° since its last line) or `remove` |
 | `transform` | Anchor to world, or `null` for `remove` |
 | `frame` | The keyframe's frame for a `keyframe` anchor, else `null` |
+| `final` | `true` for the lines of a final sample, with no movement threshold |
+| `capture_id` | On a final sample taken at a segment's session-end reads (with `continuous_session`), that segment's `capture_id`; else `null` |
 
-**`events.jsonl`**, one line per event: `t`, `kind` and `detail`, a short code or a number (or `null`), never a pose, a time or a fix.
+A mesh anchor's transform at `t` is its latest line at or before `t` in either `anchors.jsonl` (kind `mesh`) or `mesh/history.jsonl`: ARKit moves mesh anchors without changing their geometry, and `history.bin` gets a block only when the geometry changed.
+
+**The final sample.** When the recording closes, at `window.end_t`, the recorder takes a final sample: every keyframe, image and marked anchor in `anchors.jsonl` and every mesh anchor in the mesh history, `final: true`, with the transforms read at that moment. **End the session here** stops the session at that same moment, so the bundle's session-end reads (`refined_keyframes.jsonl`, `mesh/scene.ply`) are this sample, which is what `deriveBundle`'s `recorded` policy rebuilds them from. A recording closed for another reason (`idle`, `background`, `heat`, `disk`, `limit`) also takes one at its close, but a bundle whose session-end reads came later doesn't match it, so `recorded` doesn't apply to that bundle. A recording cut back (`stop` without End the session here, or `interrupted`) has no final sample, since its end is in the past. With `continuous_session`, the session-end reads at each segment's end take a final sample too, marked with that segment's `capture_id` (an open point of the bundle format).
+
+**`events.jsonl`**, one line per event: `t`, `kind` and `detail`, a short code (a number as its decimal text) or `null`, never a pose, a time or a fix. Each kind's `detail` is fixed by this table, which `RECORDING_EVENT_DETAILS` in `packages/contracts` carries and `validate-recording` checks; the Swift recorder writes events from a typed enum, so it can't put anything else there.
 
 | `kind` | `detail` |
 | --- | --- |
 | `recording_opened` | `null` |
 | `recording_closed` | Why: as `window.ended` |
-| `configuration` | What the session ran with, a short code |
-| `session_failed` | ARKit's error code |
+| `configuration` | What the session ran with, a short lowercase code |
+| `session_failed` | ARKit's error code, as decimal digits |
 | `interruption_began`, `interruption_ended` | `null` |
 | `relocalization_began`, `relocalization_ended` | `null` |
 | `image_anchor_detected` | The anchor's UUID |
@@ -148,7 +155,7 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 | `altimeter_unavailable`, `altimeter_denied`, `motion_unavailable` | `null` |
 | `degradation` | The step: `fewer_candidates`, `no_mesh_history` or `no_recording` |
 
-**`actions.jsonl`**, one line per module call: `t`; `call`, the method's name (`start`, `markAnchor`, `addTag`, `stop`, `discard` and so on); `args`, the arguments as JavaScript passed them, as JSON text; `result`, what native code returned, as JSON text (for a raycast: the hit, its normal and the frame used), or `null` for nothing; and `error`, the error's code when the call failed, else `null`. The session-end reads are calls too.
+**`actions.jsonl`**, one line per module call during the session: `t`; `call`, the method's name (`start`, `markAnchor`, `addTag`, `stop`, `discard` and so on); `args`, the arguments as JavaScript passed them, as JSON text; `result`, what native code returned, as JSON text (for a raycast: the hit, its normal and the frame used), or `null` for nothing or for a binary result (floor triangles, which only `boundary/<seq>.f32` holds); and `error`, the error's code when the call failed, else `null`. The recorder's own plumbing isn't logged here and gets no boundary line: `appendBoundary` (its lines are already in `boundary.jsonl`) and `listRecordings`, `exportRecording` and `deleteRecording`, which run outside a session.
 
 **`telemetry.jsonl`**, one line a second:
 
@@ -165,7 +172,7 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 
 **`location.jsonl`**, one line per GNSS fix in a window: exactly the bundle's `gnss.jsonl` line (`t`, `lat`, `lon`, `h_accuracy_m`).
 
-**`boundary.jsonl`**, one line per event or result JavaScript received: `t`, the session time the module stamped on it; `seq`, from 0; `kind`, the event or call's name; `value`, what JavaScript received, as JSON text, or `null` when it was binary; and `binary`, `boundary/<seq>.f32` for a binary result (such as floor triangles, `seq` zero-padded to six digits), else `null`. TypeScript writes these lines and hands them to the module (`appendBoundary`).
+**`boundary.jsonl`**, one line per event or result JavaScript received: `t`, the session time the module stamped on it; `seq`, from 0; `kind`, the event or call's name; `value`, what JavaScript received, as JSON text, or `null` when it was binary; and `binary`, `boundary/<seq>.f32` for a binary result (such as floor triangles, `seq` zero-padded to six digits), else `null`. Exactly one of `value` and `binary` is non-null, which `validate-recording` checks. TypeScript writes these lines and hands them to the module (`appendBoundary`).
 
 **`mesh/history.jsonl`**, one line per mesh-history block:
 
@@ -177,7 +184,10 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 | `transform` | Anchor to world at `t`, or `null` for `remove` |
 | `offset`, `bytes` | Where the block is in `history.bin`, or `null` for `remove` |
 | `vertices`, `faces` | Counts in the block, or `null` for `remove` |
-| `final` | `true` for the snapshot at stop, which holds every anchor with the session-end transforms |
+| `final` | `true` for a final snapshot (above), which holds every mesh anchor with the transforms read at that moment |
+| `capture_id` | On a final snapshot taken at a segment's session-end reads, that segment's `capture_id`; else `null` |
+
+The first snapshot is taken when the recording opens and writes every mesh anchor the session already has as `add`; later snapshots write the anchors whose geometry changed. An anchor's first line is always an `add`.
 
 **`privacy/blur.jsonl`**, one line per recorded candidate: exactly the bundle's `privacy/blur.jsonl` line, in candidate pixel coordinates.
 
@@ -186,7 +196,7 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 ## Encodings
 
 - **Candidates** follow the keyframe rules of [capture-bundle.md](capture-bundle.md#keyframes-depth-and-confidence): 3-component colour JPEG at `image_size`, in the sensor's native landscape orientation, one image with no thumbnail, no second image and no MPF segment, nothing after EOI. Depth is 16-bit greyscale PNG in millimetres at 256 × 192, confidence 8-bit greyscale PNG (0, 1, 2). Every candidate has a blur line, written in the same step as its JPEG. Keyframes are never stored twice: they stay in their bundle.
-- **Mesh history.** `history.bin` is a concatenation of blocks, one per changed mesh anchor per snapshot. Each block is raw DEFLATE (RFC 1951: Apple's `COMPRESSION_ZLIB`, read with Node's `inflateRawSync`) of the anchor's float32 vertices (x, y, z in the anchor's frame), uint32 triangle indices (3 per face) and uint8 classifications (one per face, the `ARMeshClassification` values of [capture-bundle.md](capture-bundle.md#meshsceneply)), all little-endian. A `remove` line has no block. The snapshot at stop holds every anchor, with the session-end transforms.
+- **Mesh history.** `history.bin` is a concatenation of blocks, one per changed mesh anchor per snapshot. Each block is raw DEFLATE (RFC 1951: Apple's `COMPRESSION_ZLIB`, read with Node's `inflateRawSync`) of the anchor's float32 vertices (x, y, z in the anchor's frame), uint32 triangle indices (3 per face) and uint8 classifications (one per face, the `ARMeshClassification` values of [capture-bundle.md](capture-bundle.md#meshsceneply)), all little-endian. A `remove` line has no block. The first snapshot and the final snapshot hold every anchor.
 - **Binary boundary results** in `boundary/<seq>.f32` are little-endian float32, exactly as JavaScript received them.
 
 ## Limits
@@ -195,7 +205,8 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 
 | Limit | Value | Applies to |
 | --- | --- | --- |
-| `maxRecordingBytes` | 8 GiB | The recording directory, or its export parts: 512 parts of 16 MiB |
+| `maxRecordingBytes` | 8 GiB | The recording directory |
+| `maxExportParts` | 4,096 | Parts of a replay set's export tar, 16 MiB each (64 GiB): the recording, the session's bundles and the tar's headers. `exportRecording` works out the tar's size before writing anything, and refuses, keeping the raw files, when it would need more |
 | `maxEntries` | 60,000 | Files and directories in the recording |
 | `maxSessionSeconds` | 1,800 (600 in `dense`) | `window.end_t − window.start_t` |
 | `maxJsonBytes` | 16 MiB | `recording.json` |
@@ -208,8 +219,8 @@ Written when the recording opens and rewritten when it closes. Until then `windo
 ## Export and import
 
 - **On the phone,** recordings are kept in `Library/Application Support/recordings/rec-<recording_id>/`, `NSFileProtectionCompleteUnlessOpen` while being written and `NSFileProtectionComplete` once closed, excluded from backup. Swift writes every file, the boundary trace included. Only `exports/` lives under Documents, the folder `UIFileSharingEnabled` exposes.
-- **Export.** `exportRecording(id)` packs the replay set (the recording and the session's bundles; an unrecorded session exports only its bundles, under the session's id) as one plain ustar tar, read under the bundle's tar rules ([capture-bundle.md](capture-bundle.md#ingest-and-validation)), with members under `rec-<recording_id>/` and `capture-<capture_id>/`. It splits the tar into 16 MiB parts (`UPLOAD_PART_BYTES`) in `Documents/exports/replay-<recording_id>/`: `0000.part`, `0001.part` and so on, plus `parts.json`: `recording_version` (1), `recording_id`, `tar_bytes` and `tar_sha256` for the whole tar, and `parts` (at most 512), each part's `name`, `bytes` and `sha256`. The parts and `parts.json` are `NSFileProtectionComplete` and excluded from backup. The raw files are deleted once the parts are written and hashed, and the parts once a pull has verified them. The development build refuses to export.
-- **Pull and import on the PC.** `pnpm rec pull` copies only the files `parts.json` lists, over USB, verifies them and removes them from the phone, into `.data/holding/<recording_id>/`. Until it exists, the Apple Devices app copies the parts straight into `.data/holding/<recording_id>/`, never into a folder that OneDrive or another cloud service syncs. `pnpm rec import` refuses a source folder outside `.data/`, reassembles and validates the set (`validate-recording`, `validate-bundle`), runs the face re-check over every image, and moves it to `.data/fixtures/recordings/<recording_id>/` with an `import.json`: `recording_version` (1), `recording_id`, `imported_at`, `reviewed_at` (`null` until `pnpm rec review`), `recheck` (the re-check's `detector`, `images_checked` and `images_deleted`, or `null` for a set with no images), and `deleted` (at most 60,000): every file deleted by the re-check or by a quarantine carried over from ingest, with its `path`, `frame` and `reason` (`recheck` or `quarantine`).
+- **Export.** `exportRecording(id)` packs the replay set (the recording and the session's bundles; an unrecorded session exports only its bundles, under the session's id) as one plain ustar tar, read under the bundle's tar rules ([capture-bundle.md](capture-bundle.md#ingest-and-validation)), with members under `rec-<recording_id>/` and `capture-<capture_id>/`. It splits the tar into 16 MiB parts (`UPLOAD_PART_BYTES`) in `Documents/exports/replay-<recording_id>/`: `0000.part`, `0001.part` and so on, plus `parts.json`: `recording_version` (1), `recording_id`, `tar_bytes` and `tar_sha256` for the whole tar, and `parts` (at most `maxExportParts`), each part's `name`, `bytes` and `sha256`. The parts and `parts.json` are `NSFileProtectionComplete` and excluded from backup. The raw files are deleted once the parts are written and hashed, and the parts once a pull has verified them. The development build refuses to export.
+- **Pull and import on the PC.** `pnpm rec pull` copies only the files `parts.json` lists, over USB, verifies them and removes them from the phone, into `.data/holding/<recording_id>/`. Until it exists, the Apple Devices app copies the parts straight into `.data/holding/<recording_id>/`, never into a folder that OneDrive or another cloud service syncs. `pnpm rec import` refuses a source folder outside `.data/`, reassembles and validates the set (`validate-recording`, `validate-bundle`), runs the face re-check over every image, and moves it to `.data/fixtures/recordings/<recording_id>/` with an `import.json`: `recording_version` (1), `recording_id`, `imported_at`, `reviewed_at` (`null` until `pnpm rec review`), `recheck` (the re-check's `detector`, `images_checked` and `images_deleted`, or `null` for a set with no images), and `deleted` (at most 60,000): every file deleted by the re-check or by a quarantine carried over from ingest, with its `path` (a recording's candidate, depth or confidence image, or a bundle's keyframe, depth or confidence image), `frame` and `reason` (`recheck` or `quarantine`). `pnpm rec import` checks that each path's id is the recording's or one of the session's capture ids, that `frame` is the file's frame, and that the file is gone.
 
 ## Privacy rules
 

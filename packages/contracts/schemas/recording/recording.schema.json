@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/recording.schema.json",
   "title": "RecordingManifest",
-  "description": "recording.json of a session recording, recording_version 1 (docs/session-recording.md): written by the Swift recorder when the recording opens and rewritten when it closes. Until it closes, window.end_t, window.ended and rates are null, closed is false and files is empty. Unknown fields are rejected; adding one is a recording_version bump. Checked by validate-recording, not by this schema: files lists every other file exactly once with matching bytes and SHA-256, window.end_t is not before window.start_t, each segment's end_t is not before its start_t, and build.profile is synthetic exactly when origin is.",
+  "description": "recording.json of a session recording, recording_version 1 (docs/session-recording.md): written by the Swift recorder when the recording opens and rewritten when it closes. Until it closes, window.end_t, window.ended and rates are null, closed is false and files is empty; it is rewritten again when a listed segment finishes or is discarded after the close (segments only). Unknown fields are rejected; adding one is a recording_version bump. Checked by validate-recording, not by this schema: files lists every other file exactly once with matching bytes and SHA-256, window.end_t is not before window.start_t, each segment's end_t is not before its start_t, build.profile is synthetic exactly when origin is, a segment with a manifest_sha256 has an end_t, and once the session has stopped every kept segment has both.",
   "type": "object",
   "properties": {
     "recording_version": {
@@ -67,6 +67,17 @@
     "arkit": {
       "$ref": "#/$defs/arkit"
     },
+    "motion": {
+      "description": "Device motion's configuration, or null when device motion is unavailable.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/motion"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "detector_versions": {
       "description": "As the bundle manifest's privacy.detector_versions; null in lean, which runs no detectors.",
       "anyOf": [
@@ -79,7 +90,7 @@
       ]
     },
     "venues": {
-      "description": "Ids of the seeded venues walked, chosen before the start, so a recording can be found and deleted on request.",
+      "description": "Ids of the seeded venues walked, chosen before the start, so a recording can be found and deleted on request. At most 50.",
       "type": "array",
       "items": {
         "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
@@ -87,7 +98,7 @@
       "maxItems": 50
     },
     "segments": {
-      "description": "One per bundle the session wrote, in order.",
+      "description": "One per bundle the session started while the recording was open, in order, listed when it starts. At most 200.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/segment"
@@ -120,6 +131,7 @@
     "clocks",
     "window",
     "arkit",
+    "motion",
     "detector_versions",
     "venues",
     "segments",
@@ -368,7 +380,7 @@
     },
     "segment": {
       "title": "RecordingSegment",
-      "description": "One bundle the session wrote.",
+      "description": "One bundle the session started while the recording was open.",
       "type": "object",
       "properties": {
         "capture_id": {
@@ -380,10 +392,13 @@
           ]
         },
         "manifest_sha256": {
-          "description": "SHA-256 of the bundle's manifest.json bytes.",
-          "allOf": [
+          "description": "SHA-256 of the bundle's manifest.json bytes, or null while it has none (still open, or discarded before it got one).",
+          "anyOf": [
             {
               "$ref": "../capture-bundle/defs.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
             }
           ]
         },
@@ -396,10 +411,13 @@
           ]
         },
         "end_t": {
-          "description": "When it ended.",
-          "allOf": [
+          "description": "When the segment ended, or null until it does.",
+          "anyOf": [
             {
               "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+            },
+            {
+              "type": "null"
             }
           ]
         },
@@ -443,6 +461,29 @@
       },
       "required": ["path", "bytes", "sha256"],
       "additionalProperties": false
+    },
+    "motion": {
+      "title": "MotionConfiguration",
+      "description": "How device motion was started.",
+      "type": "object",
+      "properties": {
+        "reference_frame": {
+          "$ref": "#/$defs/referenceFrame"
+        }
+      },
+      "required": ["reference_frame"],
+      "additionalProperties": false
+    },
+    "referenceFrame": {
+      "title": "MotionReferenceFrame",
+      "description": "The CMAttitudeReferenceFrame motion.jsonl's attitude and heading use. heading is null in the two arbitrary frames; it is magnetic or true north in the other two.",
+      "type": "string",
+      "enum": [
+        "xArbitraryZVertical",
+        "xArbitraryCorrectedZVertical",
+        "xMagneticNorthZVertical",
+        "xTrueNorthZVertical"
+      ]
     }
   }
 }

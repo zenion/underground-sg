@@ -5,6 +5,7 @@
 import type {
   AnchorHistoryKind,
   CandidateStatus,
+  MotionReferenceFrame,
   RecordingEnded,
   RecordingEventKind,
   RecordingProfile,
@@ -72,8 +73,14 @@ const MiB = 1024 * KiB;
 const GiB = 1024 * MiB;
 
 export interface RecordingLimits {
-  /** The recording directory, or its export parts: 512 parts of 16 MiB. */
+  /** The recording directory. */
   readonly maxRecordingBytes: number;
+  /**
+   * Parts of a replay set's export tar (the recording, the session's bundles and the tar's
+   * headers), `UPLOAD_PART_BYTES` each: 4096 parts is 64 GiB, and four-digit part names still
+   * fit. `exportRecording` works out the tar's size first and refuses when it would need more.
+   */
+  readonly maxExportParts: number;
   /** Files and directories in the recording. */
   readonly maxEntries: number;
   /** `window.end_t − window.start_t`, in `lean` and `standard`. */
@@ -104,6 +111,7 @@ export interface RecordingLimits {
  */
 export const DEFAULT_RECORDING_LIMITS: RecordingLimits = Object.freeze({
   maxRecordingBytes: 8 * GiB,
+  maxExportParts: 4096,
   maxEntries: 60_000,
   maxSessionSeconds: 1_800,
   maxDenseSessionSeconds: 600,
@@ -178,3 +186,83 @@ export const RECORDING_EVENT_KINDS = [
 
 /** The `detail` of a `degradation` event: the recorder's steps, in order. */
 export const DEGRADATION_STEPS = ["fewer_candidates", "no_mesh_history", "no_recording"] as const;
+
+/** `motion.reference_frame` in recording.json: the CMAttitudeReferenceFrame device motion used. */
+export const MOTION_REFERENCE_FRAMES = [
+  "xArbitraryZVertical",
+  "xArbitraryCorrectedZVertical",
+  "xMagneticNorthZVertical",
+  "xTrueNorthZVertical",
+] as const satisfies readonly MotionReferenceFrame[];
+
+/**
+ * What each event kind's `detail` holds (docs/session-recording.md, events.jsonl). The schema
+ * allows any short code, so validate-recording checks this, and the Swift recorder writes events
+ * from a typed enum that can only produce these. `null`: always null. `ended`: a `window.ended`
+ * value. `thermal`: a thermal state. `degradation`: one of `DEGRADATION_STEPS`. `uuid`: a
+ * lowercase UUID. `integer`: decimal digits, with an optional minus. `code`: a short lowercase
+ * code.
+ */
+export type EventDetailRule =
+  | "null"
+  | "ended"
+  | "thermal"
+  | "degradation"
+  | "uuid"
+  | "integer"
+  | "code";
+
+export const RECORDING_EVENT_DETAILS: Readonly<
+  Record<(typeof RECORDING_EVENT_KINDS)[number], EventDetailRule>
+> = Object.freeze({
+  recording_opened: "null",
+  recording_closed: "ended",
+  configuration: "code",
+  session_failed: "integer",
+  interruption_began: "null",
+  interruption_ended: "null",
+  relocalization_began: "null",
+  relocalization_ended: "null",
+  image_anchor_detected: "uuid",
+  thermal: "thermal",
+  memory_warning: "null",
+  background: "null",
+  foreground: "null",
+  screenshot: "null",
+  screen_capture_began: "null",
+  screen_capture_ended: "null",
+  altimeter_unavailable: "null",
+  altimeter_denied: "null",
+  motion_unavailable: "null",
+  degradation: "degradation",
+});
+
+/** The thermal states a `thermal` event's detail and telemetry use (ProcessInfo.thermalState). */
+export const THERMAL_STATES = ["nominal", "fair", "serious", "critical"] as const;
+
+/**
+ * Whether `detail` is what `RECORDING_EVENT_DETAILS` allows for `kind`. For validate-recording;
+ * the result says only yes or no, never echoing the value.
+ */
+export function eventDetailAllowed(
+  kind: (typeof RECORDING_EVENT_KINDS)[number],
+  detail: string | null,
+): boolean {
+  const rule = RECORDING_EVENT_DETAILS[kind];
+  if (rule === "null") return detail === null;
+  if (detail === null) return false;
+  switch (rule) {
+    case "ended":
+      return (RECORDING_ENDED as readonly string[]).includes(detail);
+    case "thermal":
+      return (THERMAL_STATES as readonly string[]).includes(detail);
+    case "degradation":
+      return (DEGRADATION_STEPS as readonly string[]).includes(detail);
+    case "uuid":
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(detail);
+    case "integer":
+      return /^-?[0-9]{1,10}$/.test(detail);
+    case "code":
+      return /^[a-z][a-z0-9_]{0,63}$/.test(detail);
+  }
+}

@@ -58,6 +58,7 @@ export const recording: RecordingManifest = {
     video_format: { width: 1920, height: 1440, fps: 60 },
     world_alignment: "gravity",
   },
+  motion: { reference_frame: "xArbitraryCorrectedZVertical" },
   detector_versions: null,
   venues: ["36632586-e1fa-4e10-800a-81acf0eab09a", "dabbc03c-39d9-4947-8dbc-b2aa0c42e5d2"],
   segments: [],
@@ -122,6 +123,8 @@ export const anchorLine: AnchorHistoryLine = {
   op: "update",
   transform: pose,
   frame: null,
+  final: false,
+  capture_id: null,
 };
 
 export const eventLines: RecordingEventLine[] = [
@@ -173,6 +176,7 @@ export const meshHistoryLines: MeshHistoryLine[] = [
     vertices: 3120,
     faces: 5840,
     final: false,
+    capture_id: null,
   },
   {
     t: 30,
@@ -184,6 +188,7 @@ export const meshHistoryLines: MeshHistoryLine[] = [
     vertices: null,
     faces: null,
     final: false,
+    capture_id: null,
   },
 ];
 

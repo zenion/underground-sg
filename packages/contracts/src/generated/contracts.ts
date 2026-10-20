@@ -276,6 +276,14 @@ export type FrameSemantic = "sceneDepth" | "smoothedSceneDepth";
  */
 export type WorldAlignment = "gravity" | "gravityAndHeading" | "camera";
 /**
+ * The CMAttitudeReferenceFrame motion.jsonl's attitude and heading use. heading is null in the two arbitrary frames; it is magnetic or true north in the other two.
+ */
+export type MotionReferenceFrame =
+  | "xArbitraryZVertical"
+  | "xArbitraryCorrectedZVertical"
+  | "xMagneticNorthZVertical"
+  | "xTrueNorthZVertical";
+/**
  * Path of a recording file relative to rec-<recording_id>/, using / as the separator. Only the files of the recording layout are allowed; recording.json does not list itself.
  */
 export type RecordingPath = string;
@@ -295,7 +303,7 @@ export type CandidateStatus =
   | "dropped:disk"
   | "dropped:blur";
 /**
- * A unit quaternion [x, y, z, w].
+ * An approximately unit quaternion [x, y, z, w], as Core Motion reports it: not renormalised, so a component can round just past 1. validate-recording checks the norm within 1e-3.
  *
  * @minItems 4
  * @maxItems 4
@@ -2286,7 +2294,7 @@ export interface RecordingDocuments {
   "import.json": RecordingImport;
 }
 /**
- * recording.json of a session recording, recording_version 1 (docs/session-recording.md): written by the Swift recorder when the recording opens and rewritten when it closes. Until it closes, window.end_t, window.ended and rates are null, closed is false and files is empty. Unknown fields are rejected; adding one is a recording_version bump. Checked by validate-recording, not by this schema: files lists every other file exactly once with matching bytes and SHA-256, window.end_t is not before window.start_t, each segment's end_t is not before its start_t, and build.profile is synthetic exactly when origin is.
+ * recording.json of a session recording, recording_version 1 (docs/session-recording.md): written by the Swift recorder when the recording opens and rewritten when it closes. Until it closes, window.end_t, window.ended and rates are null, closed is false and files is empty; it is rewritten again when a listed segment finishes or is discarded after the close (segments only). Unknown fields are rejected; adding one is a recording_version bump. Checked by validate-recording, not by this schema: files lists every other file exactly once with matching bytes and SHA-256, window.end_t is not before window.start_t, each segment's end_t is not before its start_t, build.profile is synthetic exactly when origin is, a segment with a manifest_sha256 has an end_t, and once the session has stopped every kept segment has both.
  */
 export interface RecordingManifest {
   /**
@@ -2320,17 +2328,21 @@ export interface RecordingManifest {
   window: RecordingWindow;
   arkit: ArkitConfiguration;
   /**
+   * Device motion's configuration, or null when device motion is unavailable.
+   */
+  motion: MotionConfiguration | null;
+  /**
    * As the bundle manifest's privacy.detector_versions; null in lean, which runs no detectors.
    */
   detector_versions: DetectorVersions | null;
   /**
-   * Ids of the seeded venues walked, chosen before the start, so a recording can be found and deleted on request.
+   * Ids of the seeded venues walked, chosen before the start, so a recording can be found and deleted on request. At most 50.
    *
    * @maxItems 50
    */
   venues: Uuid[];
   /**
-   * One per bundle the session wrote, in order.
+   * One per bundle the session started while the recording was open, in order, listed when it starts. At most 200.
    *
    * @maxItems 200
    */
@@ -2459,7 +2471,13 @@ export interface ArVideoFormat {
   fps: number;
 }
 /**
- * One bundle the session wrote.
+ * How device motion was started.
+ */
+export interface MotionConfiguration {
+  reference_frame: MotionReferenceFrame;
+}
+/**
+ * One bundle the session started while the recording was open.
  */
 export interface RecordingSegment {
   /**
@@ -2467,17 +2485,17 @@ export interface RecordingSegment {
    */
   capture_id: Uuid;
   /**
-   * SHA-256 of the bundle's manifest.json bytes.
+   * SHA-256 of the bundle's manifest.json bytes, or null while it has none (still open, or discarded before it got one).
    */
-  manifest_sha256: Sha256;
+  manifest_sha256: Sha256 | null;
   /**
    * When the segment started.
    */
   start_t: SessionTime;
   /**
-   * When it ended.
+   * When the segment ended, or null until it does.
    */
-  end_t: SessionTime;
+  end_t: SessionTime | null;
   /**
    * The session frame of the bundle's frame 0: a bundle's frame is the session frame minus this.
    */
@@ -2582,12 +2600,12 @@ export interface StageTimings {
   write?: number;
 }
 /**
- * One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. Checked by validate-recording, not by this schema: t strictly increases.
+ * One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. Checked by validate-recording, not by this schema: t strictly increases, the attitude's norm is within 1e-3 of 1, and heading is null in the arbitrary reference frames.
  */
 export interface MotionLine {
   t: SessionTime;
   /**
-   * CMDeviceMotion.attitude as a quaternion, in Core Motion's reference frame.
+   * CMDeviceMotion.attitude as a quaternion, in recording.json's motion.reference_frame.
    */
   attitude: Quaternion;
   /**
@@ -2604,7 +2622,7 @@ export interface MotionLine {
   rotation: DeviceVector;
   magnetic: MagneticField;
   /**
-   * Degrees from north, 0 up to 360, or null when Core Motion gives none.
+   * Degrees clockwise from the north of motion.reference_frame (magnetic or true), from 0 up to 360; null in the two arbitrary frames, and when Core Motion gives none.
    */
   heading: number | null;
 }
@@ -2633,7 +2651,7 @@ export interface AltitudeLine {
   pressure_kpa: number;
 }
 /**
- * One line of anchors.jsonl in a session recording, recording_version 1 (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh snapshot and at stop. Updates only for anchors that moved more than about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by this schema: t never decreases, transform is null exactly for remove, and frame is set exactly for keyframe anchors.
+ * One line of anchors.jsonl in a session recording, recording_version 1 (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh snapshot. The first sample, when the recording opens, writes every anchor as add; the final sample, when it closes, writes every keyframe, image and marked anchor with final true and no movement threshold. Otherwise updates only for anchors that moved more than about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by this schema: t never decreases, an anchor's first line is an add, transform is null exactly for remove, frame is set exactly for keyframe anchors, and capture_id is set only on final lines.
  */
 export interface AnchorHistoryLine {
   /**
@@ -2654,9 +2672,17 @@ export interface AnchorHistoryLine {
    * The keyframe's frame for a keyframe anchor, else null.
    */
   frame: FrameIndex | null;
+  /**
+   * true for the lines of a final sample (written whether or not the anchor moved).
+   */
+  final: boolean;
+  /**
+   * On a final sample taken at a segment's session-end reads (with continuous_session), that segment's capture_id; else null.
+   */
+  capture_id: Uuid | null;
 }
 /**
- * One line of events.jsonl in a session recording, recording_version 1 (docs/session-recording.md). detail is a short code, never a pose, a time or a fix. Checked by validate-recording, not by this schema: t never decreases.
+ * One line of events.jsonl in a session recording, recording_version 1 (docs/session-recording.md). detail is a short code, never a pose, a time or a fix; the Swift recorder writes events from a typed enum. Checked by validate-recording, not by this schema: t never decreases, and each kind's detail is what RECORDING_EVENT_DETAILS in packages/contracts says (null for most kinds; a RecordingEnded value for recording_closed; a ThermalState for thermal; a degradation step for degradation; a lowercase UUID for image_anchor_detected; decimal digits for session_failed; a short lowercase code for configuration).
  */
 export interface RecordingEventLine {
   t: SessionTime;
@@ -2667,7 +2693,7 @@ export interface RecordingEventLine {
   detail: string | null;
 }
 /**
- * One line of actions.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one call JavaScript made to the capture module, with what native code returned. Checked by validate-recording, not by this schema: t never decreases, and args and result parse as JSON.
+ * One line of actions.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one call JavaScript made to the capture module during the session, with what native code returned. The recorder's plumbing (appendBoundary, listRecordings, exportRecording, deleteRecording) is never logged. A value that would pass the JSON-text bound or the line limit is replaced by the marker {"omitted":"too_large","bytes":N}. Checked by validate-recording, not by this schema: t never decreases, args and result parse as JSON, and call is not a plumbing call.
  */
 export interface ActionLine {
   /**
@@ -2683,7 +2709,7 @@ export interface ActionLine {
    */
   args: JsonText;
   /**
-   * What native code returned, as JSON text, or null for nothing.
+   * What native code returned, as JSON text, or null for nothing or for a binary result (which only boundary/<seq>.f32 holds).
    */
   result: JsonText | null;
   /**
@@ -2750,7 +2776,7 @@ export interface StagePercentile {
   p95: number;
 }
 /**
- * One line of boundary.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one event or result JavaScript received from the capture module, exactly as it received it. TypeScript writes these lines and hands them to the module (appendBoundary). Checked by validate-recording, not by this schema: seq strictly increases, t never decreases, value parses as JSON, and binary is boundary/<seq>.f32 for this line's seq.
+ * One line of boundary.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one event or result JavaScript received from the capture module, exactly as it received it. TypeScript writes these lines and hands them to the module (appendBoundary). The recorder's plumbing (appendBoundary and the recording management calls) gets no line. Checked by validate-recording, not by this schema: seq strictly increases, t never decreases, exactly one of value and binary is non-null, value parses as JSON, and binary is boundary/<seq>.f32 for this line's seq.
  */
 export interface BoundaryLine {
   /**
@@ -2775,7 +2801,7 @@ export interface BoundaryLine {
   binary: string | null;
 }
 /**
- * One line of mesh/history.jsonl in a session recording, recording_version 1 (docs/session-recording.md): the index of one block of mesh/history.bin, one per changed mesh anchor per snapshot. Checked by validate-recording, not by this schema: t never decreases; transform, offset, bytes, vertices and faces are null exactly for remove; and each block lies inside history.bin.
+ * One line of mesh/history.jsonl in a session recording, recording_version 1 (docs/session-recording.md): the index of one block of mesh/history.bin. The first snapshot, when the recording opens, writes every mesh anchor as add; later snapshots write anchors whose geometry changed; the final snapshot, when it closes, writes every mesh anchor with final true. Checked by validate-recording, not by this schema: t never decreases; an anchor's first line is an add; transform, offset, bytes, vertices and faces are null exactly for remove; each block lies inside history.bin; and capture_id is set only on final lines.
  */
 export interface MeshHistoryLine {
   /**
@@ -2808,9 +2834,13 @@ export interface MeshHistoryLine {
    */
   faces: number | null;
   /**
-   * true for the snapshot at stop, which holds every anchor with the session-end transforms.
+   * true for a final snapshot, which holds every mesh anchor with the transforms read at that moment.
    */
   final: boolean;
+  /**
+   * On a final snapshot taken at a segment's session-end reads (with continuous_session), that segment's capture_id; else null.
+   */
+  capture_id: Uuid | null;
 }
 /**
  * parts.json of a replay set's export, recording_version 1 (docs/session-recording.md): written by exportRecording beside the parts in Documents/exports/replay-<recording_id>/; pnpm rec pull copies only the parts it lists. Checked by the PC tools, not by this schema: the names run 0000.part, 0001.part and so on without gaps, every part but the last is UPLOAD_PART_BYTES long, and the bytes add up to tar_bytes.
@@ -2833,9 +2863,9 @@ export interface ExportParts {
    */
   tar_sha256: Sha256;
   /**
-   * The parts in order. At most 512 (8 GiB in 16 MiB parts).
+   * The parts in order. At most 4096 (DEFAULT_RECORDING_LIMITS.maxExportParts, 64 GiB in 16 MiB parts).
    *
-   * @maxItems 512
+   * @maxItems 4096
    */
   parts: ExportPart[];
 }
@@ -2857,7 +2887,7 @@ export interface ExportPart {
   sha256: Sha256;
 }
 /**
- * import.json of an imported replay set on the PC, recording_version 1 (docs/session-recording.md): written by pnpm rec import in .data/fixtures/recordings/<recording_id>/, and updated by pnpm rec review and when a quarantine is carried over. Never leaves the PC.
+ * import.json of an imported replay set on the PC, recording_version 1 (docs/session-recording.md): written by pnpm rec import in .data/fixtures/recordings/<recording_id>/, and updated by pnpm rec review and when a quarantine is carried over. Never leaves the PC. Checked by pnpm rec import, not by this schema: each deletion's id is the recording's or one of the session's capture ids, frame is the file's frame, and the file is gone.
  */
 export interface RecordingImport {
   /**
@@ -2909,7 +2939,7 @@ export interface ImportRecheck {
  */
 export interface ImportDeletion {
   /**
-   * Its path in the replay set: a recording's candidate or a bundle's keyframe, with its depth and confidence.
+   * Its path in the replay set: a recording's candidate, depth or confidence image, or a bundle's keyframe, depth or confidence image.
    */
   path: string;
   frame: FrameIndex;

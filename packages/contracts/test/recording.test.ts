@@ -9,7 +9,10 @@ import {
   CANDIDATE_STATUSES,
   DEFAULT_RECORDING_LIMITS,
   DEGRADATION_STEPS,
+  eventDetailAllowed,
+  MOTION_REFERENCE_FRAMES,
   RECORDING_ENDED,
+  RECORDING_EVENT_DETAILS,
   RECORDING_EVENT_KINDS,
   RECORDING_PROFILES,
   RECORDING_SCHEMA_FILES,
@@ -35,6 +38,16 @@ function validate(name: Name, document: unknown): { valid: boolean; errors: stri
 }
 
 const DOC = readFileSync(new URL("../../../docs/session-recording.md", import.meta.url), "utf8");
+
+/** A kept, finished segment. */
+const SEGMENT = {
+  capture_id: "8f9585da-8554-4b8a-ba4e-0f390ccd3802",
+  manifest_sha256: "3f2a9c4e8b1d7f6a0c5e2b9d4a7f1c8e6b3d0a9f5c2e7b4d1a8f6c3e0b9d2a7f",
+  start_t: 3.2,
+  end_t: 211.4,
+  frame_offset: 0,
+  kept: true,
+};
 
 const valid: Record<string, readonly [Name, unknown]> = {
   "recording.json once closed": ["recording.json", ex.recording],
@@ -154,11 +167,74 @@ const valid: Record<string, readonly [Name, unknown]> = {
     "mesh/history.jsonl",
     { ...ex.meshHistoryLines[0], op: "update", final: true },
   ],
+  "a final mesh snapshot at a segment's session-end reads": [
+    "mesh/history.jsonl",
+    { ...ex.meshHistoryLines[0], op: "update", final: true, capture_id: SEGMENT.capture_id },
+  ],
+  "a final anchor sample line": [
+    "anchors.jsonl",
+    { ...ex.anchorLine, kind: "keyframe", frame: 1203, final: true },
+  ],
+  "a final anchor line at a segment's session-end reads": [
+    "anchors.jsonl",
+    { ...ex.anchorLine, final: true, capture_id: SEGMENT.capture_id },
+  ],
+  "a segment still open when the recording closed on heat": [
+    "recording.json",
+    {
+      ...ex.recording,
+      window: { start_t: 3.2, end_t: 300.5, ended: "heat", trimmed: false },
+      segments: [{ ...SEGMENT, end_t: null, manifest_sha256: null }],
+    },
+  ],
+  "a segment discarded before it had a manifest": [
+    "recording.json",
+    { ...ex.recording, segments: [{ ...SEGMENT, manifest_sha256: null, kept: false }] },
+  ],
+  "device motion unavailable": ["recording.json", { ...ex.recording, motion: null }],
+  "device motion in true north": [
+    "recording.json",
+    { ...ex.recording, motion: { reference_frame: "xTrueNorthZVertical" } },
+  ],
+  "50 venues": [
+    "recording.json",
+    { ...ex.recording, venues: new Array(50).fill(ex.recording.venues[0]) },
+  ],
+  "an attitude rounding just past 1, as Core Motion reports it": [
+    "motion.jsonl",
+    { ...ex.motionLine, attitude: [0, 0, 0, 1.0000001192092896] },
+  ],
+  "an action whose value was too large, as the marker": [
+    "actions.jsonl",
+    { ...ex.actionLine, result: '{"omitted":"too_large","bytes":70211}' },
+  ],
+  "an action with a binary result": [
+    "actions.jsonl",
+    { ...ex.actionLine, call: "floorTriangles", args: "[]", result: null },
+  ],
   "parts.json": ["parts.json", ex.parts],
   "import.json": ["import.json", ex.importFile],
   "import.json of a lean set, reviewed": [
     "import.json",
     { ...ex.importFile, reviewed_at: "2027-01-12T09:30:00+08:00", recheck: null, deleted: [] },
+  ],
+  "import.json deleting a recording's candidate and a bundle's depth image": [
+    "import.json",
+    {
+      ...ex.importFile,
+      deleted: [
+        {
+          path: `rec-${ex.recording.recording_id}/candidates/001203.jpg`,
+          frame: 1203,
+          reason: "recheck",
+        },
+        {
+          path: `capture-${SEGMENT.capture_id}/depth/000812.png`,
+          frame: 812,
+          reason: "quarantine",
+        },
+      ],
+    },
   ],
 };
 
@@ -235,6 +311,71 @@ const invalid: Record<string, readonly [Name, unknown]> = {
   ],
   "a heading of 360": ["motion.jsonl", { ...ex.motionLine, heading: 360 }],
   "a quaternion of three": ["motion.jsonl", { ...ex.motionLine, attitude: [0, 0, 1] }],
+  "51 venues": [
+    "recording.json",
+    { ...ex.recording, venues: new Array(51).fill(ex.recording.venues[0]) },
+  ],
+  "an unknown motion reference frame": [
+    "recording.json",
+    { ...ex.recording, motion: { reference_frame: "xMagneticNorth" } },
+  ],
+  "no motion field": [
+    "recording.json",
+    variant(ex.recording, (r) => {
+      delete (r as Partial<typeof r>).motion;
+    }),
+  ],
+  "an anchor line without final": [
+    "anchors.jsonl",
+    variant(ex.anchorLine, (a) => {
+      delete (a as Partial<typeof a>).final;
+    }),
+  ],
+  "a mesh-history line without capture_id": [
+    "mesh/history.jsonl",
+    variant(ex.meshHistoryLines[0], (h) => {
+      delete (h as Partial<NonNullable<typeof h>>).capture_id;
+    }),
+  ],
+  "an uppercase capture_id on a final anchor line": [
+    "anchors.jsonl",
+    { ...ex.anchorLine, final: true, capture_id: SEGMENT.capture_id.toUpperCase() },
+  ],
+  "a recording keyframe in import.json": [
+    "import.json",
+    {
+      ...ex.importFile,
+      deleted: [
+        {
+          path: `rec-${ex.recording.recording_id}/keyframes/000001.jpg`,
+          frame: 1,
+          reason: "recheck",
+        },
+      ],
+    },
+  ],
+  "a bundle candidate in import.json": [
+    "import.json",
+    {
+      ...ex.importFile,
+      deleted: [
+        {
+          path: `capture-${SEGMENT.capture_id}/candidates/000001.jpg`,
+          frame: 1,
+          reason: "recheck",
+        },
+      ],
+    },
+  ],
+  "a depth image as JPEG in import.json": [
+    "import.json",
+    {
+      ...ex.importFile,
+      deleted: [
+        { path: `rec-${ex.recording.recording_id}/depth/000001.jpg`, frame: 1, reason: "recheck" },
+      ],
+    },
+  ],
   "absolute altitude": ["altitude.jsonl", { ...ex.altitudeLine, altitude_m: 12 }],
   "an unknown anchor kind": ["anchors.jsonl", { ...ex.anchorLine, kind: "plane" }],
   "an unknown event": ["events.jsonl", { t: 1, kind: "crash", detail: null }],
@@ -324,21 +465,55 @@ describe("constants", () => {
     expect(enumOf("recording/frame-line.schema.json", "candidate")).toEqual(CANDIDATE_STATUSES);
     expect(enumOf("recording/anchor-line.schema.json", "kind")).toEqual(ANCHOR_HISTORY_KINDS);
     expect(enumOf("recording/event-line.schema.json", "kind")).toEqual(RECORDING_EVENT_KINDS);
+    expect(enumOf("recording/recording.schema.json", "referenceFrame")).toEqual(
+      MOTION_REFERENCE_FRAMES,
+    );
+    expect(Object.keys(RECORDING_EVENT_DETAILS).sort()).toEqual([...RECORDING_EVENT_KINDS].sort());
   });
 
   test("the limits", () => {
     const { maxJpegBytes, maxPngBytes, maxImagePixels } = DEFAULT_BUNDLE_LIMITS;
     expect(DEFAULT_RECORDING_LIMITS).toMatchObject({ maxJpegBytes, maxPngBytes, maxImagePixels });
-    expect(DEFAULT_RECORDING_LIMITS.maxRecordingBytes).toBe(512 * UPLOAD_PART_BYTES);
     const recording = readSchema(FILES["recording.json"])["properties"] as Record<
       string,
       SchemaObject
     >;
     expect(recording["files"]?.["maxItems"]).toBe(DEFAULT_RECORDING_LIMITS.maxEntries);
     const parts = readSchema(FILES["parts.json"])["properties"] as Record<string, SchemaObject>;
-    expect((parts["parts"]?.["maxItems"] as number) * UPLOAD_PART_BYTES).toBe(
-      DEFAULT_RECORDING_LIMITS.maxRecordingBytes,
-    );
+    expect(parts["parts"]?.["maxItems"]).toBe(DEFAULT_RECORDING_LIMITS.maxExportParts);
+    // A full recording plus the bundles of a long session still fits the export, with room for
+    // the tar's 512-byte headers.
+    const exportBytes = DEFAULT_RECORDING_LIMITS.maxExportParts * UPLOAD_PART_BYTES;
+    expect(exportBytes).toBeGreaterThanOrEqual(DEFAULT_RECORDING_LIMITS.maxRecordingBytes * 4);
+    // Four-digit part names (0000.part to 9999.part).
+    expect(DEFAULT_RECORDING_LIMITS.maxExportParts).toBeLessThanOrEqual(10_000);
+  });
+
+  test("event details follow their kind's rule", () => {
+    const cases: [(typeof RECORDING_EVENT_KINDS)[number], string | null, boolean][] = [
+      ["recording_opened", null, true],
+      ["recording_opened", "23.415", false],
+      ["recording_closed", "end_anchor", true],
+      ["recording_closed", null, false],
+      ["thermal", "serious", true],
+      ["thermal", "hot", false],
+      ["thermal", "1.2934815", false],
+      ["degradation", "no_mesh_history", true],
+      ["degradation", "noMeshHistory", false],
+      ["image_anchor_detected", "0b4e2d8f-61a7-4c3e-9d25-7f1a8c6e3b90", true],
+      ["image_anchor_detected", "0B4E2D8F-61A7-4C3E-9D25-7F1A8C6E3B90", false],
+      ["session_failed", "102", true],
+      ["session_failed", "102.5", false],
+      ["configuration", "mesh_classification_depth", true],
+      ["configuration", "2026-10-20T00:15:02.104Z", false],
+      ["configuration", null, false],
+    ];
+    for (const [kind, detail, allowed] of cases) {
+      expect(
+        eventDetailAllowed(kind, detail),
+        `${kind} case ${cases.findIndex((c) => c[0] === kind && c[1] === detail)}`,
+      ).toBe(allowed);
+    }
   });
 
   test("the files Swift writes have their own recording schemas", () => {
@@ -369,5 +544,39 @@ describe("the doc", () => {
 
   test("says recording_version 1", () => {
     expect(DOC).toContain(`This is \`recording_version\` ${RECORDING_VERSION}.`);
+  });
+
+  /** The doc's row for `field` in a Markdown table: the line starting with "| `field`". */
+  const row = (field: string): string =>
+    DOC.split("\n").find((line) => line.startsWith(`| \`${field}\``)) ?? "";
+
+  test("each event kind's row in the events table says its detail rule", () => {
+    const words: Record<string, RegExp> = {
+      null: /\| `null` \|$/,
+      ended: /window\.ended/,
+      thermal: /`nominal`, `fair`, `serious` or `critical`/,
+      degradation: /`fewer_candidates`, `no_mesh_history` or `no_recording`/,
+      uuid: /UUID/,
+      integer: /decimal digits/,
+      code: /short lowercase code/,
+    };
+    const eventRow = (kind: string): string =>
+      DOC.split("\n").find(
+        (line) => line.startsWith("| `") && line.split("|")[1]?.includes(`\`${kind}\``),
+      ) ?? "";
+    for (const [kind, rule] of Object.entries(RECORDING_EVENT_DETAILS)) {
+      expect(eventRow(kind), kind).toMatch(words[rule] ?? /^$/);
+    }
+  });
+
+  test("the list bounds in recording.json's table match the schema", () => {
+    const properties = readSchema(FILES["recording.json"])["properties"] as Record<
+      string,
+      SchemaObject
+    >;
+    for (const field of ["venues", "segments", "files"]) {
+      const bound = /\(at most ([0-9,]+)/.exec(row(field))?.[1]?.replaceAll(",", "");
+      expect(Number(bound), field).toBe(properties[field]?.["maxItems"]);
+    }
   });
 });

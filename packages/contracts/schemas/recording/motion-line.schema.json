@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/motion-line.schema.json",
   "title": "MotionLine",
-  "description": "One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. Checked by validate-recording, not by this schema: t strictly increases.",
+  "description": "One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. Checked by validate-recording, not by this schema: t strictly increases, the attitude's norm is within 1e-3 of 1, and heading is null in the arbitrary reference frames.",
   "type": "object",
   "properties": {
     "t": {
       "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
     },
     "attitude": {
-      "description": "CMDeviceMotion.attitude as a quaternion, in Core Motion's reference frame.",
+      "description": "CMDeviceMotion.attitude as a quaternion, in recording.json's motion.reference_frame.",
       "allOf": [
         {
           "$ref": "defs.schema.json#/$defs/quaternion"
@@ -44,7 +44,7 @@
       "$ref": "#/$defs/magnetic"
     },
     "heading": {
-      "description": "Degrees from north, 0 up to 360, or null when Core Motion gives none.",
+      "description": "Degrees clockwise from the north of motion.reference_frame (magnetic or true), from 0 up to 360; null in the two arbitrary frames, and when Core Motion gives none.",
       "anyOf": [
         {
           "type": "number",
