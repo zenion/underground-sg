@@ -2,6 +2,6 @@
   "platforms": ["apple"],
   "apple": {
     "modules": ["CaptureNativeModule"],
-    "podspecPath": ["ios/CaptureNative.podspec", "CaptureCore.podspec"]
+    "podspecPath": ["ios/CaptureNative.podspec", "CaptureCore.podspec", "CaptureIO.podspec"]
   }
 }

@@ -21,7 +21,7 @@ describe("which pods are checked", () => {
         "utf8",
       ),
     );
-    expect(podNames(config)).toEqual(["CaptureNative", "CaptureCore"]);
+    expect(podNames(config)).toEqual(["CaptureNative", "CaptureCore", "CaptureIO"]);
     expect(podNames({ apple: { podspecPath: "ios/Only.podspec" } })).toEqual(["Only"]);
     expect(() => podNames({ apple: {} })).toThrow(/podspecPath/);
   });

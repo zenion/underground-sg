@@ -16,7 +16,7 @@ Still to come, in the backlog's order: the rest of `CaptureCore` (selector, back
 ## Layout
 
 ```
-expo-module.config.json   two pods: ios/CaptureNative.podspec and CaptureCore.podspec
+expo-module.config.json   three pods: ios/CaptureNative.podspec, CaptureCore.podspec and CaptureIO.podspec
 index.ts, src/types.ts    the TypeScript side: the module, the view and their types
 ios/                      the Expo module (ARKit, RealityKit, UIKit): only the app build compiles it
 Package.swift             SwiftPM, for `swift test`; the podspecs exclude it and Tests/
@@ -32,11 +32,20 @@ Sources/CaptureCore/      Foundation only: WorldTransform, CandidateGate, RateMe
                           RecordPermission with RecordingGrant, MemorySink, SyntheticSession); and
                           generated/Contracts.swift (written by `pnpm gen` from packages/contracts;
                           do not edit)
+CaptureIO.podspec         CaptureIO as its own pod (depends on CaptureCore; Compression and CryptoKit)
+Sources/CaptureIO/        Foundation and POSIX (Darwin or Glibc): DurableFile (append-only files, pread,
+                          fsync and F_FULLFSYNC, truncate), Sha256Stream (CryptoKit), Deflate.raw
+                          (Compression), AtomicJsonWriter, the FileSecurity protocol (its Darwin
+                          implementation goes in ios/), RecordingPaths; and the pure-Swift fallbacks
+                          Sha256Fallback and StoredDeflate, compiled only without CryptoKit and
+                          Compression or under Package.swift's USG_IO_FALLBACKS, never on iOS
 Tests/CaptureCoreTests/   Swift Testing, and Golden/: one file per line type, byte-exact (UPDATE_GOLDENS=1 rewrites them);
                           Support/: the scripted-session harness, and SHA-256 and stored DEFLATE for MemorySink
 Tests/CaptureCorePublicSurfaceTests/, Tests/PublicSurfaceProbe/
                           CaptureCore without @testable: the tests stop compiling if a member that must
                           stay internal (RecorderCore's grant) becomes public
+Tests/CaptureIOTests/     Swift Testing on temporary directories; Support/: a recording FileSecurity fake
+                          and a small inflate (stored, fixed and dynamic Huffman) for the round trips
 encoder-allowlist.json    the encoder check's allowed places (empty until the blur lands)
 ci/planted/               planted encoder calls for the encoder check's self-test; in no pod
 ```
@@ -52,7 +61,8 @@ Rules ([ADR 0007](../../../../docs/decisions/0007-expo-mapper-app.md#swift-code-
   ```
 
   from this directory in Git Bash (`MSYS_NO_PATHCONV=1` in front if the path gets mangled). CI runs the same on Linux, and on the macOS runner.
-- **The recorder switch.** The recorder's code is compiled only under the `USG_RECORDER` condition (ADR 0010). `Package.swift` defines it by default, so `swift test` covers the recorder; with `USG_NO_RECORDER=1` (`docker run -e USG_NO_RECORDER=1 ...`) it builds and tests without it, as a contributor build will, which CI's Linux job checks with `swift build`. What is gated: `RecorderWindow`, `MeshHistorySchedule`, `DegradationLadder` and everything in `Recording/` except `JsonText`, `MeshBlockLayout`, `MeshFingerprint`, `TarLayout` and `PartPlan`, which bundles will use too. The pods don't define it yet: the config plugin that sets it for the development and walk builds comes later, so the app build compiles CaptureCore without the recorder until then.
+- **The recorder switch.** The recorder's code is compiled only under the `USG_RECORDER` condition (ADR 0010). `Package.swift` defines it by default, so `swift test` covers the recorder; with `USG_NO_RECORDER=1` (`docker run -e USG_NO_RECORDER=1 ...`) it builds and tests without it, as a contributor build will, which CI's Linux job checks with `swift build`. What is gated: `RecorderWindow`, `MeshHistorySchedule`, `DegradationLadder` and everything in `Recording/` except `JsonText`, `MeshBlockLayout`, `MeshFingerprint`, `TarLayout` and `PartPlan`, which bundles will use too; in CaptureIO, `RecordingPaths` (DurableFile, Sha256Stream, Deflate, AtomicJsonWriter and FileSecurity are not gated). The pods don't define it yet: the config plugin that sets it for the development and walk builds comes later, so the app build compiles CaptureCore without the recorder until then.
+- **The fallbacks.** On Linux CaptureIO compiles its own SHA-256 and stored-block DEFLATE, since CryptoKit and Compression are absent, and `fsync` stands in for `F_FULLFSYNC`. `Package.swift` also defines `USG_IO_FALLBACKS`, so on macOS `swift test` checks the fallbacks against CryptoKit and Compression (design D17); the pods never define it.
 - **The macOS CI job** (`iOS native (macOS)` in `.github/workflows/ci.yml`): `swift test`, the generated Swift types, the encoder check's self-test, `expo prebuild`, `pod install`, an unsigned Debug build of the whole app, then the encoder check on this module's compiled objects.
 - **The encoder check** (`apps/mapper/scripts/encoder-check.mts`, rules in `encoder-check-lib.mts`, tested in `test/encoder-check.test.ts`) reads each object file's undefined symbols (raw and demangled) and its Objective-C selectors, and fails on image and video encoders, raw pixel access, view snapshots and Photos writes outside `encoder-allowlist.json`. Its self-test compiles each file in `ci/planted/` and expects the rule named on its first line.
 - **The native-dependency allow-list** (`apps/mapper/native-dependencies.json`, `test/native-dependencies.test.ts`) asks Expo's autolinking what native code the app links and fails on anything unreviewed or refused.

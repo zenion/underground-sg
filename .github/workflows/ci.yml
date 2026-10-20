@@ -112,7 +112,8 @@ jobs:
 
   swift-linux:
     # CaptureCore is Foundation only, so it must also build and pass its tests with the Swift
-    # toolchain on Linux (ADR 0010), the toolchain Windows and WSL would use.
+    # toolchain on Linux (ADR 0010), the toolchain Windows and WSL would use. So must CaptureIO,
+    # with its pure-Swift SHA-256 and DEFLATE in place of CryptoKit and Compression (design D17).
     name: Swift on Linux
     runs-on: ubuntu-latest
     container:
