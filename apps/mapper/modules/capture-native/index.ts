@@ -17,6 +17,11 @@ export interface CaptureViewProps extends ViewProps {
    * and stops when the prop changes or the view unmounts. Builds before the glue ignore it.
    */
   session?: CaptureSession | null;
+  /**
+   * Draws the live mesh over the camera (design Q15; default on). Display only: it sets the
+   * ARView's debug options and changes no ARKit configuration and nothing that is recorded.
+   */
+  showMesh?: boolean;
 }
 
 export const CaptureNative = requireOptionalNativeModule<CaptureNativeModule>("CaptureNative");

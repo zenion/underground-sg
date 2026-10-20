@@ -100,6 +100,64 @@ Everything else is the same: the API on the reserved domain, Metro on a random h
 
 Both the development and the walk build compile the session recorder (`USG_RECORDER=1` in their `eas.json` profiles), but only the walk build records. The walk build (`eas build --profile walk`, [apps/mapper/README.md](../apps/mapper/README.md#the-build-profiles-and-the-recorder-switch)) is Release with its JavaScript embedded: it never connects to Metro or `dev:phone`, and installing it replaces the development build (the same bundle identifier) and keeps the app's data. Reinstall the development build to go back to desk testing, after exporting and copying off any recordings: the development build can't export them.
 
+## Walks, recordings and the build checks
+
+Two tabs serve the session recorder ([the lean recorder design](reviews/2026-10-21-lean-recorder-design.md), section 10; [ADR 0010](decisions/0010-capture-recording-and-replay.md)):
+
+- **Walk**: the corridor walk. Venues, then record **Off** or **Lean** (Lean only when the build can record; otherwise it says why, with the module's refusal code), the motion and location permissions (Lean only), **Start**, **Mark start** with the street-facing toggle, the node tag row, then **Mark end** or **Mark end and end the session here** (hold the phone still for the 5 s countdown; the recording closes a few seconds later and the session stops by itself), Saving, and a summary of counts and durations. A red REC badge sits over the camera while the recording window is open. **Live mesh** turns the mesh drawing off and on; it is display only and changes nothing that is recorded. The tab bar is hidden while a session runs, so the map stays unmounted. On iOS 26.4 to 26.6.0 the screen warns about the LiDAR drift regression, but the walk can go ahead. The **Debug** card shows the module's figures (counts, rates, sizes and timings, never a position or a time of day), the boundary trace's counts, the module's log ring and the log check.
+- **Recordings**: each recording's id, state, length, size, age in days and venues; **Export** (the walk build only) with its progress; **Delete**, after a confirmation; how to copy an export to the PC; the self-test; and what recovery did at launch.
+
+Never take a screenshot or a screen recording of the Walk or Capture screen while the camera runs, and never share one with Claude Code. Report results as codes, counts and pass or fail.
+
+### B2: the development build after the native glue
+
+Built on EAS cloud (`pnpm --filter @usg/mapper exec eas build --platform ios --profile development`), then served with `pnpm dev:phone --dev-client`. At a desk:
+
+1. **Refusals, with their codes.** Capture tab, Camera check: **Try Lean (must be refused)** shows `ERR_RECORD_REFUSED` with the refusal code (`debugBuild`, `notWalkBuild`, `notEmbedded` or `devClient`). Refusal checks: **Try an export** shows `ERR_EXPORT_REFUSED`, and **Try location** shows a code without iOS asking anything. On the Walk tab, Lean is disabled with the same reason.
+2. **Never a location prompt.** iOS never asks for location, and Settings, Privacy & Security, Location Services doesn't list Underground SG Mapper.
+3. **Status at 5 Hz with the delegate off the main thread.** Camera check, Start: the camera and the live mesh keep rendering and stay smooth, and the status rows update about five times a second. Debug, Show figures: the frame work p50 and p95 (about 0.3 ms or less) and the frame rate are there.
+4. **Marks and tags at a desk.** Walk tab with record Off: Start, Mark start, a few tags, then Mark end and end the session here (the countdown, then the session stops). Every mark and tag resolves and the summary counts them; nothing on screen shows a position or a time. `ERR_NO_FLOOR_HIT` or `ERR_TRACKING` mean aim at the floor, or move slowly until tracking is normal, and mark again.
+5. **The self-test.** Recordings, **Run the self-test**: passed; protection `completeUnlessOpen` while writing and `complete` after closing; excluded from backup; Compression and SHA-256 match; the MB/s figures; Documents holds `exports` or nothing.
+6. **Heat and frame-gap baseline.** A 15-minute record-off session, walking around indoors: when the Thermal row reaches fair and serious, and from Debug, the frames skipped and the largest gap. The module doesn't send the memory figures to the Debug card yet.
+
+JavaScript fixes after B2 reach the development build through `pnpm dev:phone --dev-client`. A walk build gets them only when it is built.
+
+### W1: the first walk build
+
+Built on EAS cloud by the owner, interactively, so it creates the signing credentials ([apps/mapper/README.md](../apps/mapper/README.md#the-first-walk-build-w1)). Later walk builds can run on a GitHub runner: Actions, **Walk build**, Run workflow (`.github/workflows/walk-build.yml`; it needs the `walk` environment with the owner as required reviewer and the `EXPO_TOKEN` secret in that environment). Review the first run's log before sharing anything about it. Check:
+
+1. It installs over the development build, opens and runs a capture in airplane mode, has no dev menu (shake the phone) and makes no Metro connection.
+2. Walk tab: Lean is enabled, and Start with Lean works (the REC badge appears at Mark start).
+3. Documents holds only `exports/`: Apple Devices, Files, Underground SG Mapper (or the self-test's Documents row).
+4. **The log check**, with the device log running (below) during a test capture: Debug, Show figures, **Log check**. The log must show no `usg-log-check` line. In the development build the same check does show the marker, which proves the check reaches the log. A `[redacted capture error]` line may appear in the walk build, if React Native logs the non-fatal error at all in a release build (only this check on the phone shows whether it does). The marker filter can't show that line: to look for it, run the check again with the log filtered to the app's process (below). If it appears, it must not hold the marker.
+5. **A kept self-test, exported.** Recordings, **Run and keep it for export**, then Export it, copy it to the PC (below) and validate it with `--parts`. Claude Code may run the validator on it: its output is aggregate (counts, pass or fail).
+6. **A short rehearsal recording at a public place** (the owner's call, design Q6): Mark start, Mark end, Mark end and end the session here. Then the variants: a background close (go to the Home Screen mid-recording: it closes as `background`), a Stop cut-back (Stop after an end mark: `stop`, cut back), and a force-quit mid-recording, which the next launch recovers as `interrupted` (Recordings, Recovery at launch). Export each, copy, validate on the PC, then delete them on the phone and in `.data/holding/`.
+7. **Lock mid-recording.** The recording closes as `background`; after unlocking, its files read `complete` (the self-test's protection rows show the same classes).
+8. **Heat.** A 15-minute Lean session against B2's record-off baseline: when the Thermal row reaches fair and serious, the frames skipped and the largest gap, and the recorder's Written and Write backlog figures.
+
+### Copying a recording to the PC
+
+Recordings never pass through Metro, a tunnel or a synced folder. With the walk build:
+
+1. Recordings, **Export** the recording, one at a time, so `exports` holds only it. Keep the app open and the phone unlocked until it says Exported.
+2. Connect the iPhone by USB and unlock it. Open the **Apple Devices** app on the PC, select the iPhone, then **Files**, then **Underground SG Mapper**.
+3. In Explorer, create `.data\holding\<recording id>\` in the repo checkout (the id is on the recording's card).
+4. Drag `exports` from Apple Devices straight into that folder. Never save it into Downloads, Documents, Desktop or a OneDrive folder: they are synced or backed up.
+5. Validate it: `node packages/contracts/src/recording-validator/cli.ts --parts .data/holding/<recording id>/exports/replay-<recording id>`.
+6. Only once that passes, **Delete** the recording on the phone (it removes the recording and its export there).
+
+The Recordings screen shows the same steps with the recording's id filled in.
+
+### Device logs and crash logs (pymobiledevice3)
+
+[pymobiledevice3](https://github.com/doronz88/pymobiledevice3) reads the iPhone's log over USB from Windows (offline tooling, so Python is fine; `pipx install pymobiledevice3`). The Apple Devices app provides the USB driver. With the iPhone connected, unlocked and trusted:
+
+- Live device log, filtered to the log check's marker: `pymobiledevice3 syslog live -m usg-log-check` (`pymobiledevice3 syslog live --help` lists the filters; without one it shows every process). It prints only lines that hold the marker, so in the walk build it prints nothing when the guard works, and nothing either if the check never reached the log: the development build's run, which does print the marker, is what shows the check reaches it.
+- Live device log of the app's process, to look for a `[redacted capture error]` line: `pymobiledevice3 syslog live -pn <process name>`, with the app's process name as the unfiltered log shows it.
+- Crash logs: `pymobiledevice3 crash pull .data/crash/` copies them into the git-ignored `.data/crash/`.
+
+If a command asks for a tunnel (some services do on iOS 17 and later), start `pymobiledevice3 remote tunneld` in an administrator terminal first. Device logs and crash logs stay in `.data/` on the PC and are never pasted into a conversation with Claude Code: report only whether the marker appeared, and crash counts.
+
 ## Stop it
 
 Press **Ctrl+C** in the terminal. Metro stops, then dev:phone stops ngrok and the API: every process it started, with their children, and nothing else (your own `node` or `ngrok` windows are left alone). The reserved domain then answers ngrok's "endpoint offline" page, and the Metro address is gone for good. PostGIS and RustFS keep running; `docker compose stop` stops them and keeps the data.

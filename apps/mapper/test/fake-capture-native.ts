@@ -38,6 +38,8 @@ export class FakeSession {
   tagResult: NativeAddTagResult | null = null;
   stopResult: NativeStopResult = { t: 0, recording: null };
   appendFails = false;
+  /** When set, start rejects with it. */
+  startError: unknown = null;
   private readonly listeners = new Map<string, Set<(event: never) => void>>();
 
   addListener<E extends EventName>(event: E, listener: CaptureSessionEvents[E]) {
@@ -60,20 +62,28 @@ export class FakeSession {
     }
   }
 
-  async start(): Promise<{ recordingId: string | null }> {
+  readonly startOptions: unknown[] = [];
+  readonly markOptions: unknown[] = [];
+  readonly tagOptions: unknown[] = [];
+
+  async start(options?: unknown): Promise<{ recordingId: string | null }> {
     this.calls.push("start");
+    this.startOptions.push(options);
+    if (this.startError) throw this.startError;
     return { recordingId: null };
   }
 
-  async markAnchor(): Promise<NativeMarkAnchorResult> {
+  async markAnchor(options?: unknown): Promise<NativeMarkAnchorResult> {
     this.calls.push("markAnchor");
+    this.markOptions.push(options);
     if (!this.markResult)
       throw Object.assign(new Error("ERR_NO_FLOOR_HIT"), { code: "ERR_NO_FLOOR_HIT" });
     return this.markResult;
   }
 
-  async addTag(): Promise<NativeAddTagResult> {
+  async addTag(options?: unknown): Promise<NativeAddTagResult> {
     this.calls.push("addTag");
+    this.tagOptions.push(options);
     if (!this.tagResult) throw Object.assign(new Error("ERR_TRACKING"), { code: "ERR_TRACKING" });
     return this.tagResult;
   }

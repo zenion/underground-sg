@@ -49,6 +49,7 @@ const reasonText = {
   unknown: "unknown reason",
 } as const;
 
+/** From a session's status, or anything else with these fields. */
 export function describeTracking(status: TrackingStatus): { text: string; tone: Tone } {
   if (!status.running) return { text: "Stopped", tone: "muted" };
   switch (status.tracking) {

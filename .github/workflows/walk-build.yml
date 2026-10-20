@@ -1,0 +1,95 @@
+name: Walk build
+
+# Later walk builds on a GitHub macOS runner (the lean recorder design, section 10; ADR 0010
+# "Getting the walk build onto the phone"; ADR 0009 "Builds and accounts"). The first walk build
+# (W1) runs on EAS cloud, started by the owner from the PC, because it creates the EAS-managed ad
+# hoc credentials this workflow then uses (apps/mapper/README.md, "The first walk build").
+#
+# This repository is public, and so are its Actions logs. The .ipa's ad hoc profile lists the
+# iPhone's UDID and the developer team, and the build's output names them and the install link.
+# So: started by hand only, in the protected environment "walk" (the owner is its required
+# reviewer, and EXPO_TOKEN is that environment's secret); the build's output goes to a file under
+# $RUNNER_TEMP, and only its masked error lines are printed on failure; `eas upload` hands the
+# .ipa to EAS, which gives an internal-distribution install link private to the Expo account, with
+# its own output discarded; and the .ipa is never an Actions artifact
+# (apps/mapper/test/walk-build-yaml.test.ts keeps it that way). The owner reviews the first run's
+# log.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: walk-build
+  cancel-in-progress: false
+
+jobs:
+  walk:
+    name: Walk build (eas build --local)
+    runs-on: macos-26
+    environment: walk
+    timeout-minutes: 120
+    env:
+      # eas-cli, pinned: 25.2.0 has `eas upload` (--platform, --build-path, --non-interactive),
+      # checked in its oclif manifest on 2026-10-21. npm's --before keeps its dependencies to what
+      # was published by then, so a newer release can't slip in.
+      EAS_CLI_VERSION: 25.2.0
+      EAS_CLI_BEFORE: "2026-10-19T00:00:00Z"
+      EXPO_NO_TELEMETRY: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Node from .node-version, the pnpm pinned in package.json, and pnpm install --frozen-lockfile.
+      - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+        with:
+          cache: true
+          require-lockfile: true
+      - name: Install EAS CLI
+        run: |
+          if ! npm install --global --ignore-scripts --no-audit --no-fund --before "$EAS_CLI_BEFORE" "eas-cli@$EAS_CLI_VERSION" > /dev/null 2>&1; then
+            echo "npm couldn't install eas-cli $EAS_CLI_VERSION."
+            exit 1
+          fi
+          if ! eas --version > /dev/null 2>&1; then
+            echo "eas-cli $EAS_CLI_VERSION doesn't run."
+            exit 1
+          fi
+      # The build's output never reaches the log: on failure only its error lines, masked
+      # (apps/mapper/scripts/walk-build-log-lib.mts), between stop-commands markers so no line can
+      # act as a workflow command.
+      - name: Build (eas build --local, walk profile)
+        working-directory: apps/mapper
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set +e
+          eas build --local --profile walk --platform ios --non-interactive --output "$RUNNER_TEMP/walk.ipa" > "$RUNNER_TEMP/build.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "eas build failed with exit status $status. Its error lines, masked:"
+            marker="$(uuidgen)"
+            echo "::stop-commands::$marker"
+            node scripts/walk-build-log.mts "$RUNNER_TEMP/build.log"
+            echo "::$marker::"
+            exit "$status"
+          fi
+          echo "Built."
+      - name: Upload to EAS (internal distribution)
+        working-directory: apps/mapper
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if eas upload --platform ios --build-path "$RUNNER_TEMP/walk.ipa" --non-interactive > /dev/null 2>&1; then
+            echo "Uploaded: the install link is on expo.dev, under the project's builds."
+          else
+            echo "eas upload failed (its output is discarded). Run the build on EAS cloud instead."
+            exit 1
+          fi
+      - name: Remove the build and its log
+        if: always()
+        run: rm -f "$RUNNER_TEMP/walk.ipa" "$RUNNER_TEMP/build.log"

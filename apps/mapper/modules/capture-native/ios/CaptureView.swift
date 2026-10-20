@@ -15,6 +15,9 @@ final class CaptureView: ExpoView {
   private var arView: ARView?
   /// The session the `session` prop names. The session holds this view weakly.
   private var session: CaptureSession?
+  /// The `showMesh` prop (design Q15): whether RealityKit draws the live mesh over the camera.
+  /// Remembered for an ARView made later.
+  private var showMesh = true
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -69,6 +72,18 @@ final class CaptureView: ExpoView {
     showRecorderState("off")
   }
 
+  // MARK: The showMesh prop
+
+  /// The `showMesh` prop: display only, it changes no ARKit configuration and nothing recorded.
+  func setShowMesh(_ show: Bool) {
+    showMesh = show
+    arView?.debugOptions = meshOptions
+  }
+
+  private var meshOptions: ARView.DebugOptions {
+    showMesh ? [.showSceneUnderstanding] : []
+  }
+
   // MARK: For the session (main)
 
   /// Whether the shield's cover is over the camera.
@@ -112,8 +127,9 @@ final class CaptureView: ExpoView {
       .disableMotionBlur, .disableDepthOfField, .disableHDR, .disableCameraGrain,
       .disableGroundingShadows, .disablePersonOcclusion, .disableAREnvironmentLighting,
     ]
-    // The live mesh: RealityKit draws the reconstructed mesh over the camera.
-    view.debugOptions = [.showSceneUnderstanding]
+    // The live mesh: RealityKit draws the reconstructed mesh over the camera, unless the
+    // `showMesh` prop turned it off.
+    view.debugOptions = meshOptions
     view.isHidden = true
     container.addSubview(view)
     arView = view

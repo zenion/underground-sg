@@ -70,6 +70,11 @@ public final class CaptureNativeModule: Module {
       Prop("session") { (view: CaptureView, session: CaptureSession?) in
         view.attach(session)
       }
+
+      // The live-mesh overlay (design Q15): display only, default on.
+      Prop("showMesh") { (view: CaptureView, show: Bool?) in
+        view.setShowMesh(show ?? true)
+      }
     }
 
     AsyncFunction("listRecordings") { (promise: Promise) in

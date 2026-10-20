@@ -359,7 +359,10 @@ Class(CaptureSession.self) {                             // no Events() here (D2
   AsyncFunction("discard")    { (s: CaptureSession, p: Promise) in s.discard(p) }
   AsyncFunction("appendBoundary") { (s: CaptureSession, lines: [String], final: Bool) in s.appendBoundary(lines, final) }
 }
-View(CaptureView.self) { Prop("session") { (v: CaptureView, s: CaptureSession?) in v.attach(s) } }
+View(CaptureView.self) {
+  Prop("session") { (v: CaptureView, s: CaptureSession?) in v.attach(s) }
+  Prop("showMesh") { (v: CaptureView, on: Bool?) in v.setShowMesh(on ?? true) }  // Q15, display only
+}
 Events("exportProgress")
 AsyncFunction("listRecordings"); AsyncFunction("exportRecording") { (id: String, p: Promise) }
 AsyncFunction("deleteRecording") { (id: String) }; AsyncFunction("recoveryStatus")
