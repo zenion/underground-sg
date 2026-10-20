@@ -25,7 +25,10 @@
     "map": "pnpm --filter @usg/api map",
     "demo": "pnpm --filter @usg/api demo",
     "web": "pnpm --filter @usg/web dev",
-    "web:fixtures": "pnpm --filter @usg/web dev:fixtures"
+    "web:fixtures": "pnpm --filter @usg/web dev:fixtures",
+    "prepare": "node scripts/install-hooks.ts",
+    "rec": "pnpm --filter @usg/recording rec",
+    "check:tracked": "node packages/recording/scripts/check-tracked.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

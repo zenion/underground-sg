@@ -37,11 +37,13 @@ You need Node 26 (the repo follows the latest Node release), pnpm 12 and Docker 
 pnpm install
 ```
 
+`pnpm install` also points git at the hooks in `.githooks/` (`core.hooksPath`): the pre-push hook refuses a push that would publish a session recording or capture data ([packages/recording](packages/recording/README.md#the-git-check)).
+
 ```bash
 pnpm check
 ```
 
-`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm build` builds what has a build: the webapp's static files (`apps/web/dist`) and the mapper app's iOS JavaScript export. `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md). `pnpm test:venue` runs the tests that need meshes recorded in a venue, from the git-ignored `.data/fixtures/`; they skip when the files are absent. `pnpm mapper` starts Metro for the mapper app in Expo Go on the phone (see [apps/mapper/README.md](apps/mapper/README.md)). `pnpm dev:phone` starts everything for testing on the iPhone through tunnels, the webapp in Safari and the mapper app in Expo Go ([docs/phone-testing.md](docs/phone-testing.md)).
+`pnpm check` runs Biome (lint and format check), then typecheck and tests across the workspace through Turborepo. `pnpm format` applies Biome's fixes. `pnpm build` builds what has a build: the webapp's static files (`apps/web/dist`) and the mapper app's iOS JavaScript export. `pnpm gen` regenerates the TypeScript and Swift types from the JSON Schemas in `packages/contracts`. `node packages/contracts/src/bundle-validator/cli.ts <bundle directory or tar>` checks a capture bundle against [docs/capture-bundle.md](docs/capture-bundle.md). `pnpm rec synth` regenerates the synthetic replay sets in `packages/recording/fixtures/synthetic/`, and `node packages/contracts/src/recording-validator/cli.ts <path>` checks a session recording or replay set against [docs/session-recording.md](docs/session-recording.md). `pnpm test:venue` runs the tests that need meshes recorded in a venue, from the git-ignored `.data/fixtures/`; they skip when the files are absent. `pnpm mapper` starts Metro for the mapper app in Expo Go on the phone (see [apps/mapper/README.md](apps/mapper/README.md)). `pnpm dev:phone` starts everything for testing on the iPhone through tunnels, the webapp in Safari and the mapper app in Expo Go ([docs/phone-testing.md](docs/phone-testing.md)).
 
 ### Webapp
 

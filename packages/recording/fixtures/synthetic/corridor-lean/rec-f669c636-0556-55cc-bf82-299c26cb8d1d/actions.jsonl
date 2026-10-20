@@ -1,0 +1,3 @@
+{"t":4,"call":"markAnchor","args":"[{\"role\":\"start\",\"kind\":\"floor_point\",\"streetFacing\":true}]","result":"{\"anchor\":\"8f7feefc-370c-52e8-9fe8-2d563483b7e4\",\"frame\":240,\"window\":\"opened\"}","error":null}
+{"t":36,"call":"markAnchor","args":"[{\"role\":\"end\",\"kind\":\"floor_point\",\"streetFacing\":false,\"endSessionHere\":true}]","result":"{\"anchor\":\"33070114-c5f2-5e13-ba42-1597bb776d23\",\"frame\":2159,\"window\":\"closing\"}","error":null}
+{"t":36.5,"call":"floorTriangles","args":"[]","result":null,"error":null}
