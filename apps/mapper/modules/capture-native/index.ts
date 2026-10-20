@@ -1,12 +1,14 @@
 // The capture-native module (ADR 0007): a local Expo module in Swift (ios/, and the SwiftPM
 // targets in Sources/). It exists only in development and walk builds of this app; in Expo Go and
-// on the web both exports are null, and the Capture screen says why.
+// on the web both exports are null, and the Capture screen says why. The app reaches the session
+// recorder through src/capture/native.ts (moduleCaptureNative), never through CaptureNative directly.
 
 import { requireNativeView, requireOptionalNativeModule } from "expo";
 import type { ComponentType, Ref } from "react";
 import type { NativeSyntheticEvent, ViewProps } from "react-native";
 import type {
-  Capabilities,
+  CaptureNativeModule,
+  CaptureSession,
   CaptureStatus,
   CaptureViewHandle,
   CaptureWarning,
@@ -14,13 +16,11 @@ import type {
 
 export type * from "./src/types.ts";
 
-interface CaptureNativeModule {
-  getCapabilities(): Capabilities;
-}
-
 export interface CaptureViewProps extends ViewProps {
   onStatus?: (event: NativeSyntheticEvent<CaptureStatus>) => void;
   onWarning?: (event: NativeSyntheticEvent<CaptureWarning>) => void;
+  /** The CaptureSession that runs in this view (design 3.3); builds before the glue ignore it. */
+  session?: CaptureSession | null;
   ref?: Ref<CaptureViewHandle>;
 }
 

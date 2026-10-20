@@ -1,7 +1,14 @@
 import { Tabs } from "expo-router/js-tabs";
 import { type AndroidSymbol, type SFSymbol, SymbolView } from "expo-symbols";
 import type { ColorValue } from "react-native";
+import { CaptureNative } from "../../modules/capture-native/index.ts";
+import { installLogGuard } from "../capture/log-guard.ts";
+import { buildProfileOf } from "../capture/native.ts";
 import { colors } from "../ui.tsx";
+
+// The walk build silences JavaScript's console and redacts uncaught errors from launch (ADR 0010,
+// the lean recorder design's D19); in every other build this does nothing.
+installLogGuard(buildProfileOf(CaptureNative));
 
 // Expo Router's error screen, with a retry, instead of a blank screen when a screen throws.
 export { ErrorBoundary } from "expo-router";
