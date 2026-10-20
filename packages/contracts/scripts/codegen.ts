@@ -302,7 +302,93 @@ async function generateSwift(): Promise<string> {
     throw new Error("Unexpected quicktype output: expected its header, then import Foundation");
   }
   const header = SWIFT_HEADER_LINES.map((line) => `// ${line}`);
-  return normalise([...header, "", ...lines.slice(firstCode)].join("\n"));
+  const code = lines.slice(firstCode);
+  return normalise([...header, "", ...code, ...nullEncoders(code)].join("\n"));
+}
+
+/**
+ * Every titled object schema in the package, and every titled union of them (`oneOf`), by title:
+ * quicktype names its struct after it.
+ */
+function titledObjectSchemas(): Map<string, SchemaObject> {
+  const found = new Map<string, SchemaObject>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+    } else if (value !== null && typeof value === "object") {
+      const schema = value as SchemaObject;
+      if (typeof schema["title"] === "string" && (schema["type"] === "object" || schema["oneOf"])) {
+        found.set(schema["title"], schema);
+      }
+      for (const child of Object.values(schema)) visit(child);
+    }
+  };
+  for (const file of ALL_SCHEMA_FILES) visit(readSchema(file));
+  return found;
+}
+
+/**
+ * `encode(to:)` for each struct with a field that is required but may be null. Synthesized
+ * `Encodable` leaves a nil optional out (`encodeIfPresent`), which the schemas reject for a
+ * required field, so these write it with `encode`, which writes null. A field that isn't required
+ * stays left out when nil. Parses quicktype's output: `let` lines and the `CodingKeys` cases.
+ */
+function nullEncoders(code: readonly string[]): string[] {
+  const schemas = titledObjectSchemas();
+  const out: string[] = [];
+  let struct: { name: string; fields: { name: string; optional: boolean }[] } | undefined;
+  let keys = new Map<string, string>();
+  for (const line of code) {
+    const start = /^struct (\w+): Codable/.exec(line);
+    if (start?.[1]) {
+      struct = { name: start[1], fields: [] };
+      keys = new Map();
+      continue;
+    }
+    if (!struct) continue;
+    const field = /^ {4}let (\w+): (.+)$/.exec(line);
+    if (field?.[1] && field[2]) {
+      struct.fields.push({ name: field[1], optional: field[2].endsWith("?") });
+    }
+    const key = /^ {8}case (\w+) = "([^"]+)"$/.exec(line);
+    if (key?.[1] && key[2]) keys.set(key[1], key[2]);
+    if (line !== "}") continue;
+
+    const { name, fields } = struct;
+    const schema = schemas.get(name);
+    if (!schema) throw new Error(`No titled object schema for the Swift struct ${name}`);
+    // A union's branches are merged into one struct (CaptureTag, which TypeScript writes): the
+    // synthesized encoder stays, since a field required in one branch may be absent in the other.
+    if (schema["oneOf"]) {
+      struct = undefined;
+      continue;
+    }
+    const required = new Set((schema["required"] as string[] | undefined) ?? []);
+    const isRequired = (field: string): boolean => {
+      const json = keys.get(field);
+      if (json === undefined) throw new Error(`${name}.${field} has no CodingKeys case`);
+      return required.has(json);
+    };
+    if (fields.some((f) => f.optional && isRequired(f.name))) {
+      out.push(
+        "",
+        `extension ${name} {`,
+        "    /// Writes null for a required field that is nil, as the schema requires; leaves out a",
+        "    /// field the schema doesn't require when it is nil.",
+        "    func encode(to encoder: Encoder) throws {",
+        "        var container = encoder.container(keyedBy: CodingKeys.self)",
+        ...fields.map((f) =>
+          f.optional && !isRequired(f.name)
+            ? `        try container.encodeIfPresent(${f.name}, forKey: .${f.name})`
+            : `        try container.encode(${f.name}, forKey: .${f.name})`,
+        ),
+        "    }",
+        "}",
+      );
+    }
+    struct = undefined;
+  }
+  return out;
 }
 
 /** Generates every output file, in memory. */

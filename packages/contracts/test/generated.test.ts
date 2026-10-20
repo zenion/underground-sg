@@ -116,6 +116,11 @@ describe("which documents get which output", () => {
       expect(swift?.content).toContain("struct CaptureManifest");
       expect(swift?.content).toContain("struct RecordingManifest");
       expect(swift?.content).toContain("struct ExportParts");
+      // Required but nullable fields are written as null; optional ones are left out when nil.
+      const window = /extension RecordingWindow \{[\s\S]*?\n\}/.exec(swift?.content ?? "")?.[0];
+      expect(window).toContain("try container.encode(endT, forKey: .endT)");
+      expect(swift?.content).not.toContain("extension StageTimings");
+      expect(swift?.content).not.toContain("extension CaptureTag");
     },
     TIMEOUT_MS,
   );

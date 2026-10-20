@@ -1108,3 +1108,197 @@ struct ExportPart: Codable, Equatable, Sendable {
 
 typealias CaptureAnchors = [CaptureAnchor]
 typealias CaptureTags = [CaptureTag]
+
+
+extension CaptureManifest {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(appVersion, forKey: .appVersion)
+        try container.encode(captureID, forKey: .captureID)
+        try container.encode(depthSize, forKey: .depthSize)
+        try container.encode(deviceModel, forKey: .deviceModel)
+        try container.encode(driftM, forKey: .driftM)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(files, forKey: .files)
+        try container.encode(frameCount, forKey: .frameCount)
+        try container.encode(imageSize, forKey: .imageSize)
+        try container.encode(keyframeCount, forKey: .keyframeCount)
+        try container.encode(osVersion, forKey: .osVersion)
+        try container.encode(privacy, forKey: .privacy)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(sessionStartedAt, forKey: .sessionStartedAt)
+        try container.encode(startedAt, forKey: .startedAt)
+    }
+}
+
+extension CaptureAnchor {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(anchorID, forKey: .anchorID)
+        try container.encode(facing, forKey: .facing)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(name, forKey: .name)
+        try container.encode(ordinal, forKey: .ordinal)
+        try container.encode(photo, forKey: .photo)
+        try container.encode(point, forKey: .point)
+        try container.encode(registration, forKey: .registration)
+        try container.encode(role, forKey: .role)
+        try container.encode(transform, forKey: .transform)
+    }
+}
+
+extension RecordingManifest {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(arkit, forKey: .arkit)
+        try container.encode(build, forKey: .build)
+        try container.encode(clocks, forKey: .clocks)
+        try container.encode(closed, forKey: .closed)
+        try container.encode(detectorVersions, forKey: .detectorVersions)
+        try container.encode(deviceModel, forKey: .deviceModel)
+        try container.encode(files, forKey: .files)
+        try container.encode(origin, forKey: .origin)
+        try container.encode(osVersion, forKey: .osVersion)
+        try container.encode(profile, forKey: .profile)
+        try container.encode(rates, forKey: .rates)
+        try container.encode(recordingID, forKey: .recordingID)
+        try container.encode(recordingVersion, forKey: .recordingVersion)
+        try container.encode(segments, forKey: .segments)
+        try container.encode(sessionStartedAt, forKey: .sessionStartedAt)
+        try container.encode(venues, forKey: .venues)
+        try container.encode(window, forKey: .window)
+    }
+}
+
+extension RecordingBuild {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(appVersion, forKey: .appVersion)
+        try container.encode(easBuildID, forKey: .easBuildID)
+        try container.encode(gitCommit, forKey: .gitCommit)
+        try container.encode(profile, forKey: .profile)
+    }
+}
+
+extension RecordingRates {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(candidatesHz, forKey: .candidatesHz)
+        try container.encode(framesHz, forKey: .framesHz)
+        try container.encode(imuHz, forKey: .imuHz)
+        try container.encode(meshIntervalS, forKey: .meshIntervalS)
+        try container.encode(motionHz, forKey: .motionHz)
+    }
+}
+
+extension RecordingWindow {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(endT, forKey: .endT)
+        try container.encode(ended, forKey: .ended)
+        try container.encode(startT, forKey: .startT)
+        try container.encode(trimmed, forKey: .trimmed)
+    }
+}
+
+extension RecordingFrameLine {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(candidate, forKey: .candidate)
+        try container.encode(exposure, forKey: .exposure)
+        try container.encode(frame, forKey: .frame)
+        try container.encode(gap, forKey: .gap)
+        try container.encode(intrinsics, forKey: .intrinsics)
+        try container.encode(light, forKey: .light)
+        try container.encode(mapping, forKey: .mapping)
+        try container.encode(ms, forKey: .ms)
+        try container.encode(sharpness, forKey: .sharpness)
+        try container.encode(t, forKey: .t)
+        try container.encode(tracking, forKey: .tracking)
+        try container.encode(transform, forKey: .transform)
+    }
+}
+
+extension MotionLine {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(attitude, forKey: .attitude)
+        try container.encode(gravity, forKey: .gravity)
+        try container.encode(heading, forKey: .heading)
+        try container.encode(magnetic, forKey: .magnetic)
+        try container.encode(rotation, forKey: .rotation)
+        try container.encode(t, forKey: .t)
+        try container.encode(userAccel, forKey: .userAccel)
+    }
+}
+
+extension AnchorHistoryLine {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(anchor, forKey: .anchor)
+        try container.encode(frame, forKey: .frame)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(op, forKey: .op)
+        try container.encode(t, forKey: .t)
+        try container.encode(transform, forKey: .transform)
+    }
+}
+
+extension RecordingEventLine {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(detail, forKey: .detail)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(t, forKey: .t)
+    }
+}
+
+extension ActionLine {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(args, forKey: .args)
+        try container.encode(call, forKey: .call)
+        try container.encode(error, forKey: .error)
+        try container.encode(result, forKey: .result)
+        try container.encode(t, forKey: .t)
+    }
+}
+
+extension MeshHistoryLine {
+    /// Writes null for a required field that is nil, as the schema requires; leaves out a
+    /// field the schema doesn't require when it is nil.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(anchor, forKey: .anchor)
+        try container.encode(bytes, forKey: .bytes)
+        try container.encode(faces, forKey: .faces)
+        try container.encode(meshHistoryLineFinal, forKey: .meshHistoryLineFinal)
+        try container.encode(offset, forKey: .offset)
+        try container.encode(op, forKey: .op)
+        try container.encode(t, forKey: .t)
+        try container.encode(transform, forKey: .transform)
+        try container.encode(vertices, forKey: .vertices)
+    }
+}
