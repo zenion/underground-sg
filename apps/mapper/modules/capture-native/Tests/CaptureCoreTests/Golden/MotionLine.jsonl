@@ -1,0 +1,2 @@
+{"attitude":[0.0123,-0.7012,0.0087,0.7128],"gravity":[0.05,-9.79,-0.52],"heading":41.5,"magnetic":{"accuracy":"medium","field":[12.4,-31.2,-18.9]},"rotation":[0.01,-0.03,0.002],"t":23.418,"user_accel":[0.12,0.31,-0.08]}
+{"attitude":[0.0124,-0.7011,0.0088,0.7129],"gravity":[0.06,-9.79,-0.51],"heading":null,"magnetic":{"accuracy":"uncalibrated","field":[0,0,0]},"rotation":[0.011,-0.029,0.002],"t":23.428,"user_accel":[0.11,0.3,-0.07]}

@@ -18,7 +18,11 @@ let package = Package(
     .testTarget(
       name: "CaptureCoreTests",
       dependencies: ["CaptureCore"],
-      path: "Tests/CaptureCoreTests"
+      path: "Tests/CaptureCoreTests",
+      // The golden files: LineEncoderTests reads them through #filePath and
+      // packages/contracts/test/swift-goldens.test.ts checks them against the schemas, so they are
+      // not bundle resources.
+      exclude: ["Golden"]
     ),
   ]
 )

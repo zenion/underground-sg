@@ -1,0 +1,2 @@
+{"args":"[{\"role\":\"start\",\"kind\":\"floor_point\"}]","call":"markAnchor","error":null,"result":"{\"frame\":192,\"hit\":[0.31,-1.42,-0.9],\"normal\":[0,1,0]}","t":3.2}
+{"args":"[{\"type\":\"node\",\"kind\":\"door\",\"name\":null}]","call":"addTag","error":"ERR_TRACKING_LIMITED","result":null,"t":23.47}

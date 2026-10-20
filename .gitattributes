@@ -48,3 +48,8 @@ db/schema.sql linguist-generated=true
 # Golden files of the snapshot builder (services/api/test/fixtures/snapshot/): byte-exact compact
 # JSON that the snapshot tests compare and the routing tests read. No line-ending conversion.
 services/api/test/fixtures/snapshot/*.json -text linguist-generated=true
+
+# Golden files of the Swift line encoder (apps/mapper/modules/capture-native/Tests/CaptureCoreTests/
+# Golden/): byte-exact compact JSON lines that the Swift tests compare and the contracts tests
+# validate against the schemas. No line-ending conversion.
+apps/mapper/modules/capture-native/Tests/CaptureCoreTests/Golden/* -text linguist-generated=true

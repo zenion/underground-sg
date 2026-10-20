@@ -33,15 +33,26 @@ import { SNAPSHOT_SCHEMA_FILES } from "../src/snapshot.ts";
 /** The package directory (packages/contracts). */
 export const PACKAGE_DIR = fileURLToPath(new URL("..", import.meta.url));
 
-/** Output files, relative to the package directory, with / separators. */
-export const GENERATED_TS_FILE = "src/generated/contracts.ts";
-export const GENERATED_SWIFT_FILE = "generated/swift/Contracts.swift";
+/** The repo root: the generated files' paths are relative to it. */
+export const REPO_DIR = fileURLToPath(new URL("../../..", import.meta.url));
+
+/** Output files, relative to the repo root, with / separators. */
+export const GENERATED_TS_FILE = "packages/contracts/src/generated/contracts.ts";
+/**
+ * In the capture module's CaptureCore target, which compiles it: SwiftPM and CocoaPods compile
+ * only sources under the module's own directory. Its types are internal to CaptureCore.
+ */
+export const GENERATED_SWIFT_FILE =
+  "apps/mapper/modules/capture-native/Sources/CaptureCore/generated/Contracts.swift";
 
 /** Directories that hold only generated files; anything else in them is deleted. */
-export const GENERATED_DIRS = ["src/generated", "generated/swift"] as const;
+export const GENERATED_DIRS = [
+  "packages/contracts/src/generated",
+  "apps/mapper/modules/capture-native/Sources/CaptureCore/generated",
+] as const;
 
 export interface GeneratedFile {
-  /** Path relative to the package directory, with / separators. */
+  /** Path relative to the repo root, with / separators. */
   path: string;
   content: string;
 }
@@ -400,8 +411,8 @@ export async function generate(): Promise<GeneratedFile[]> {
 }
 
 /**
- * Writes the generated files under `outDir` (the package directory, or a temporary directory in
- * the tests) and deletes anything else in the generated directories. Returns the files written.
+ * Writes the generated files under `outDir` (the repo root, or a temporary directory in the
+ * tests) and deletes anything else in the generated directories. Returns the files written.
  */
 export async function writeGenerated(outDir: string): Promise<GeneratedFile[]> {
   const files = await generate();

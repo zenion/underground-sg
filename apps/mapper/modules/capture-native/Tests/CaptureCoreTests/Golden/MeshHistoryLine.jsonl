@@ -1,0 +1,3 @@
+{"anchor":"0b4e2d8f-61a7-4c3e-9d25-7f1a8c6e3b90","bytes":48211,"capture_id":null,"faces":5840,"final":false,"offset":0,"op":"add","t":25,"transform":[0.99950707,0,0.03139484,0,0,1,0,0,-0.03139484,0,0.99950707,0,0.1,-1.4,-27.5,1],"vertices":3120}
+{"anchor":"0b4e2d8f-61a7-4c3e-9d25-7f1a8c6e3b90","bytes":null,"capture_id":null,"faces":null,"final":false,"offset":null,"op":"remove","t":30,"transform":null,"vertices":null}
+{"anchor":"5e8b2c41-0d7a-4b93-8f16-2a9c7d3e6b05","bytes":51007,"capture_id":"8f9585da-8554-4b8a-ba4e-0f390ccd3802","faces":6012,"final":true,"offset":48211,"op":"add","t":412.8,"transform":[0.9998,0,-0.019998666,0,0,1,0,0,0.019998666,0,0.9998,0,0.4,-1.4,-31.2,1],"vertices":3266}
