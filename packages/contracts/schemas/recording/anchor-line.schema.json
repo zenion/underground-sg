@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/anchor-line.schema.json",
+  "title": "AnchorHistoryLine",
+  "description": "One line of anchors.jsonl in a session recording, recording_version 1 (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh snapshot (mesh anchors included). The first sample, when the recording opens, writes every anchor as add. The final sample, when the recording closes with end_anchor or idle, writes final true at window.end_t: a remove for each keyframe, image or marked anchor removed since the last sample, then every one that exists (update if already seen, add if new), with no movement threshold. Otherwise updates only for anchors that moved more than about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by this schema: t never decreases, an anchor's first line in the file is an add, transform is null exactly for remove, frame is set exactly for keyframe anchors, final lines are only at window.end_t, and capture_id is null on lines that aren't final.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "description": "When it was sampled.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+        }
+      ]
+    },
+    "anchor": {
+      "description": "ARKit's anchor identifier.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        }
+      ]
+    },
+    "kind": {
+      "$ref": "#/$defs/kind"
+    },
+    "op": {
+      "$ref": "defs.schema.json#/$defs/historyOp"
+    },
+    "transform": {
+      "description": "Anchor to world, or null for remove.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/transform"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "frame": {
+      "description": "The keyframe's frame for a keyframe anchor, else null.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/frameIndex"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "final": {
+      "description": "true for the lines of a final sample (written whether or not the anchor moved).",
+      "type": "boolean"
+    },
+    "capture_id": {
+      "description": "On a final sample, the segment whose session-end reads it is (the segment open when it was taken), or null when no segment was open; null on other lines.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["t", "anchor", "kind", "op", "transform", "frame", "final", "capture_id"],
+  "additionalProperties": false,
+  "$defs": {
+    "kind": {
+      "title": "AnchorHistoryKind",
+      "description": "keyframe: the anchor placed at a keyframe. image: a detected image anchor. mesh: a mesh anchor. marked: an anchor markAnchor placed.",
+      "type": "string",
+      "enum": ["keyframe", "image", "mesh", "marked"]
+    }
+  }
+}

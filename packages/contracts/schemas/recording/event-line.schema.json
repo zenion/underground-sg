@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/event-line.schema.json",
+  "title": "RecordingEventLine",
+  "description": "One line of events.jsonl in a session recording, recording_version 1 (docs/session-recording.md). detail is a short code, never a pose, a time or a fix; the Swift recorder writes events from a typed enum. Checked by validate-recording, not by this schema: t never decreases, and each kind's detail is what RECORDING_EVENT_DETAILS in packages/contracts says (null for most kinds; a RecordingEnded value for recording_closed; a ThermalState for thermal; a degradation step for degradation; a lowercase UUID for image_anchor_detected; decimal digits with an optional minus for session_failed; a short lowercase code for configuration).",
+  "type": "object",
+  "properties": {
+    "t": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+    },
+    "kind": {
+      "$ref": "#/$defs/kind"
+    },
+    "detail": {
+      "description": "A short code, a number as its decimal text, or null; what it holds depends on kind (see the doc).",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["t", "kind", "detail"],
+  "additionalProperties": false,
+  "$defs": {
+    "kind": {
+      "title": "RecordingEventKind",
+      "description": "What happened (the doc lists each kind's detail).",
+      "type": "string",
+      "enum": [
+        "recording_opened",
+        "recording_closed",
+        "configuration",
+        "session_failed",
+        "interruption_began",
+        "interruption_ended",
+        "relocalization_began",
+        "relocalization_ended",
+        "image_anchor_detected",
+        "thermal",
+        "memory_warning",
+        "background",
+        "foreground",
+        "screenshot",
+        "screen_capture_began",
+        "screen_capture_ended",
+        "altimeter_unavailable",
+        "altimeter_denied",
+        "motion_unavailable",
+        "degradation"
+      ]
+    }
+  }
+}

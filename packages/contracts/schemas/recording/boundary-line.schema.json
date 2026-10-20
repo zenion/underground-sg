@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/boundary-line.schema.json",
+  "title": "BoundaryLine",
+  "description": "One line of boundary.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one event or result JavaScript received from the capture module, exactly as it received it. TypeScript writes these lines and hands them to the module (appendBoundary). The recorder's plumbing (appendBoundary and the recording management calls) gets no line. Checked by validate-recording, not by this schema: seq strictly increases, t never decreases, exactly one of value and binary is non-null, value parses as JSON, and binary is boundary/<seq>.f32 for this line's seq.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "description": "The session time the module stamped on the event or result.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+        }
+      ]
+    },
+    "seq": {
+      "description": "The line's number, from 0.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999
+    },
+    "kind": {
+      "description": "The event's or the call's name, for example onStatus or floorTriangles.",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,63}$"
+    },
+    "value": {
+      "description": "What JavaScript received, as JSON text, or null when it was binary.",
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/jsonText"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "binary": {
+      "description": "boundary/<seq>.f32 (seq zero-padded to six digits) for a binary result, such as floor triangles, else null.",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^boundary/[0-9]{6}\\.f32$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["t", "seq", "kind", "value", "binary"],
+  "additionalProperties": false
+}

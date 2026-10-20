@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/mesh-history-line.schema.json",
+  "title": "MeshHistoryLine",
+  "description": "One line of mesh/history.jsonl in a session recording, recording_version 1 (docs/session-recording.md): the index of one block of mesh/history.bin. The first snapshot, when the recording opens, writes every mesh anchor as add; later snapshots write anchors whose geometry changed; the final snapshot, when it closes with end_anchor or idle (unless the no_mesh_history step was reached), writes every mesh anchor with final true at window.end_t. Checked by validate-recording, not by this schema: t never decreases; an anchor's first line is an add; transform, offset, bytes, vertices and faces are null exactly for remove; each block lies inside history.bin; and capture_id is set only on final lines.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "description": "The snapshot's time.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+        }
+      ]
+    },
+    "anchor": {
+      "description": "The mesh anchor's identifier.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        }
+      ]
+    },
+    "op": {
+      "$ref": "defs.schema.json#/$defs/historyOp"
+    },
+    "transform": {
+      "description": "Anchor to world at t, or null for remove.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/transform"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "offset": {
+      "description": "Where the block starts in history.bin, or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bytes": {
+      "description": "The block's length in history.bin (compressed), or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "vertices": {
+      "description": "Vertices in the block, or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "faces": {
+      "description": "Faces in the block, or null for remove.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "final": {
+      "description": "true for a final snapshot, which holds every mesh anchor with the transforms read at that moment.",
+      "type": "boolean"
+    },
+    "capture_id": {
+      "description": "On a final snapshot, the segment whose session-end reads it is (the segment open when it was taken), or null when no segment was open; null on other lines.",
+      "anyOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "t",
+    "anchor",
+    "op",
+    "transform",
+    "offset",
+    "bytes",
+    "vertices",
+    "faces",
+    "final",
+    "capture_id"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/parts.schema.json",
+  "title": "ExportParts",
+  "description": "parts.json of a replay set's export, recording_version 1 (docs/session-recording.md): written by exportRecording beside the parts in Documents/exports/replay-<recording_id>/; pnpm rec pull copies only the parts it lists. Checked by the PC tools, not by this schema: the names run 0000.part, 0001.part and so on without gaps, every part but the last is UPLOAD_PART_BYTES long, and the bytes add up to tar_bytes.",
+  "type": "object",
+  "properties": {
+    "recording_version": {
+      "description": "Version of the session recording format.",
+      "type": "integer",
+      "const": 1
+    },
+    "recording_id": {
+      "description": "The recording's id (or the session's, for an unrecorded session).",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"
+        }
+      ]
+    },
+    "tar_bytes": {
+      "description": "Size of the whole tar in bytes.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "tar_sha256": {
+      "description": "SHA-256 of the whole tar.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sha256"
+        }
+      ]
+    },
+    "parts": {
+      "description": "The parts in order. At most 4096 (DEFAULT_RECORDING_LIMITS.maxExportParts, 64 GiB in 16 MiB parts).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/part"
+      },
+      "maxItems": 4096
+    }
+  },
+  "required": ["recording_version", "recording_id", "tar_bytes", "tar_sha256", "parts"],
+  "additionalProperties": false,
+  "$defs": {
+    "part": {
+      "title": "ExportPart",
+      "description": "One part of the export tar.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The part's file name: four digits, then .part.",
+          "type": "string",
+          "pattern": "^[0-9]{4}\\.part$"
+        },
+        "bytes": {
+          "description": "Size in bytes, at most UPLOAD_PART_BYTES.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "sha256": {
+          "description": "SHA-256 of the part's bytes.",
+          "allOf": [
+            {
+              "$ref": "../capture-bundle/defs.schema.json#/$defs/sha256"
+            }
+          ]
+        }
+      },
+      "required": ["name", "bytes", "sha256"],
+      "additionalProperties": false
+    }
+  }
+}

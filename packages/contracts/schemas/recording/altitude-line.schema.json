@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/altitude-line.schema.json",
+  "title": "AltitudeLine",
+  "description": "One line of the optional altitude.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one CMAltimeter relative-altitude sample. Never absolute altitude. Checked by validate-recording, not by this schema: t strictly increases.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+    },
+    "relative_m": {
+      "description": "Metres since the first sample (CMAltitudeData.relativeAltitude).",
+      "type": "number"
+    },
+    "pressure_kpa": {
+      "description": "Barometric pressure in kilopascals.",
+      "type": "number",
+      "exclusiveMinimum": 0
+    }
+  },
+  "required": ["t", "relative_m", "pressure_kpa"],
+  "additionalProperties": false
+}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/motion-line.schema.json",
+  "title": "MotionLine",
+  "description": "One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. The file is empty exactly when recording.json's motion is null. Checked by validate-recording, not by this schema: t strictly increases, the attitude's norm is within 1e-3 of 1, and heading is null in the arbitrary reference frames.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+    },
+    "attitude": {
+      "description": "CMDeviceMotion.attitude as a quaternion, in recording.json's motion.reference_frame.",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/quaternion"
+        }
+      ]
+    },
+    "gravity": {
+      "description": "Gravity in m/s^2 (converted from g, 1 g = 9.80665 m/s^2).",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/deviceVector"
+        }
+      ]
+    },
+    "user_accel": {
+      "description": "The user's acceleration in m/s^2 (converted from g).",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/deviceVector"
+        }
+      ]
+    },
+    "rotation": {
+      "description": "Rotation rate in rad/s.",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/deviceVector"
+        }
+      ]
+    },
+    "magnetic": {
+      "$ref": "#/$defs/magnetic"
+    },
+    "heading": {
+      "description": "Degrees clockwise from the north of motion.reference_frame (magnetic or true), from 0 up to 360; null in the two arbitrary frames, and when Core Motion gives none.",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["t", "attitude", "gravity", "user_accel", "rotation", "magnetic", "heading"],
+  "additionalProperties": false,
+  "$defs": {
+    "magnetic": {
+      "title": "MagneticField",
+      "description": "CMDeviceMotion.magneticField: the calibrated field and its accuracy.",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "The field in microtesla.",
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/deviceVector"
+            }
+          ]
+        },
+        "accuracy": {
+          "$ref": "#/$defs/magneticAccuracy"
+        }
+      },
+      "required": ["field", "accuracy"],
+      "additionalProperties": false
+    },
+    "magneticAccuracy": {
+      "title": "MagneticAccuracy",
+      "description": "CMMagneticFieldCalibrationAccuracy.",
+      "type": "string",
+      "enum": ["uncalibrated", "low", "medium", "high"]
+    }
+  }
+}

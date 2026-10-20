@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/telemetry-line.schema.json",
+  "title": "TelemetryLine",
+  "description": "One line of telemetry.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one line a second. Checked by validate-recording, not by this schema: t strictly increases.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+    },
+    "thermal": {
+      "$ref": "defs.schema.json#/$defs/thermalState"
+    },
+    "memory_mb": {
+      "description": "The app's memory footprint in MB.",
+      "type": "number",
+      "minimum": 0
+    },
+    "cpu": {
+      "description": "The app's CPU use in percent of one core; it can pass 100.",
+      "type": "number",
+      "minimum": 0
+    },
+    "free_disk_mb": {
+      "description": "Free space on the phone in MB.",
+      "type": "number",
+      "minimum": 0
+    },
+    "queue": {
+      "description": "Frames waiting for the keyframe and candidate stages.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidates_blurred": {
+      "description": "Candidates blurred since the recording opened.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidates_dropped": {
+      "description": "Candidates dropped since the recording opened.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "stage_ms": {
+      "$ref": "defs.schema.json#/$defs/stagePercentiles"
+    }
+  },
+  "required": [
+    "t",
+    "thermal",
+    "memory_mb",
+    "cpu",
+    "free_disk_mb",
+    "queue",
+    "candidates_blurred",
+    "candidates_dropped",
+    "stage_ms"
+  ],
+  "additionalProperties": false
+}

@@ -9,5 +9,6 @@ export * from "./diff.ts";
 export * from "./export.ts";
 export type * from "./generated/contracts.ts";
 export * from "./map.ts";
+export * from "./recording.ts";
 export * from "./schema-ids.ts";
 export * from "./snapshot.ts";

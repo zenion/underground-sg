@@ -72,6 +72,9 @@ describe("schema files", () => {
     expect(DIFF_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}diff/`);
     expect(API_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}api/`);
     expect(EXPORT_SCHEMA_BASE_URL).toBe(`${SCHEMA_BASE_URL}export/`);
+    for (const file of ALL_SCHEMA_FILES.filter((f) => f.startsWith("recording/"))) {
+      expect(readSchema(file)["$id"]).toBe(`${SCHEMA_BASE_URL}${file}`);
+    }
   });
 
   test.each(ALL_SCHEMA_FILES)("%s declares 2020-12, its $id, a title and a description", (file) => {

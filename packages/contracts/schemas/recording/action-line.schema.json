@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/action-line.schema.json",
+  "title": "ActionLine",
+  "description": "One line of actions.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one call JavaScript made to the capture module during the session, with what native code returned. The recorder's plumbing (appendBoundary, listRecordings, exportRecording, deleteRecording) is never logged. A value that would pass the JSON-text bound or the line limit is replaced by the marker {\"omitted\":\"too_large\",\"bytes\":N}. Checked by validate-recording, not by this schema: t never decreases, args and result parse as JSON, and call is not a plumbing call.",
+  "type": "object",
+  "properties": {
+    "t": {
+      "description": "When native code answered the call.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+        }
+      ]
+    },
+    "call": {
+      "description": "The method's name, for example markAnchor.",
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]{0,63}$"
+    },
+    "args": {
+      "description": "The arguments as JavaScript passed them, as JSON text (an array).",
+      "allOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/jsonText"
+        }
+      ]
+    },
+    "result": {
+      "description": "What native code returned, as JSON text, or null for nothing or for a binary result (which only boundary/<seq>.f32 holds).",
+      "anyOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/jsonText"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "description": "The error's code when the call failed, else null.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["t", "call", "args", "result", "error"],
+  "additionalProperties": false
+}

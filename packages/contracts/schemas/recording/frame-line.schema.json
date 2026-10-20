@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://underground-sg.local/schemas/recording/frame-line.schema.json",
+  "title": "RecordingFrameLine",
+  "description": "One line of frames.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one line per ARFrame, written by the Swift recorder. Checked by validate-recording, not by this schema: frame and t strictly increase, and every candidate kept has its files and a blur line.",
+  "type": "object",
+  "properties": {
+    "frame": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/frameIndex"
+    },
+    "t": {
+      "$ref": "../capture-bundle/defs.schema.json#/$defs/sessionTime"
+    },
+    "transform": {
+      "description": "ARKit's camera.transform at this frame, as in poses.jsonl.",
+      "allOf": [
+        {
+          "$ref": "../capture-bundle/defs.schema.json#/$defs/transform"
+        }
+      ]
+    },
+    "intrinsics": {
+      "description": "[fx, fy, cx, cy] in pixels, for arkit.video_format's image size in recording.json.",
+      "type": "array",
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "tracking": {
+      "description": "ARKit's tracking state, as in poses.jsonl: normal, notAvailable, or limited:<reason>.",
+      "type": "string",
+      "pattern": "^(normal|notAvailable|limited:[A-Za-z]+)$"
+    },
+    "mapping": {
+      "$ref": "defs.schema.json#/$defs/worldMapping"
+    },
+    "exposure": {
+      "$ref": "#/$defs/exposure"
+    },
+    "light": {
+      "description": "ARKit's light estimate, or null when it has none.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/light"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gap": {
+      "description": "Frames ARKit skipped since the last line, from the time between them at the video format's rate; 0 for the first line.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "candidate": {
+      "description": "null when the frame is not a candidate.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/candidate"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sharpness": {
+      "description": "The candidate's pre-blur sharpness score, or null (not a candidate, or not measured, as in lean).",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ms": {
+      "$ref": "defs.schema.json#/$defs/stageTimings"
+    }
+  },
+  "required": [
+    "frame",
+    "t",
+    "transform",
+    "intrinsics",
+    "tracking",
+    "mapping",
+    "exposure",
+    "light",
+    "gap",
+    "candidate",
+    "sharpness",
+    "ms"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "exposure": {
+      "title": "FrameExposure",
+      "description": "The camera's exposure for this frame.",
+      "type": "object",
+      "properties": {
+        "duration_s": {
+          "description": "ARCamera.exposureDuration, in seconds.",
+          "type": "number",
+          "minimum": 0
+        },
+        "offset_ev": {
+          "description": "ARCamera.exposureOffset, in EV.",
+          "type": "number"
+        }
+      },
+      "required": ["duration_s", "offset_ev"],
+      "additionalProperties": false
+    },
+    "light": {
+      "title": "LightEstimate",
+      "description": "ARFrame.lightEstimate.",
+      "type": "object",
+      "properties": {
+        "intensity_lm": {
+          "description": "Ambient intensity in lumens (1000 is neutral).",
+          "type": "number",
+          "minimum": 0
+        },
+        "temperature_k": {
+          "description": "Ambient colour temperature in kelvin.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["intensity_lm", "temperature_k"],
+      "additionalProperties": false
+    },
+    "candidate": {
+      "title": "CandidateStatus",
+      "description": "What became of a candidate. keyframe: chosen as a keyframe (in its bundle). kept: written to candidates/ through writeBlurredJPEG. dropped:profile: the profile keeps no candidates (lean). dropped:heat, dropped:backpressure, dropped:disk: dropped under heat, a full queue or low disk. dropped:blur: a detector failed, so it was never written.",
+      "type": "string",
+      "enum": [
+        "keyframe",
+        "kept",
+        "dropped:profile",
+        "dropped:heat",
+        "dropped:backpressure",
+        "dropped:disk",
+        "dropped:blur"
+      ]
+    }
+  }
+}
