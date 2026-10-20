@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
+import { SYNTHETIC_SET_NAMES } from "../src/index.ts";
 import {
   checkIndex,
   checkPaths,
@@ -122,6 +123,43 @@ describe("the rules", () => {
     expect(inSyntheticSet(`packages/recording/fixtures/frames.jsonl`)).toBe(false);
   });
 
+  test("knows only the sets synth writes, by exact name", () => {
+    for (const set of SYNTHETIC_SET_NAMES) {
+      expect(inSyntheticSet(`${SYNTHETIC_SETS_DIR}${set}/rec-1/frames.jsonl`), set).toBe(true);
+    }
+    for (const set of ["other", "walk-copy", "Corridor-Lean", "corridor-lean-2", "corridor"]) {
+      expect(inSyntheticSet(`${SYNTHETIC_SETS_DIR}${set}/rec-1/frames.jsonl`), set).toBe(false);
+    }
+  });
+
+  test("a recording copied in beside the sets is outside them, recording.json or not", () => {
+    const stray = `${SYNTHETIC_SETS_DIR}other/rec-x`;
+    const problems = checkPaths(
+      [
+        `${stray}/location.jsonl`,
+        `${stray}/frames.jsonl`,
+        `${stray}/boundary.jsonl`,
+        `${SET}/location.jsonl`,
+      ],
+      () => true,
+    );
+    expect(problems.map((p) => [p.code, p.path])).toEqual([
+      ["recording_file_outside_sets", `${stray}/location.jsonl`],
+      ["recording_file_outside_sets", `${stray}/frames.jsonl`],
+      ["recording_file_outside_sets", `${stray}/boundary.jsonl`],
+    ]);
+  });
+
+  test("a synthetic recording.json outside the named sets doesn't count for requireSets", () => {
+    const stray = `${SYNTHETIC_SETS_DIR}other/rec-x/recording.json`;
+    expect(
+      checkPaths([stray], () => true, { requireSets: true }).map((p) => [p.code, p.path]),
+    ).toEqual([
+      ["recording_file_outside_sets", stray],
+      ["no_synthetic_recording", null],
+    ]);
+  });
+
   test("a recording.json must be synthetic, inside a set or not", () => {
     const problems = checkPaths([`${SET}/recording.json`, "notes/recording.json"], () => false);
     expect(problems.map((p) => [p.code, p.path])).toEqual([
@@ -166,6 +204,14 @@ describe("a repository's index", () => {
     const dir = repository({ "test/fixtures/capture-1/gnss.jsonl": "{}\n" });
     expect(checkIndex(dir).map((p) => [p.code, p.path])).toEqual([
       ["recording_file_outside_sets", "test/fixtures/capture-1/gnss.jsonl"],
+    ]);
+  });
+
+  test("fails on a location.jsonl planted beside the sets, with no recording.json", () => {
+    const stray = `${SYNTHETIC_SETS_DIR}other/rec-x/location.jsonl`;
+    const dir = repository({ [`${SET}/recording.json`]: SYNTHETIC, [stray]: "{}\n" });
+    expect(checkIndex(dir, { requireSets: true }).map((p) => [p.code, p.path])).toEqual([
+      ["recording_file_outside_sets", stray],
     ]);
   });
 

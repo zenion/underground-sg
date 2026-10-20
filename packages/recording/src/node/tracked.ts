@@ -2,8 +2,14 @@
 // published, so CI and the pre-push hook refuse any tracked recording.json that isn't
 // `origin: synthetic`, and recording or bundle files anywhere but the generated synthetic sets
 // and the hand-made fixture directories. Problems name paths and commits, never file contents.
+//
+// A generated set is one `pnpm rec synth` writes, named in SYNTHETIC_SET_NAMES. Any other
+// directory under fixtures/synthetic/ is outside the sets, or a walk copied in beside them would
+// pass: .gitignore re-includes rec-*/ at any depth there, and CI's regenerate-and-diff never
+// rewrites a directory synth doesn't know.
 
 import { spawnSync } from "node:child_process";
+import { SYNTHETIC_SET_NAMES } from "../synthetic/sets.ts";
 
 /** The generated sets: packages/recording/fixtures/synthetic/<set>/, as `pnpm rec synth` writes. */
 export const SYNTHETIC_SETS_DIR = "packages/recording/fixtures/synthetic/";
@@ -65,11 +71,14 @@ export function isRecordingFile(path: string): boolean {
   );
 }
 
-/** Whether the path is inside a generated set: fixtures/synthetic/<set>/, any depth below. */
+/**
+ * Whether the path is inside a generated set: fixtures/synthetic/<set>/, any depth below, where
+ * <set> is one of SYNTHETIC_SET_NAMES, matched exactly.
+ */
 export function inSyntheticSet(path: string): boolean {
   if (!path.startsWith(SYNTHETIC_SETS_DIR)) return false;
   const [set, ...rest] = path.slice(SYNTHETIC_SETS_DIR.length).split("/");
-  return set !== undefined && rest.length > 0 && !/^(rec|replay)-/.test(set) && set !== "";
+  return set !== undefined && rest.length > 0 && SYNTHETIC_SET_NAMES.includes(set);
 }
 
 function inAllowedDir(path: string): boolean {

@@ -5,10 +5,10 @@
 
 export { deflateRaw } from "./deflate.ts";
 export {
-  CORRIDOR_LEAN,
   corridorLean,
   ESPLANADE_MRT_VENUE,
   EXIT_F_DOOR,
   type SetDigests,
   type SyntheticSet,
 } from "./synthetic/corridor-lean.ts";
+export { CORRIDOR_LEAN, SYNTHETIC_SET_NAMES } from "./synthetic/sets.ts";

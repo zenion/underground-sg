@@ -1,11 +1,14 @@
 // `pnpm rec synth`: writes the synthetic replay sets, by default into the package's
 // fixtures/synthetic/, where they are tracked (.gitignore re-includes their rec-*/ directories) and
 // CI regenerates them and fails on a diff. Like every `pnpm rec` command it refuses output paths
-// outside its allowed roots: here fixtures/synthetic/ and the repo's git-ignored .data/.
+// outside its allowed roots: here fixtures/synthetic/ and the repo's git-ignored .data/. In
+// fixtures/synthetic/ it also removes every directory that isn't a known set, so CI's diff shows
+// anything copied in beside them.
 
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { corridorLean, type SyntheticSet } from "../synthetic/corridor-lean.ts";
+import { SYNTHETIC_SET_NAMES } from "../synthetic/sets.ts";
 import { NODE_DIGESTS } from "./digests.ts";
 
 export const PACKAGE_DIR = resolve(import.meta.dirname, "..", "..");
@@ -82,11 +85,47 @@ export function writeSet(set: SyntheticSet, outDir: string, roots: readonly stri
   return { name: set.name, dir, files: set.files.size, bytes };
 }
 
+/** Removes every directory in `dir` that isn't one of SYNTHETIC_SET_NAMES; returns their names. */
+export function removeStrayDirectories(dir: string): string[] {
+  const removed: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || SYNTHETIC_SET_NAMES.includes(entry.name)) continue;
+    rmSync(join(dir, entry.name), { recursive: true, force: true });
+    removed.push(entry.name);
+  }
+  return removed.sort();
+}
+
+export interface SynthesizeOptions {
+  /**
+   * Remove every other directory beside the sets. By default only in fixtures/synthetic/, where
+   * nothing but the generated sets belongs; .data/ holds the owner's own data.
+   */
+  readonly removeStrays?: boolean;
+}
+
+export interface Synthesized {
+  readonly sets: WrittenSet[];
+  /** The directories removed beside the sets, by name. */
+  readonly removed: string[];
+}
+
 /** Writes every synthetic set into `outDir` (by default the package's fixtures/synthetic/). */
 export function synthesize(
   outDir = SYNTHETIC_DIR,
   roots: readonly string[] = [SYNTHETIC_DIR, DATA_DIR],
-): WrittenSet[] {
+  options: SynthesizeOptions = {},
+): Synthesized {
   checkOutputDir(outDir, roots);
-  return syntheticSets().map((set) => writeSet(set, outDir, roots));
+  const sets = syntheticSets();
+  for (const set of sets) {
+    // The git check allows only the named sets, so an unnamed one could never be pushed.
+    if (!SYNTHETIC_SET_NAMES.includes(set.name)) {
+      throw new Error(`the set ${set.name} is not in SYNTHETIC_SET_NAMES (src/synthetic/sets.ts)`);
+    }
+  }
+  const written = sets.map((set) => writeSet(set, outDir, roots));
+  const removeStrays =
+    options.removeStrays ?? (isInside(outDir, SYNTHETIC_DIR) && isInside(SYNTHETIC_DIR, outDir));
+  return { sets: written, removed: removeStrays ? removeStrayDirectories(outDir) : [] };
 }

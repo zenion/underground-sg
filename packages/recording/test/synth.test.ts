@@ -2,7 +2,15 @@
 // copy, synthetic through and through, and refused anywhere but fixtures/synthetic/ and .data/.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { inflateRawSync } from "node:zlib";
@@ -17,14 +25,22 @@ import { validateRecording } from "@usg/contracts/recording-validator";
 import { CORE_VENUE } from "@usg/db/seed/core-venues";
 import { buildFloorplan } from "@usg/floorplan";
 import { afterAll, describe, expect, test } from "vitest";
-import { CORRIDOR_LEAN, corridorLean, ESPLANADE_MRT_VENUE, EXIT_F_DOOR } from "../src/index.ts";
+import {
+  CORRIDOR_LEAN,
+  corridorLean,
+  ESPLANADE_MRT_VENUE,
+  EXIT_F_DOOR,
+  SYNTHETIC_SET_NAMES,
+} from "../src/index.ts";
 import {
   checkOutputDir,
   DATA_DIR,
   NODE_DIGESTS,
   OutputPathError,
+  removeStrayDirectories,
   SYNTHETIC_DIR,
   synthesize,
+  syntheticSets,
   uuidV5,
   writeSet,
 } from "../src/node/index.ts";
@@ -80,7 +96,11 @@ function readTree(dir: string): Map<string, Buffer> {
 describe("the corridor-lean set", () => {
   test("passes validate-recording as a replay set, with no warnings", async () => {
     const out = temporaryDir();
-    const [written] = synthesize(out, [out]);
+    const {
+      sets: [written],
+      removed,
+    } = synthesize(out, [out]);
+    expect(removed).toEqual([]);
     expect(written?.name).toBe(CORRIDOR_LEAN);
     const report = await validateRecording(join(out, CORRIDOR_LEAN));
     expect(report.errors).toEqual([]);
@@ -235,6 +255,29 @@ describe("output paths", () => {
     writeSet(set, out, [out]);
     expect(existsSync(join(out, CORRIDOR_LEAN, "stale"))).toBe(false);
     expect(readTree(join(out, CORRIDOR_LEAN)).size).toBe(set.files.size);
+  });
+
+  test("every set synth writes is named in SYNTHETIC_SET_NAMES, which the git check allows", () => {
+    expect(syntheticSets().map((written) => written.name)).toEqual([...SYNTHETIC_SET_NAMES]);
+  });
+
+  test("in fixtures/synthetic/, synth removes every directory that isn't a set", () => {
+    const out = temporaryDir();
+    mkdirSync(join(out, "walk-copy", "rec-x"), { recursive: true });
+    writeFileSync(join(out, "walk-copy", "rec-x", "location.jsonl"), "{}\n");
+    writeFileSync(join(out, "notes.txt"), "kept\n");
+    const { sets, removed } = synthesize(out, [out], { removeStrays: true });
+    expect(sets.map((written) => written.name)).toEqual([CORRIDOR_LEAN]);
+    expect(removed).toEqual(["walk-copy"]);
+    expect(readdirSync(out).sort()).toEqual([CORRIDOR_LEAN, "notes.txt"]);
+    expect(removeStrayDirectories(out)).toEqual([]);
+  });
+
+  test("elsewhere, as in .data/, synth leaves other directories alone", () => {
+    const out = temporaryDir();
+    mkdirSync(join(out, "mine"));
+    expect(synthesize(out, [out]).removed).toEqual([]);
+    expect(existsSync(join(out, "mine"))).toBe(true);
   });
 
   test("the CLI refuses an output outside the allowed roots", () => {

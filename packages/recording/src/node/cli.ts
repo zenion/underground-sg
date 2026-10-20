@@ -11,7 +11,8 @@ const USAGE = `Usage: pnpm rec synth [--out <dir>]
 
   synth          Write the synthetic replay sets (origin: synthetic), replacing each set's
                  directory. By default into packages/recording/fixtures/synthetic/, where they
-                 are tracked; --out must be inside that directory or the repo's .data/
+                 are tracked and any other directory is removed; --out must be inside that
+                 directory or the repo's .data/
   -h, --help     Show this help
 
 Exit codes: 0 done, 2 usage error or a refused path.
@@ -49,9 +50,13 @@ function main(args: string[]): number {
   // pnpm runs the script in the package; a relative --out is relative to where it was typed.
   const from = process.env["INIT_CWD"] ?? process.cwd();
   try {
-    const written = values.out === undefined ? synthesize() : synthesize(resolve(from, values.out));
-    for (const set of written) {
+    const { sets, removed } =
+      values.out === undefined ? synthesize() : synthesize(resolve(from, values.out));
+    for (const set of sets) {
       process.stdout.write(`rec synth: ${set.name}: ${set.files} files, ${set.bytes} bytes\n`);
+    }
+    for (const name of removed) {
+      process.stdout.write(`rec synth: removed ${name}/, which is not a synthetic set\n`);
     }
   } catch (error) {
     if (error instanceof OutputPathError) return fail(`refused: ${error.message}`);

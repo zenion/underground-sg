@@ -14,7 +14,7 @@ pnpm rec synth                    # rewrites packages/recording/fixtures/synthet
 pnpm rec synth --out .data/synth  # or anywhere under the git-ignored .data/
 ```
 
-Sets are generated files, as `pnpm gen`'s output is: never edit them by hand. CI runs `pnpm rec synth` and fails on any difference, fails if they hold no tracked `recording.json`, and runs `validate-recording` on them. `pnpm rec synth` refuses an output path outside `fixtures/synthetic/` and `.data/`, symbolic links resolved. A set's directory must not be named `rec-*` or `replay-*`: `.gitignore` ignores those anywhere and re-includes only `fixtures/synthetic/**/rec-*/`.
+Sets are generated files, as `pnpm gen`'s output is: never edit them by hand. CI runs `pnpm rec synth` and fails on any difference, fails if they hold no tracked `recording.json`, and runs `validate-recording` on them. `pnpm rec synth` refuses an output path outside `fixtures/synthetic/` and `.data/`, symbolic links resolved. In `fixtures/synthetic/` it also removes every directory that isn't a set, so CI's diff shows anything copied in beside them. A set's directory must not be named `rec-*` or `replay-*`: `.gitignore` ignores those anywhere and re-includes only `fixtures/synthetic/**/rec-*/`.
 
 **`corridor-lean`** is one `lean` recording (`rec-<uuidv5>/`, `origin: synthetic`, `build.profile: synthetic`) with no bundles, as a lean recording made before the blur passes has none. It records 37 s of a walk along a synthetic stand-in for the Exit F link: the owner marks a street-facing start anchor at the street door, walks 39 m down a ramp to B1 at 1.3 m/s, marks the end anchor with End the session here, and the recording closes 5 s later (`end_anchor`). It has every file a lean recording has: frames at 60 Hz with one dropped frame and a moment of limited tracking, IMU and device motion at 100 Hz, the altimeter, telemetry, events, actions, a boundary trace with status at 5 Hz, the mark results and a binary floor-triangles result, and the mesh history.
 
@@ -22,7 +22,7 @@ Sets are generated files, as `pnpm gen`'s output is: never edit them by hand. CI
 - **Coordinates.** Poses and the mesh are in the session's ARKit frame, with no georeference. The only real-world values are the GNSS fixes in `location.jsonl`, near the public street door of Esplanade MRT's Exit F, inside the window and within 30 s of the street-facing mark. The door's position is approximate (`EXIT_F_DOOR`); replace it with LTA's MRT Station Exit data once that is imported.
 - **Determinism.** Noise comes from seeded PRNGs, numbers are rounded before they are written, UUIDs are UUIDv5 in a fixed namespace, and times are fixed, so every run on every platform writes the same bytes. `.gitattributes` marks the sets `-text`, so no checkout converts line endings and breaks the digests in `recording.json`.
 
-Add a set by writing its builder beside `src/synthetic/corridor-lean.ts`, listing it in `syntheticSets()` (`src/node/synth.ts`) and adding its `validate-recording` step to CI.
+Add a set by writing its builder beside `src/synthetic/corridor-lean.ts`, listing it in `syntheticSets()` (`src/node/synth.ts`), naming its directory in `SYNTHETIC_SET_NAMES` (`src/synthetic/sets.ts`, the names the git check allows) and adding its `validate-recording` step to CI.
 
 ## The git check
 
@@ -36,7 +36,7 @@ node packages/recording/scripts/check-tracked.ts --require-sets   # as CI runs i
 It fails on:
 
 - any tracked `recording.json` that doesn't say `origin: synthetic` (or isn't JSON), wherever it is;
-- `recording.json`, `frames.jsonl`, `boundary.jsonl`, `location.jsonl`, `history.bin`, `poses.jsonl`, `gnss.jsonl`, `parts.json`, `*.part`, anything under a `candidates/` directory, or `capture-*/manifest.json`, outside the generated sets (`fixtures/synthetic/<set>/`) and the hand-made fixture directories, matched without regard to case;
+- `recording.json`, `frames.jsonl`, `boundary.jsonl`, `location.jsonl`, `history.bin`, `poses.jsonl`, `gnss.jsonl`, `parts.json`, `*.part`, anything under a `candidates/` directory, or `capture-*/manifest.json`, outside the generated sets (`fixtures/synthetic/<set>/` for a `<set>` in `SYNTHETIC_SET_NAMES`, so a directory copied in beside them is outside) and the hand-made fixture directories, matched without regard to case;
 - with `--require-sets` (CI), no synthetic `recording.json` in the generated sets.
 
 The hook checks every commit the push would publish (each pushed ref's commits that no remote-tracking ref has), not only the tip, so a recording committed and deleted again is still refused. Without Node the hook fails, and so does the push. Output names paths, commits and problem codes, never file contents.

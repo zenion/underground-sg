@@ -32,6 +32,7 @@ import {
   phantomChunk,
   scannedCount,
 } from "./mesh.ts";
+import { CORRIDOR_LEAN } from "./sets.ts";
 import {
   cameraHeight,
   cameraTransform,
@@ -50,9 +51,6 @@ import {
   walking,
   walkRotation,
 } from "./walk.ts";
-
-/** The set's directory name under fixtures/synthetic/ (never rec-* or replay-*). */
-export const CORRIDOR_LEAN = "corridor-lean";
 
 /** Esplanade MRT's id in the seed (db/seed/core-venues.ts), fixed for good. */
 export const ESPLANADE_MRT_VENUE = "36632586-e1fa-4e10-800a-81acf0eab09a";
