@@ -3,8 +3,9 @@
 // console.log, console.error, React Native's nativeLoggingHook and the uncaught-error handler (as
 // a non-fatal error, so the app keeps running) — while the owner watches `pymobiledevice3 syslog
 // live` (docs/phone-testing.md). In the walk build the log guard (log-guard.ts) must leave none of
-// it in the log: no marker, only "[redacted capture error]". In other builds the marker shows up,
-// which proves the check reaches the log at all. The numbers are made up, never a real place.
+// it in the log: no marker (a "[redacted capture error]" line may appear, if React Native logs the
+// non-fatal error at all in a release build). In other builds the marker shows up, which proves
+// the check reaches the log at all. The numbers are made up, never a real place.
 
 import type { LogGuardTarget } from "./log-guard.ts";
 

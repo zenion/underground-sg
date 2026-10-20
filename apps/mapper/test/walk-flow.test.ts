@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 import {
   HOLD_STILL_S,
   initialWalkState,
+  isWalkActive,
   type WalkAction,
   type WalkState,
   walkMarkOptions,
@@ -410,5 +411,76 @@ describe("venues", () => {
     expect(run(ready, { type: "back" }).step).toBe("record");
     expect(run(ready, { type: "back" }, { type: "back" }).step).toBe("venues");
     expect(run(walking(), { type: "back" }).step).toBe("walking");
+  });
+});
+
+describe("isWalkActive (the tab bar is hidden and tab presses refused while true)", () => {
+  /** Ready to start a record-off desk check. */
+  function ready(): WalkState {
+    return run(
+      initialWalkState(false),
+      { type: "toggleVenue", id: SOUTH_BEACH },
+      { type: "confirmVenues" },
+      { type: "confirmRecord" },
+    );
+  }
+
+  test("is off before Start", () => {
+    expect(isWalkActive(initialWalkState(true))).toBe(false);
+    expect(ready().step).toBe("ready");
+    expect(isWalkActive(ready())).toBe(false);
+  });
+
+  test("is on from the Start tap, before the session has started", () => {
+    const starting = run(ready(), { type: "start" });
+    expect(starting.step).toBe("starting");
+    expect(starting.sessionRunning).toBe(false);
+    expect(isWalkActive(starting)).toBe(true);
+  });
+
+  test("is off again when start fails", () => {
+    const refused = run(
+      ready(),
+      { type: "start" },
+      { type: "callFailed", call: "start", code: "ERR_RECORD_REFUSED" },
+    );
+    expect(refused.step).toBe("ready");
+    expect(isWalkActive(refused)).toBe(false);
+  });
+
+  test("stays on through every session step and Saving, and goes off at the summary", () => {
+    const steps: string[] = [];
+    let state = armed();
+    const check = (next: WalkState) => {
+      steps.push(next.step);
+      expect(isWalkActive(next)).toBe(true);
+      state = next;
+    };
+    check(state);
+    check(walking());
+    check(run(state, { type: "holdStill" }));
+    check(run(state, ...heldSeconds(HOLD_STILL_S)));
+    check(run(state, { type: "marked", window: "open" }, { type: "recording", phase: "closing" }));
+    check(run(state, { type: "recording", phase: "finalizing" }));
+    check(run(state, { type: "stopped", recording: null }));
+    expect(state.sessionRunning).toBe(false);
+    expect(state.step).toBe("saving");
+    const done = run(state, {
+      type: "recording",
+      phase: "closed",
+      ended: "end_anchor",
+      trimmed: false,
+      closed: true,
+    });
+    expect(done.step).toBe("summary");
+    expect(isWalkActive(done)).toBe(false);
+    expect(steps).toEqual(
+      expect.arrayContaining(["armed", "walking", "holding", "marking", "closing", "saving"]),
+    );
+
+    const stopping = run(walking(), { type: "stop" });
+    expect(stopping.step).toBe("stopping");
+    expect(isWalkActive(stopping)).toBe(true);
+    expect(isWalkActive(run(stopping, { type: "stopped", recording: null }))).toBe(true);
   });
 });

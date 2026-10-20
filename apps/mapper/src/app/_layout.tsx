@@ -2,7 +2,7 @@ import { Tabs } from "expo-router/js-tabs";
 import { type AndroidSymbol, type SFSymbol, SymbolView } from "expo-symbols";
 import type { ColorValue } from "react-native";
 import { CaptureNative } from "../../modules/capture-native/index.ts";
-import { useCaptureActive } from "../capture/active.ts";
+import { isCaptureActive, useCaptureActive } from "../capture/active.ts";
 import { installLogGuard } from "../capture/log-guard.ts";
 import { buildProfileOf } from "../capture/native.ts";
 import { colors } from "../ui.tsx";
@@ -22,14 +22,20 @@ function icon(ios: SFSymbol, other: AndroidSymbol) {
 }
 
 export default function TabsLayout() {
-  // While a walk session runs the tab bar is hidden: leaving the walk screen would unmount the
-  // camera, and the Map tab would mount the map next to ARKit.
+  // From the walk's Start tap until its summary the tab bar is hidden, and a tab press that still
+  // lands (one queued before the bar was hidden) is refused: leaving the walk screen would unmount
+  // the camera, and the Map tab would mount the map next to ARKit (ADR 0007).
   const captureActive = useCaptureActive();
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.accent,
         ...(captureActive ? { tabBarStyle: { display: "none" } } : {}),
+      }}
+      screenListeners={{
+        tabPress: (event) => {
+          if (isCaptureActive()) event.preventDefault();
+        },
       }}
     >
       <Tabs.Screen

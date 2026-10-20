@@ -186,6 +186,28 @@ const STOPPABLE: ReadonlySet<WalkStep> = new Set([
   "closing",
 ]);
 
+/** The steps from the Start tap until the summary: the session is starting, running or saving. */
+const ACTIVE_STEPS: ReadonlySet<WalkStep> = new Set([
+  "starting",
+  "armed",
+  "walking",
+  "marking",
+  "holding",
+  "closing",
+  "stopping",
+  "saving",
+]);
+
+/**
+ * Whether the walk holds the screen: from the Start tap (before the session has started, since
+ * start can take a while) until the summary, and whenever the session runs. Meanwhile the layout
+ * hides the tab bar and refuses tab presses, so the walker can't leave the walk screen and the map
+ * can't mount next to ARKit (ADR 0007).
+ */
+export function isWalkActive(state: WalkState): boolean {
+  return state.sessionRunning || ACTIVE_STEPS.has(state.step);
+}
+
 export function walkReducer(state: WalkState, action: WalkAction): WalkState {
   switch (action.type) {
     case "toggleVenue": {

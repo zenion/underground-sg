@@ -75,7 +75,7 @@ export function DebugCard({
           <Note>
             {checked === null
               ? `Log check: sends "${LOG_CHECK_TEXT}" to the console, React Native's log hook and the error handler, while you watch pymobiledevice3 syslog (docs/phone-testing.md). In the walk build none of it may appear.`
-              : `Sent through ${checked} channels. In the walk build the syslog must show none of it, only "[redacted capture error]".`}
+              : `Sent through ${checked} channels. In the walk build the syslog must show no "usg-log-check" line. A "[redacted capture error]" line may appear; it must not hold the marker.`}
           </Note>
         </>
       ) : null}

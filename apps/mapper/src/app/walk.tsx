@@ -6,11 +6,12 @@
 //
 // Only the walk build records; in the development build Lean is disabled with the module's reason
 // and the screen runs record-off desk checks. The map stays unmounted (it is mounted only on its
-// own tab, and the tab bar is hidden while a session runs). Nothing here shows or logs a pose or
-// a session time: the controller keeps them inside the port's Redacted values.
+// own tab, and from the Start tap until the summary the tab bar is hidden and tab presses are
+// refused). Nothing here shows or logs a pose or a session time: the controller keeps them inside
+// the port's Redacted values.
 
 import { useIsFocused, useRouter } from "expo-router";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CaptureView } from "../../modules/capture-native/index.ts";
 import { setCaptureActive } from "../capture/active.ts";
@@ -30,7 +31,7 @@ import {
   recBadge,
   summaryRows,
 } from "../walk/describe.ts";
-import { HOLD_STILL_S, type WalkAction, walkSummary } from "../walk/flow.ts";
+import { HOLD_STILL_S, isWalkActive, type WalkAction, walkSummary } from "../walk/flow.ts";
 import { NODE_TAG_ROW } from "../walk/tags.ts";
 import { CORRIDOR_VENUES } from "../walk/venues.ts";
 
@@ -119,16 +120,22 @@ function Walk({ capture, controller }: { capture: CaptureNative; controller: Wal
   });
   const [showMesh, setShowMesh] = useState(true);
 
-  const active = state.sessionRunning || state.step === "saving" || state.step === "stopping";
-  useEffect(() => setCaptureActive(active), [active]);
+  // From the Start tap until the summary: the layout hides the tab bar and refuses tab presses.
+  // A layout effect, so the store changes before the next frame is drawn.
+  const active = isWalkActive(state);
+  useLayoutEffect(() => setCaptureActive(active), [active]);
+
+  // The walk screen should never lose focus while active; if it somehow does, come back to it
+  // rather than keep a camera view mounted on a screen nobody sees.
+  useEffect(() => {
+    if (active && !focused) router.navigate("/walk");
+  }, [active, focused, router]);
 
   const driftWarning = capabilities ? iosDriftWarning("iOS", capabilities.osVersion) : null;
   const NativeView = CaptureView;
+  // The camera only on the focused screen, never on a hidden one.
   const showCamera =
-    NativeView !== null &&
-    snapshot.session !== null &&
-    CAMERA_STEPS.has(state.step) &&
-    (focused || active);
+    NativeView !== null && snapshot.session !== null && CAMERA_STEPS.has(state.step) && focused;
   const badge = recBadge(state, snapshot.status);
 
   return (
