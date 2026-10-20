@@ -1,5 +1,5 @@
-import { expect } from "vitest";
-import { type FloorPolygon, type LocalRing, ringArea } from "../src/index.ts";
+import type { FloorPolygon, LocalRing } from "../src/index.ts";
+import { checkWellFormed } from "./check.ts";
 
 /** Even-odd point-in-ring test. */
 export function insideRing(ring: LocalRing, x: number, z: number): boolean {
@@ -33,29 +33,7 @@ export function bounds(rings: readonly LocalRing[]): [number, number, number, nu
   return [minX, minZ, maxX, maxZ];
 }
 
-/**
- * Checks the output invariants: closed rings of at least 3 distinct points with finite
- * coordinates, outer rings counter-clockwise and holes clockwise from above, the reported area
- * matching the rings, and largest polygon first.
- */
+/** The output invariants, the same check as the venue tests' (test/check.ts). */
 export function expectWellFormed(polygons: readonly FloorPolygon[]): void {
-  let previous = Number.POSITIVE_INFINITY;
-  for (const polygon of polygons) {
-    for (const ring of [polygon.outer, ...polygon.holes]) {
-      expect(ring.length).toBeGreaterThanOrEqual(4);
-      expect(ring[0]).toEqual(ring[ring.length - 1]);
-      for (const [x, z] of ring) {
-        expect(Number.isFinite(x) && Number.isFinite(z)).toBe(true);
-      }
-    }
-    expect(ringArea(polygon.outer)).toBeGreaterThan(0);
-    let area = ringArea(polygon.outer);
-    for (const hole of polygon.holes) {
-      expect(ringArea(hole)).toBeLessThan(0);
-      area += ringArea(hole);
-    }
-    expect(polygon.areaM2).toBeCloseTo(area, 6);
-    expect(polygon.areaM2).toBeLessThanOrEqual(previous);
-    previous = polygon.areaM2;
-  }
+  checkWellFormed(polygons, "output");
 }
