@@ -1,3 +1,4 @@
+#if USG_RECORDER
 /// The phone's thermal state, as ProcessInfo.thermalState reports it. Telemetry and the `thermal`
 /// event write the raw value.
 public enum DeviceThermal: String, CaseIterable, Sendable {
@@ -135,3 +136,5 @@ public struct DegradationLadder: Sendable {
     !(profile == .lean && step == .fewerCandidates)
   }
 }
+
+#endif

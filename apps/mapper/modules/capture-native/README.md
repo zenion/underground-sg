@@ -21,8 +21,12 @@ Package.swift             SwiftPM, for `swift test`; the podspecs exclude it and
 CaptureCore.podspec       CaptureCore as its own pod, so it is its own Swift module in the app too
 Sources/CaptureCore/      Foundation only: WorldTransform, CandidateGate, RateMeter; the recorder's pure logic
                           (LineEncoder, RecorderWindow, GnssWindows, AnchorSampler, MeshHistorySchedule,
-                          DegradationLadder, StageTimer, FrameGap); and generated/Contracts.swift
-                          (written by `pnpm gen` from packages/contracts; do not edit)
+                          DegradationLadder, StageTimer, FrameGap); Recording/: the recorder's building
+                          blocks (SessionClock, the samples, RecordingEvent, ConfigCode, SessionCall,
+                          JsonText, BoundaryLineCheck, PendingLine, ImuPairer, AltitudeRebaser,
+                          PreOpenBuffer, Facing, MeshBlockLayout, MeshFingerprint, MeshLedger); and
+                          generated/Contracts.swift (written by `pnpm gen` from packages/contracts;
+                          do not edit)
 Tests/CaptureCoreTests/   Swift Testing, and Golden/: one file per line type, byte-exact (UPDATE_GOLDENS=1 rewrites them)
 encoder-allowlist.json    the encoder check's allowed places (empty until the blur lands)
 ci/planted/               planted encoder calls for the encoder check's self-test; in no pod
@@ -39,6 +43,7 @@ Rules ([ADR 0007](../../../../docs/decisions/0007-expo-mapper-app.md#swift-code-
   ```
 
   from this directory in Git Bash (`MSYS_NO_PATHCONV=1` in front if the path gets mangled). CI runs the same on Linux, and on the macOS runner.
+- **The recorder switch.** The recorder's code is compiled only under the `USG_RECORDER` condition (ADR 0010). `Package.swift` defines it by default, so `swift test` covers the recorder; with `USG_NO_RECORDER=1` (`docker run -e USG_NO_RECORDER=1 ...`) it builds and tests without it, as a contributor build will, which CI's Linux job checks with `swift build`. What is gated: `RecorderWindow`, `MeshHistorySchedule`, `DegradationLadder` and everything in `Recording/` except `JsonText`, `MeshBlockLayout` and `MeshFingerprint`, which bundles will use too. The pods don't define it yet: the config plugin that sets it for the development and walk builds comes later, so the app build compiles CaptureCore without the recorder until then.
 - **The macOS CI job** (`iOS native (macOS)` in `.github/workflows/ci.yml`): `swift test`, the generated Swift types, the encoder check's self-test, `expo prebuild`, `pod install`, an unsigned Debug build of the whole app, then the encoder check on this module's compiled objects.
 - **The encoder check** (`apps/mapper/scripts/encoder-check.mts`, rules in `encoder-check-lib.mts`, tested in `test/encoder-check.test.ts`) reads each object file's undefined symbols (raw and demangled) and its Objective-C selectors, and fails on image and video encoders, raw pixel access, view snapshots and Photos writes outside `encoder-allowlist.json`. Its self-test compiles each file in `ci/planted/` and expects the rule named on its first line.
 - **The native-dependency allow-list** (`apps/mapper/native-dependencies.json`, `test/native-dependencies.test.ts`) asks Expo's autolinking what native code the app links and fails on anything unreviewed or refused.

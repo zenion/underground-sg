@@ -232,9 +232,10 @@ public enum JsonText { static func bounded(_ json: String) -> String }  // ≤16
 public enum BoundaryLineCheck { static func check(_ line: String, window: RecorderWindow, lastSeq: Int?)
   -> Result<(t: Double, seq: Int, bytes: Data), BoundaryRefusal> }  // exactly t,seq,kind,value,binary; binary null;
                                                                    // ≤64 KiB; t accepted; seq increasing
-public struct PendingLine: Sendable { let file: RecordingFile; let t: Double
+public struct PendingLine: Sendable { let file: RecordingFilePath; let t: Double
   func encode(_ e: LineEncoder) throws -> Data }       // wraps the internal generated Codable value
-public enum RecordingFile: String, CaseIterable { frames="frames.jsonl", imu, motion, altitude, anchors, events,
+// RecordingFilePath, not RecordingFile: the generated type of a recording.json files entry has that name
+public enum RecordingFilePath: String, CaseIterable { frames="frames.jsonl", imu, motion, altitude, anchors, events,
   actions, telemetry, location, boundary, meshIndex="mesh/history.jsonl", meshBin="mesh/history.bin" }
 ```
 

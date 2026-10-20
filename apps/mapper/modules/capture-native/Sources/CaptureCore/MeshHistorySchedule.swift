@@ -1,3 +1,4 @@
+#if USG_RECORDER
 import Foundation
 
 /// The mesh anchors one mesh-history snapshot writes to mesh/history.bin and history.jsonl, and
@@ -94,3 +95,5 @@ public struct MeshHistorySchedule: Sendable {
     lastSnapshotT = t
   }
 }
+
+#endif

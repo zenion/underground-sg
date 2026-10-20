@@ -111,6 +111,12 @@ jobs:
         with:
           persist-credentials: false
       - run: swift test --package-path apps/mapper/modules/capture-native
+      # Without the recorder, as a contributor build compiles CaptureCore: nothing outside the
+      # recorder may need its code (the USG_RECORDER condition, design D12).
+      - name: Build without the recorder
+        run: swift build --package-path apps/mapper/modules/capture-native --scratch-path .build-no-recorder
+        env:
+          USG_NO_RECORDER: "1"
 
   db:
     # Branch protection requires the two check names above; add this one there to require it.
