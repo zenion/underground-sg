@@ -104,6 +104,8 @@ public final class FileSink {
   private var paths: RecordingPaths { store.paths }
   private var security: any FileSecurity { store.security }
   private var journalFile: DurableFile?
+  /// The journal's length up to its last whole, synced record.
+  private var journalBytes: Int64 = 0
   private var writers: [RecordingFilePath: JsonlFileWriter] = [:]
   private var mesh: MeshHistoryWriter?
   private var meshRunner = MeshJobRunner()
@@ -387,10 +389,20 @@ public final class FileSink {
     try mesh?.sync()
   }
 
+  /// A record full-synced onto the journal. A failed write or sync is cut back to the last whole
+  /// record, as the writers' are (design 7.7): recovery reads the journal only up to its first
+  /// torn line, so a torn checkpoint would hide the `closed{}` written after it.
   private func writeJournal(_ record: JournalRecord) throws {
     guard let journalFile else { throw IOFailure.closed }
-    try journalFile.appendAll(try Journal.encode(record))
-    try journalFile.fullSync()
+    let bytes = try Journal.encode(record)
+    do {
+      try journalFile.appendAll(bytes)
+      try journalFile.fullSync()
+    } catch {
+      try? journalFile.truncate(to: journalBytes)
+      throw error
+    }
+    journalBytes += Int64(bytes.count)
   }
 
   /// Asks for the window to close, once.

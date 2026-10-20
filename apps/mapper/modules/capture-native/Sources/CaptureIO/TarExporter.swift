@@ -71,8 +71,10 @@ public final class TarExporter {
   public var headroomBytes: Int64 = 64 << 20
   /// `maxExportParts`; the tests lower it.
   var maxParts = PartPlan.maxParts
-  /// The steps where the tests stop an export, as a crash would.
+  /// The steps where the tests stop an export, as a crash or a failed read would.
   enum Step: Sendable {
+    /// Each chunk read from a source file, before it is hashed and written.
+    case read
     case rename
     case deleteRaw
   }
@@ -174,7 +176,9 @@ public final class TarExporter {
       try DurableFile.syncDirectory(staging)
     } catch {
       try? deleteItem(staging)
-      throw (error as? ExportError) ?? .io
+      if let error = error as? ExportError { throw error }
+      // A class A part can't be written once the phone has locked (design 7.6).
+      throw unreadable
     }
 
     // Into Documents/exports/, then the raw files go. A crash between the two leaves both;
@@ -222,6 +226,7 @@ public final class TarExporter {
       var hash = Sha256Stream()
       do {
         try stream(url) { chunk in
+          try fault(.read)
           guard hash.byteCount + Int64(chunk.count) <= entry.size else {
             throw ExportError.corrupt
           }
@@ -233,8 +238,12 @@ public final class TarExporter {
         throw error
       } catch let error as IOFailure {
         throw error
-      } catch {
+      } catch is TarPartsError {
         throw ExportError.corrupt
+      } catch {
+        // A read that fails says nothing about the recording: only a file that has gone is
+        // corrupt. Others are the lock (class A files can't be read) or an I/O error.
+        throw isMissingFile(error) ? ExportError.corrupt : unreadable
       }
       guard hash.byteCount == entry.size else { throw ExportError.corrupt }
       if let expected = plan.expected[entry.name], expected.sha256 != hash.hex() {
@@ -247,5 +256,20 @@ public final class TarExporter {
     report(force: true)
     return try writer.finish()
   }
+
+  /// A read or write that failed: `locked` if the phone has locked since the export began, else
+  /// `io`. Never `corrupt`, which says the recording doesn't match recording.json.
+  private var unreadable: ExportError {
+    security.protectedDataAvailable ? .io : .locked
+  }
+}
+
+/// Foundation's error for a file that isn't there, from FileHandle on Darwin or Linux.
+private func isMissingFile(_ error: any Error) -> Bool {
+  if let error = error as? CocoaError {
+    return error.code == .fileNoSuchFile || error.code == .fileReadNoSuchFile
+  }
+  if let error = error as? POSIXError { return error.code == .ENOENT }
+  return false
 }
 #endif

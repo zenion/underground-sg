@@ -262,6 +262,57 @@ private func files(_ sink: MemorySink) -> [String: Data] {
     #expect(sink.figures.writeFailures > 0)
   }
 
+  @Test func aTornJournalRecordIsCutBackSoClosedStaysReadable() throws {
+    // The disk fills during a checkpoint's journal record: 7 of its bytes land, then ENOSPC. The
+    // sink cuts the journal back to its last whole record, so the `closed{}` the `disk` close
+    // writes next is still read: by Journal.decode, and by recovery after a kill before the
+    // journal goes.
+    let session = SyntheticSession(seed: 12, durationS: 40)
+    let sink = FileSink(store: fixture.store())
+    let disk = DiskSwitch()
+    sink.calls = disk.calls
+    let core = session.makeRecorder()
+    var torn = false
+    var notices: [SinkNotice] = []
+    session.drive(core) { commands in
+      guard sink.state == .open || sink.state == .empty else { return }
+      var batch = sink.apply(commands)
+      if !torn, let t = sink.latestFrameT, t >= 15 {
+        torn = true
+        batch += sink.tick()
+        disk.full = true
+        batch += sink.checkpoint()
+        disk.full = false
+      }
+      for notice in batch {
+        notices.append(notice)
+        if case .closeRequested(let reason) = notice {
+          notices += sink.apply(core.sinkLimitReached(reason))
+        }
+      }
+    }
+    #expect(disk.partialWrites == 1)
+    #expect(notices.contains(.closeRequested(.disk)))
+    #expect(notices.contains(.awaitingBoundary))
+    #expect(sink.state == .awaitingBoundary)
+    let id = session.recordingID
+    let bytes = FileManager.default.contents(atPath: fixture.paths.journal(id).path) ?? Data()
+    let journal = Journal.decode(bytes)
+    #expect(!journal.damaged)
+    #expect(journal.validBytes == bytes.count)
+    #expect(journal.summary.closed?.reason == .disk)
+
+    // Killed while waiting for the final boundary flush: recovery finishes it as closed.
+    sink.abandon()
+    let report = RecoveryRunner(store: fixture.store()).run()
+    #expect(report.finished == 1)
+    #expect(report.discarded == 0)
+    let facts = try #require(fixture.store().manifestFacts(id))
+    #expect(facts.closed)
+    #expect(facts.ended == .disk)
+    #expect(!fixture.exists(fixture.paths.journal(id)))
+  }
+
   @Test func aSlippedCloseIsLeftToRecovery() throws {
     // A close whose end is behind lines already on disk, which no cut checkpoint covers, can't
     // be finished in process without keeping them: the sink stops and recovery takes over.

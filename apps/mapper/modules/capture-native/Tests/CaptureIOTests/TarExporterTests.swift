@@ -3,12 +3,14 @@ import CaptureCore
 import Foundation
 import Testing
 
+@testable import CaptureCore
 @testable import CaptureIO
 
 // The export (design 9 and 14): the parts and parts.json, the raw files deleted only after the
-// rename; refused when too large, without room, without a device grant or with a corrupt file
-// (the raw files kept, no staging left); and a crash between the rename and the delete finished
-// by recovery.
+// rename; refused when too large, without room, without a device grant, for a device recording
+// through the synthetic path, or with a corrupt file (the raw files kept, no staging left); a
+// failed read or the lock reported as such, never as corrupt; and a crash between the rename and
+// the delete finished by recovery.
 
 private func sha(_ data: Data) -> String { Sha256Stream.hex(of: data) }
 
@@ -91,10 +93,84 @@ private func joinedParts(_ fixture: StoreFixture, _ id: UUID) throws -> (Data, E
     #expect(listed.exportParts == parts.parts.count)
   }
 
-  @Test func syntheticExportsNeedNoGrantButOnlyExportSyntheticSets() throws {
+  @Test func syntheticExportsNeedNoGrant() throws {
     let result = try TarExporter(store: fixture.store()).exportSynthetic(id: id)
     #expect(result.parts == 1)
     #expect(!fixture.exists(fixture.paths.recording(id)))
+  }
+
+  @Test func aGrantThatIsNotADeviceGrantIsRefused() throws {
+    let raw = fixture.files(of: id)
+    let grant = RecordingGrant(profile: .lean, venues: SyntheticWorld.venues, origin: .synthetic)
+    #expect(throws: ExportError.refused) {
+      try TarExporter(store: fixture.store()).export(id: id, grant: grant)
+    }
+    #expect(ExportError.refused.code == "ERR_EXPORT_REFUSED")
+    #expect(fixture.files(of: id) == raw)
+    #expect(fixture.names(fixture.paths.exportsStagingRoot).isEmpty)
+    #expect(!fixture.exists(fixture.paths.exportsRoot))
+  }
+
+  @Test func syntheticExportsRefuseADeviceRecording() throws {
+    let manifest = fixture.paths.manifest(of: id)
+    let data = try #require(FileManager.default.contents(atPath: manifest.path))
+    var document = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    document["origin"] = "device"
+    try JSONSerialization.data(withJSONObject: document).write(to: manifest)
+    #expect(fixture.store().manifestFacts(id)?.origin == .device)
+    let raw = fixture.files(of: id)
+    #expect(throws: ExportError.refused) {
+      try TarExporter(store: fixture.store()).exportSynthetic(id: id)
+    }
+    #expect(fixture.files(of: id) == raw)
+    #expect(fixture.names(fixture.paths.exportsStagingRoot).isEmpty)
+    #expect(!fixture.exists(fixture.paths.exportsRoot))
+  }
+
+  @Test func aFailedReadIsAnIOErrorNotCorrupt() throws {
+    let raw = fixture.files(of: id)
+    let exporter = TarExporter(store: fixture.store())
+    exporter.fault = { step in if step == .read { throw POSIXError(.EIO) } }
+    #expect(throws: ExportError.io) { try exporter.export(id: id, grant: try walkGrant()) }
+    #expect(fixture.files(of: id) == raw)
+    #expect(fixture.names(fixture.paths.exportsStagingRoot).isEmpty)
+    #expect(fixture.names(fixture.paths.exportsRoot).isEmpty)
+  }
+
+  @Test(arguments: [
+    CocoaError(.fileReadNoPermission) as any Error,
+    IOFailure.system(.write, errno: POSIXErrorCode.EPERM.rawValue),
+  ])
+  func aLockDuringTheExportIsLockedNotCorrupt(failure: any Error) throws {
+    // Class A files can't be read, and class A parts can't be written, once the phone locks.
+    let raw = fixture.files(of: id)
+    let exporter = TarExporter(store: fixture.store())
+    let security = fixture.security
+    exporter.fault = { step in
+      guard step == .read else { return }
+      security.protectedDataAvailable = false
+      throw failure
+    }
+    #expect(throws: ExportError.locked) { try exporter.export(id: id, grant: try walkGrant()) }
+    security.protectedDataAvailable = true
+    #expect(fixture.files(of: id) == raw)
+    #expect(fixture.names(fixture.paths.exportsStagingRoot).isEmpty)
+    #expect(fixture.names(fixture.paths.exportsRoot).isEmpty)
+  }
+
+  @Test func aSourceFileThatGoesMidExportIsCorrupt() throws {
+    let exporter = TarExporter(store: fixture.store())
+    let last = try #require(try exporter.plan(id: id).layout.entries.last)
+    let gone = fixture.paths.recording(id).appendingPathComponent(
+      String(last.name.split(separator: "/", maxSplits: 1)[1]))
+    #expect(throws: ExportError.corrupt) {
+      try exporter.export(id: id, grant: try walkGrant()) { _ in
+        try? FileManager.default.removeItem(at: gone)
+      }
+    }
+    #expect(!fixture.exists(gone))
+    #expect(fixture.exists(fixture.paths.recording(id)))
+    #expect(fixture.names(fixture.paths.exportsStagingRoot).isEmpty)
   }
 
   @Test func tooLargeIsRefusedBeforeAnythingIsWritten() throws {
