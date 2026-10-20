@@ -23,6 +23,11 @@ function run(state: WalkState, ...actions: WalkAction[]): WalkState {
 }
 
 const ticks = (n: number): WalkAction[] => Array.from({ length: n }, () => ({ type: "tick" }));
+const holdTicks = (n: number): WalkAction[] =>
+  Array.from({ length: n }, () => ({ type: "holdTick" }));
+/** n seconds of a hold: the session's tick and the hold's own tick each second. */
+const heldSeconds = (n: number): WalkAction[] =>
+  Array.from({ length: n }, (): WalkAction[] => [{ type: "tick" }, { type: "holdTick" }]).flat();
 
 /** A lean session, started, with venues chosen and permissions granted. */
 function armed(): WalkState {
@@ -102,10 +107,10 @@ describe("a lean walk, ending with End the session here", () => {
     state = run(state, { type: "holdStill" });
     expect(state.step).toBe("holding");
     expect(state.holdRemainingS).toBe(HOLD_STILL_S);
-    state = run(state, ...ticks(HOLD_STILL_S - 1));
+    state = run(state, ...heldSeconds(HOLD_STILL_S - 1));
     expect(state.step).toBe("holding");
     expect(state.holdRemainingS).toBe(1);
-    state = run(state, { type: "tick" });
+    state = run(state, { type: "tick" }, { type: "holdTick" });
     expect(state.step).toBe("marking");
     expect(walkMarkOptions(state)).toMatchObject({ role: "end", endSessionHere: true });
 
@@ -141,18 +146,31 @@ describe("a lean walk, ending with End the session here", () => {
   });
 
   test("the countdown can be cancelled, and Stop during it stops", () => {
-    const holding = run(walking(), { type: "holdStill" }, { type: "tick" });
+    const holding = run(walking(), { type: "holdStill" }, { type: "holdTick" });
     const cancelled = run(holding, { type: "cancelHold" });
     expect(cancelled.step).toBe("walking");
     expect(cancelled.endMarks).toBe(0);
     expect(run(holding, { type: "stop" }).step).toBe("stopping");
   });
 
+  test("the hold lasts HOLD_STILL_S of its own ticks from the tap; session ticks never end it", () => {
+    let state = run(walking(), ...ticks(1), { type: "holdStill" }, ...ticks(HOLD_STILL_S * 2));
+    expect(state.step).toBe("holding");
+    expect(state.holdRemainingS).toBe(HOLD_STILL_S);
+    expect(state.sessionS).toBe(1 + HOLD_STILL_S * 2);
+    state = run(state, ...holdTicks(HOLD_STILL_S - 1));
+    expect(state.step).toBe("holding");
+    state = run(state, { type: "holdTick" });
+    expect(state.step).toBe("marking");
+    expect(walkMarkOptions(state)).toMatchObject({ role: "end", endSessionHere: true });
+    expect(run(walking(), { type: "holdTick" }).step).toBe("walking");
+  });
+
   test("closed before the session stops waits in Saving", () => {
     const state = run(
       walking(),
       { type: "holdStill" },
-      ...ticks(HOLD_STILL_S),
+      ...holdTicks(HOLD_STILL_S),
       { type: "marked", window: "open" },
       { type: "recording", phase: "finalizing" },
       { type: "recording", phase: "closed", ended: "end_anchor", trimmed: false, closed: true },
@@ -187,7 +205,7 @@ describe("record off (a desk check, or a build that can't record)", () => {
       { type: "markStart" },
       { type: "marked", window: "not_open" },
       { type: "holdStill" },
-      ...ticks(HOLD_STILL_S),
+      ...holdTicks(HOLD_STILL_S),
       { type: "marked", window: "not_open" },
     );
     expect(state.step).toBe("stopping");
@@ -225,7 +243,7 @@ describe("refusals and early ends", () => {
       },
     );
     expect(start.step).toBe("armed");
-    const end = run(walking(), { type: "holdStill" }, ...ticks(HOLD_STILL_S), {
+    const end = run(walking(), { type: "holdStill" }, ...holdTicks(HOLD_STILL_S), {
       type: "callFailed",
       call: "markAnchor",
       code: "ERR_NO_FLOOR_HIT",
@@ -271,6 +289,83 @@ describe("refusals and early ends", () => {
       trimmed: true,
       closed: true,
     });
+  });
+
+  test("Stop while open: the recording's finalizing and close wait in Saving for the stop", () => {
+    const stopping = run(
+      walking(),
+      { type: "markEnd" },
+      { type: "marked", window: "open" },
+      { type: "stop" },
+    );
+    expect(stopping.step).toBe("stopping");
+    const closed = run(
+      stopping,
+      { type: "recording", phase: "finalizing" },
+      { type: "recording", phase: "closed", ended: "stop", trimmed: true, closed: true },
+    );
+    expect(closed.step).toBe("saving");
+    // Nothing the walker could do while walking is taken: no second stop, mark, hold or tag.
+    for (const action of [
+      { type: "stop" },
+      { type: "markEnd" },
+      { type: "holdStill" },
+      { type: "addTag", kind: "door" },
+    ] as const) {
+      expect(run(closed, action)).toEqual(closed);
+    }
+    const done = run(closed, {
+      type: "stopped",
+      recording: {
+        id: "0f7d0e65-6f2e-4b43-9a55-5d7f4f0c5b0e",
+        ended: "stop",
+        trimmed: true,
+        closed: true,
+      },
+    });
+    expect(done.step).toBe("summary");
+    expect(walkSummary(done).endMarks).toBe(1);
+  });
+
+  test("a close the walker didn't ask for, landing after Stop, also waits for the stop", () => {
+    const state = run(
+      walking(),
+      { type: "stop" },
+      { type: "recording", phase: "closed", ended: "background", trimmed: false, closed: true },
+    );
+    expect(state.step).toBe("saving");
+    expect(run(state, { type: "stopped", recording: null }).step).toBe("summary");
+  });
+
+  test("a mark still in flight at Stop is counted when it resolves", () => {
+    const start = run(
+      armed(),
+      { type: "markStart" },
+      { type: "stop" },
+      { type: "marked", window: "opened" },
+    );
+    expect(start.step).toBe("stopping");
+    expect(run(start, { type: "stopped", recording: null }).startMarks).toBe(1);
+
+    // The end mark's result can come after stop's, too.
+    const end = run(
+      walking(),
+      { type: "markEnd" },
+      { type: "stop" },
+      {
+        type: "stopped",
+        recording: {
+          id: "0f7d0e65-6f2e-4b43-9a55-5d7f4f0c5b0e",
+          ended: "stop",
+          trimmed: false,
+          closed: true,
+        },
+      },
+      { type: "marked", window: "open" },
+    );
+    expect(end.step).toBe("summary");
+    expect(walkSummary(end).endMarks).toBe(1);
+    expect(run(end, { type: "marked", window: "open" }).endMarks).toBe(1);
   });
 
   test("an idle close while walking leaves the walker to stop", () => {
