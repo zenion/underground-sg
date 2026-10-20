@@ -17,13 +17,17 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/contracts/src/**",
         "$TURBO_ROOT$/packages/map-style/src/**",
-        "$TURBO_ROOT$/packages/floorplan/src/**"
+        "$TURBO_ROOT$/packages/floorplan/src/**",
+        "$TURBO_ROOT$/db/seed/**",
+        "$TURBO_ROOT$/db/src/**"
       ]
     },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/contracts/schemas/**",
+        "$TURBO_ROOT$/db/seed/**",
         "$TURBO_ROOT$/packages/map-style/src/**",
         "$TURBO_ROOT$/packages/floorplan/src/**",
         "$TURBO_ROOT$/services/api/test/fixtures/snapshot/**"

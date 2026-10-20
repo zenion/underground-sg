@@ -68,6 +68,17 @@ opens the whole app at <http://localhost:8081>. The map is the same DOM componen
 - **Walks use the walk build**, not the development build: the same capture module in release configuration, without the dev client, with the JavaScript embedded (EAS internal distribution), so a capture in a venue needs no Metro, no tunnel and no signal ([ADR 0010](../../docs/decisions/0010-capture-recording-and-replay.md)). Both builds compile the session recorder, but only the walk build records; the `walk` profile is a backlog task.
 - **Bundle identifier:** `com.xennion.usg.mapper`, from the owner's domain (confirmed 2026-10-17). It can't change once the app is registered with Apple. `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` are placeholders for that build; Expo Go uses its own.
 
+## The capture port and the walk flow
+
+The session recorder's TypeScript side (the lean recorder design's PR4, [ADR 0010](../../docs/decisions/0010-capture-recording-and-replay.md)), ready for the native glue and the walk screen:
+
+- **`src/capture/native.ts`**: the `CaptureNative` port. `moduleCaptureNative(CaptureNative)` adapts the module object; it is null in Expo Go and on the web. Builds before the native glue have no `CaptureSession` class, so `openSession()` is null, `listRecordings()` empty and the recorder calls reject with `ERR_RECORDER_NOT_COMPILED`, as the module does without the recorder. The module's types, `CaptureSession` included, are in `modules/capture-native/src/types.ts`. The screens use the port, never the module directly.
+- **`src/capture/redacted.ts`**: every session time and pose (`t`, a mark's hit, facing and camera, a tag's position and camera) reaches the app as a `Redacted` value. `String()`, a template literal, `JSON.stringify`, Node's `util.inspect` and React Native's console all give `[redacted]`; only `unwrap()` reads it, and only the code that uses the value calls it.
+- **`src/capture/boundary-trace.ts`**: the boundary trace ([session-recording.md](../../docs/session-recording.md), `boundary.jsonl`). The adapter records every session event and result before it wraps anything; the trace holds lines until the window opens (the last 2 s, at most 256 lines), numbers them from 0 at the open, and sends them to `appendBoundary` every second, at 64 lines, when the app's state changes, and with `final` when the recording finalizes and before stop or discard. Values are JSON text with sorted keys, bounded to 16,384 code points (else the too-large marker). The recorder's plumbing gets no line.
+- **`src/capture/log-guard.ts`**: in the walk build, from launch (`_layout.tsx`), every `console` method and `nativeLoggingHook` do nothing, and an uncaught error reaches React Native's handler as "[redacted capture error]" with only its stack frames. In other builds it does nothing.
+- **The no-pose lint** (`scripts/no-pose-logging.mts`, run by `test/no-pose-logging.test.ts`): no `console.*` call, `Error` construction, `throw` or template literal in `src/` or the module's TypeScript may mention a pose, transform, camera, hit, position, GNSS, facing or session-time name, a name declared `Redacted` or `SessionTime`, or `unwrap`; and the app never imports a `node:` module. The rule is in the script's header; the test plants cases that must fail. Rename a variable that only sounds like one rather than adding an exemption.
+- **`src/walk/`**: the walk flow as a pure reducer (`flow.ts`: venues, record Off or Lean, permissions, Start, Mark start with the street-facing toggle, tags, Mark end or Mark end and end the session here after a 5 s hold-still countdown, Saving, the summary), the corridor's venues with the seed's ids (`venues.ts`, checked against `db/seed/core-venues.ts`) and the minimal node tag row (`tags.ts`).
+
 ## Configuration
 
 The API base URL is the dev server's host (the PC that serves the JavaScript, from `expo-constants` `hostUri`) with port `EXPO_PUBLIC_API_PORT`, default 28000. `EXPO_PUBLIC_API_URL` replaces it, for example through a tunnel or for another machine; `pnpm dev:phone` sets it to the ngrok domain. The Map tab loads the published map from `<api>/public/latest.json` and the version files it names, and the glyphs from `<api>/glyphs/`; the API lets any origin read those, so the map's WebView, served by Metro, can. Put `EXPO_PUBLIC_` variables in `apps/mapper/.env.local` (git-ignored) or the shell, then restart Metro (it doesn't watch `.env` files: `metro.config.js` blocks them). A production bundle (`expo export`, `pnpm build`) inlines their values; `metro.config.js` puts them in Metro's cache key, so an export after a change never reuses code with the old value.
@@ -87,7 +98,7 @@ When the API exists it has to listen on all interfaces (not only `localhost`), a
 | `build` | `expo export --platform ios` into `dist/ios`: the Hermes bytecode bundle and the map's DOM-component bundle. Proves the JavaScript compiles; `pnpm build` at the root and CI run it |
 | `build:web` | `expo export --platform web` into `dist/web` |
 | `typecheck` | `tsc` |
-| `test` | Vitest on the pure logic in `test/` (API URL, health check, features, the benchmark, SVG paths, loading and checking the published map, the level bands and the camera, device checks) and on `metro.config.js` (what Metro may read, the cache key) |
+| `test` | Vitest on the pure logic in `test/` (API URL, health check, features, the benchmark, SVG paths, loading and checking the published map, the level bands and the camera, device checks, the capture port, `Redacted`, the boundary trace against the recording schema, the log guard, the walk flow, venues and tags), the no-pose lint over the source, and `metro.config.js` (what Metro may read, the cache key) |
 
 Each script except `test` first runs `scripts/maplibre-worker.mts`. maplibre-gl v6 finds its worker script next to its own module (`import.meta.url`), which a Metro bundle doesn't have, so the script copies `maplibre-gl/dist/maplibre-gl-worker.mjs` into the git-ignored `src/map/generated/maplibre-worker.ts` as a string, and the map hands it to `setWorkerUrl()` as a `blob:` URL. That works the same over the LAN, through a tunnel, in a browser and from `file://` in a release build.
 
@@ -97,14 +108,17 @@ Each script except `test` first runs `scripts/maplibre-worker.mts`. maplibre-gl 
 app.config.ts, eas.json, metro.config.js (what Metro may read, and its cache key)
 native-dependencies.json   the reviewed native packages (ADR 0010), checked against autolinking
 modules/capture-native/    the Swift module: its README has the layout and how it is tested
-scripts/maplibre-worker.mts, encoder-check.mts (and -lib): the macOS CI job's encoder check
+scripts/maplibre-worker.mts, encoder-check.mts (and -lib): the macOS CI job's encoder check;
+                           no-pose-logging.mts: the no-pose lint, run by its test
 src/
   app/            Expo Router tabs: _layout, index (Map), floorplan, capture, about
   map/            draw-map.tsx (the DOM component), published.ts (loads and checks the published
                   map), bands.ts (the level switcher's bands), camera.ts, features.ts, worker.ts,
                   presence.ts (counts mounted maps)
   floorplan/      the on-phone benchmark and SVG paths
-  capture/        device checks, and the wording of the module's status
+  capture/        device checks, the wording of the module's status, the CaptureNative port
+                  (native.ts), Redacted, the boundary trace and the walk build's log guard
+  walk/           the walk flow reducer, the corridor's venues, the tag row
   about/          API URL, health check, JavaScript engine
   config.ts       reads EXPO_PUBLIC_ variables
 test/             Vitest

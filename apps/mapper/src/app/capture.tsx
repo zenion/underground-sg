@@ -19,6 +19,7 @@ import {
   type CaptureWarning,
 } from "../../modules/capture-native/index.ts";
 import { iosDriftWarning, lidarExpectation } from "../capture/device.ts";
+import { recorderCapabilities } from "../capture/native.ts";
 import {
   bestVideoFormat,
   captureReady,
@@ -87,7 +88,9 @@ export default function CaptureScreen() {
             <Row label="iOS" value={capabilities.osVersion} tone="muted" />
             <Row
               label="Recorder"
-              value={capabilities.recorder ? "Compiled in" : "Not in this build"}
+              value={
+                recorderCapabilities(capabilities).compiled ? "Compiled in" : "Not in this build"
+              }
               tone="muted"
             />
           </>

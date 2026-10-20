@@ -9,6 +9,8 @@ The mapper app's one native module ([ADR 0007](../../../../docs/decisions/0007-e
 - The privacy shield ([ADR 0010](../../../../docs/decisions/0010-capture-recording-and-replay.md#the-camera-view-ioss-snapshot-and-screenshots)): the camera sits inside a secure-entry text field's canvas, which iOS leaves out of screenshots and screen recordings; an opaque cover goes over it whenever the scene isn't foreground-active (so before iOS takes its app-switcher snapshot) and while the screen is recorded or mirrored; a screenshot taken during a capture raises a warning asking the owner to delete it. If this iOS has no secure canvas, `start()` refuses.
 - Every frame goes through `CaptureCore`'s candidate gate, as in every capture. Nothing is written yet: no keyframes, no bundle, no recording.
 
+`src/types.ts` also types what the native glue will add (the lean recorder design, 3.3): the `CaptureSession` shared object with its events and the recorder's functions, all optional in `CaptureNativeModule` until they exist. The app reaches them only through `src/capture/native.ts`, which traces their results and wraps every pose and session time ([apps/mapper/README.md](../../README.md#the-capture-port-and-the-walk-flow)).
+
 Still to come, in the backlog's order: the rest of `CaptureCore` (selector, backpressure, line writers), the `CaptureSession` object with `discard`, the `lean` recorder behind `USG_RECORDER`, the walk build, then the blur.
 
 ## Layout
