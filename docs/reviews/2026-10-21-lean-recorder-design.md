@@ -80,7 +80,7 @@ Facts checked in the worktrees (read only; `.data/` was never read):
 | D18 | Development-build measure mode | **Not built.** Instead [minimal] `recorderSelfTest`: the synthetic session through the real RecorderCore, CaptureIO, protection classes, backup exclusion, Compression and CryptoKit, plus timings. In the development build it writes to `Library/Application Support/selftest/` and deletes it. In the walk build it can keep the set and export it (origin `synthetic`) | Keeps "refuses any profile but off" literal. Open question Q5 asks whether to add measure mode |
 | D19 | Log guard | Three layers: `RCTSetLogFunction` filtering `RCTLogSourceJavaScript` (native; compile probe in PR3); JS `globalThis.nativeLoggingHook` and `console.*` replaced; `ErrorUtils` handler sanitising messages. Active in the walk build **from launch** (stricter than "while a capture runs"; Q9) | The backlog wants React Native's log function replaced. The `pymobiledevice3 syslog` fake-pose check is the proof |
 | D20 | Shared-object events | No `Events(...)` inside `Class(CaptureSession.self)` [fix]. Events go out through `emit(event:payload:)` with `[String: Any]` payloads. Module-level `Events("exportProgress")` is allowed | Doesn't compile otherwise |
-| D21 | Boundary `seq` | [minimal Q, resolved] TypeScript numbers `seq` from 0 **at window open**. Before it learns the open, BoundaryTrace holds lines in a bounded buffer (2 s or 256 lines). Native emits `recording {state:'open', startT}` (`startT` as a redacted SessionTime). TypeScript drops buffered lines with `t < startT` and numbers the rest from 0. Native checks that `seq` strictly increases and `t` is inside the window | Matches "from 0" with no doc change |
+| D21 | Boundary `seq` | [minimal Q, resolved] TypeScript numbers `seq` from 0 **at window open**. Before it learns the open, BoundaryTrace holds lines in a bounded buffer (2 s or 256 lines). Native emits `recording {state:'open', startT}` (`startT` as a redacted SessionTime). TypeScript drops buffered lines with `t < startT` and numbers the rest from 0. Native checks that `seq` strictly increases and `t` is inside the window, and refuses a line with a repeated or escaped key (the decoder here keeps the first of two equal keys, JSON.parse the last) | Matches "from 0" with no doc change |
 | D22 | Contracts.swift path | [minimal] PR0 keeps the module path as `GENERATED_SWIFT_FILE`, deletes `packages/contracts/generated/swift/`, and points both CI `swiftc -typecheck` steps at the module copy | Otherwise CaptureCore compiles stale types |
 | D23 | When the first device build happens | [minimal] **Build B1 (development) now**, from main after PR0 | Checks the secure-canvas shield (which blocks every walk) and criterion 1 first |
 | D24 | `LSSupportsOpeningDocumentsInPlace` | Never set; a Vitest test asserts it is absent | Absent means false; task 8 refuses the key in builds without the switch |
@@ -203,7 +203,7 @@ A CI assertion catches a silent compile-out: after the Release build with the sw
 - `Bundle.main.url(forResource:"main", withExtension:"jsbundle") != nil`;
 - `NSClassFromString("EXDevLauncherController") == nil` [perf; expo-dev-launcher is debugOnly].
 
-Refusals: `notCompiled`, `notWalkBuild`, `debugBuild`, `notEmbedded`, `devClient`, `profileUnavailable` (standard and dense before the blur), `invalidVenues` (1–50 lowercase UUIDs), `lowDisk` (< 2 × 8 GiB). `LocationSource.init(grant:)`, `RecorderHost.init(grant:)` and `TarExporter.export(id:, grant:)` all require a grant, so the development build's refusals hold at compile time.
+Refusals: `notCompiled`, `notWalkBuild`, `debugBuild`, `notEmbedded`, `devClient`, `profileUnavailable` (standard and dense before the blur), `invalidVenues` (1–50 lowercase UUIDs), `lowDisk` (< 2 × 8 GiB). `LocationSource.init(grant:)`, `RecorderHost.init(grant:)` and `TarExporter.export(id:, grant:)` all require a grant, so the development build's refusals hold at compile time. SyntheticSession makes a synthetic grant inside CaptureCore for its recorder, and it never leaves: RecorderCore keeps its grant internal, and a test without `@testable` (CaptureCorePublicSurfaceTests) stops compiling if it becomes public. Each of the three also checks `origin == .device` at run time.
 
 ---
 
@@ -424,8 +424,8 @@ export interface RecordingSummary { id: string; origin: "device" | "synthetic"; 
 |---|---|---|
 | frames.jsonl | Delegate frame:<br>- `camera.transform` (16 floats, `Double(shortest:)`);<br>- intrinsics ([0][0], [1][1], [2][0], [2][1]);<br>- tracking `normal` / `limited:<reason>` / `notAvailable`;<br>- `worldMappingStatus`;<br>- exposure;<br>- light (or null);<br>- `gap = framesSkipped(previousT:t:fps)` (0 on the first written line);<br>- `candidate`: null or `dropped:profile` (forced ones included);<br>- `sharpness`: null;<br>- `ms {gate}`.<br>Frame ≥ 1,000,000 → close `limit` | 60 Hz, about 1.5 MB/min |
 | imu.jsonl | ImuPairer; accel × 9.80665 | 100 Hz |
-| motion.jsonl | `startDeviceMotionUpdates(using:)`. Reference frame: `xMagneticNorthZVertical` if available, else `xArbitraryCorrectedZVertical`, else `xArbitraryZVertical`; written to `motion.reference_frame` (Q3). `heading` is null in arbitrary frames or when negative. Without device motion: a `motion_unavailable` event, `motion: null`, and an empty file | 100 Hz |
-| altitude.jsonl | Created on its first line. `isRelativeAltitudeAvailable` and `authorizationStatus`; unavailable or denied → an event. AltitudeRebaser | ~1 Hz |
+| motion.jsonl | `startDeviceMotionUpdates(using:)`. Reference frame: `xMagneticNorthZVertical` if available, else `xArbitraryCorrectedZVertical`, else `xArbitraryZVertical`; written to `motion.reference_frame` (Q3). `heading` is null in arbitrary frames or when negative. Without device motion: a `motion_unavailable` event at the open (from `ManifestBase.motionFrame`), `motion: null`, and an empty file | 100 Hz |
+| altitude.jsonl | Created on its first line. `isRelativeAltitudeAvailable` and `authorizationStatus`, read at `start` into `ManifestBase.altimeter`; unavailable or denied → an event at the open and no file. AltitudeRebaser | ~1 Hz |
 | anchors.jsonl | Baseline at open (every anchor `add`, on the opening frame), then each mesh-snapshot `t` (threshold 1 mm or 0.05°), and the final sample (D1). Kinds: `mesh`, `marked` | bursts / 5 s |
 | mesh/history.* | Section 8 | 5 s |
 | events.jsonl | Delegate failures and interruptions; relocalization transitions; thermal notification; memory warning; scene background and foreground; shield screenshot and capture-state callbacks; sensor availability; degradation. At open, `configuration` codes: `lean`, `mesh_with_classification`, `smoothed_scene_depth`, `gravity`, `video_<w>x<h>_<fps>`, `motion_<frame>`, `gnss_t_fix_age`, `margin_<s>s`, `idle_<s>s` | on change |
@@ -461,7 +461,7 @@ Lean is about 4–6 MB/min plus the mesh history.
 - `serious` or free < 2 GiB → `no_mesh_history`: the schedule is ignored and the final sample has no mesh part.
 - `critical` or free < 1 GiB → `no_recording`: close with `heat` or `disk`.
 
-Each step is written as a `degradation` event before it is applied.
+Each step is written as a `degradation` event before it is applied. When `no_recording` closes the window, at the last frame, the thermal event that ran the ladder and the steps are written with the closing lines at `endT`, ahead of `recording_closed`: at their own `t`, past the last frame, the finalize would cut them.
 
 ---
 
@@ -527,7 +527,7 @@ A lean background close is expected to take under 1 s: no final sample, about 1.
 2. For each journal:
    - `discard` → delete the directory and journal;
    - `manifest` → protection, then delete the journal;
-   - otherwise scan and plan (3.1): `finishClean` gives `closed: true`; `cut` gives `closed: false` with `interrupted` and `trimmed`, final lines removed. Then rehash, rates, atomic `recording.json`, protection, delete the journal.
+   - otherwise scan and plan (3.1): `finishClean` gives `closed: true`; `cut` gives `closed: false` with `interrupted` and `trimmed`, final lines and the `recording_closed` event removed (it may be on disk before `closed{}`, and its detail would contradict `interrupted`). Then rehash, rates, atomic `recording.json`, protection, delete the journal.
 3. For each `rec-*` without a journal: `recording.json` `window.ended` non-null → protection sweep (D3); null or unreadable → delete.
 4. For `exports/replay-<id>/parts.json` next to a surviving `rec-<id>/`: re-verify the parts' SHA-256, then delete the raw directory.
 
@@ -640,7 +640,7 @@ In the development build it runs under `Library/Application Support/selftest/` a
 - **Nothing past the last end anchor + margin after a crash:**
   - recovery cuts using only journaled `end{}` records, each full-synced before anything later counts;
   - without an end anchor the recording is discarded;
-  - a recording cut back by recovery has no final lines.
+  - a recording cut back by recovery has no final lines and no `recording_closed` event.
 - **Logs and errors:**
   - `os.Logger` category `recorder` logs codes, counts, file names and frame numbers, with `.public` only on codes;
   - exceptions carry constant reasons;

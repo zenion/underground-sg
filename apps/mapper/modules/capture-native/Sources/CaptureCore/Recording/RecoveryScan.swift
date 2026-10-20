@@ -17,6 +17,9 @@ public struct JsonlScan: Equatable, Sendable {
     case cut
     /// A line of a final sample, which a cut-back recording doesn't have (design 12).
     case finalLine
+    /// The `recording_closed` event, which a cut-back recording doesn't have: its detail would
+    /// say the recorder closed it, while recording.json says `interrupted`.
+    case closedEvent
   }
 
   /// The bytes to keep: the whole lines before the stop.
@@ -31,18 +34,22 @@ public struct JsonlScan: Equatable, Sendable {
 /// Streams a JSONL file in chunks of any size and finds the last valid line. A line is valid
 /// when it ends with a newline, holds no NUL, is a JSON object with a finite, non-negative
 /// numeric `t`, and its `t` doesn't decrease. With `cutT`, a line with `t` past it stops the
-/// scan; with `dropFinal`, so does a line with `"final": true`.
+/// scan; with `dropFinal`, so does a line with `"final": true`; with `dropClosedEvent` (for
+/// events.jsonl), so does the `recording_closed` event. The recorder writes that event last, so
+/// nothing after it is lost.
 public struct JsonlScanner: Sendable {
   public let cutT: Double?
   public let dropFinal: Bool
+  public let dropClosedEvent: Bool
   private var result = JsonlScan(keepBytes: 0, lines: 0, lastT: nil, stop: .end)
   private var stopped = false
   /// The start of a line whose newline hasn't come yet.
   private var carry: [UInt8] = []
 
-  public init(cutT: Double? = nil, dropFinal: Bool = false) {
+  public init(cutT: Double? = nil, dropFinal: Bool = false, dropClosedEvent: Bool = false) {
     self.cutT = cutT
     self.dropFinal = dropFinal
+    self.dropClosedEvent = dropClosedEvent
   }
 
   public mutating func feed(_ chunk: Data) {
@@ -74,6 +81,9 @@ public struct JsonlScanner: Sendable {
     else { return stop(.damaged) }
     if let cutT, fields.t > cutT { return stop(.cut) }
     if dropFinal && fields.isFinal == true { return stop(.finalLine) }
+    if dropClosedEvent && fields.kind == RecordingEventKind.recordingClosed.rawValue {
+      return stop(.closedEvent)
+    }
     result.keepBytes += line.count + 1
     result.lines += 1
     result.lastT = fields.t
@@ -97,10 +107,10 @@ public struct MeshHistoryScan: Equatable, Sendable {
 
 public enum RecoveryScan {
   /// Scans a whole JSONL file held in memory.
-  public static func jsonl(_ data: Data, cutT: Double? = nil, dropFinal: Bool = false)
-    -> JsonlScan
-  {
-    var scanner = JsonlScanner(cutT: cutT, dropFinal: dropFinal)
+  public static func jsonl(
+    _ data: Data, cutT: Double? = nil, dropFinal: Bool = false, dropClosedEvent: Bool = false
+  ) -> JsonlScan {
+    var scanner = JsonlScanner(cutT: cutT, dropFinal: dropFinal, dropClosedEvent: dropClosedEvent)
     scanner.feed(data)
     return scanner.finish()
   }
@@ -178,14 +188,23 @@ public enum RecoveryScan {
   }
 }
 
-/// The fields a scan needs from any line.
+/// The fields a scan needs from any line. `kind` is read only when it is a string, so a file
+/// whose lines have no such `kind` scans as before.
 private struct ScanFields: Decodable {
   let t: Double
   let isFinal: Bool?
+  let kind: String?
 
   enum CodingKeys: String, CodingKey {
-    case t
+    case t, kind
     case isFinal = "final"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    t = try container.decode(Double.self, forKey: .t)
+    isFinal = try container.decodeIfPresent(Bool.self, forKey: .isFinal)
+    kind = try? container.decodeIfPresent(String.self, forKey: .kind)
   }
 }
 

@@ -61,6 +61,9 @@ public enum BoundaryLineCheck {
     } catch {
       return .failure(.malformed)
     }
+    // The decoder keeps the first of two equal keys and JSON.parse on the PC the last, so a
+    // repeated key would be checked here as one value and read there as another.
+    guard hasPlainDistinctKeys(bytes) else { return .failure(.fields) }
     guard fields.t.isFinite, fields.t >= 0 else { return .failure(.badTime) }
     guard window.accepts(t: fields.t) else { return .failure(.outsideWindow) }
     if let lastT, fields.t < lastT { return .failure(.timeOrder) }
@@ -83,6 +86,55 @@ public enum BoundaryLineCheck {
         || byte == UInt8(ascii: "_") || byte == UInt8(ascii: ".") || byte == UInt8(ascii: ":")
         || byte == UInt8(ascii: "-")
     }
+  }
+
+  /// The top-level object's keys are all different and none is spelled with an escape: the five
+  /// names never need one, and JSON.stringify doesn't use one, so an escaped key could only be a
+  /// repeat in disguise. `bytes` is an object the decoder read, so every string is closed and a
+  /// comma at depth 1 always comes before a key.
+  static func hasPlainDistinctKeys(_ bytes: Data) -> Bool {
+    let quote = UInt8(ascii: "\"")
+    let backslash = UInt8(ascii: "\\")
+    var keys: Set<Data> = []
+    var depth = 0
+    var expectingKey = false
+    var index = bytes.startIndex
+    while index < bytes.endIndex {
+      let byte = bytes[index]
+      if byte == quote {
+        var end = index + 1
+        var escaped = false
+        while end < bytes.endIndex, bytes[end] != quote {
+          if bytes[end] == backslash {
+            escaped = true
+            end += 1
+          }
+          end += 1
+        }
+        if depth == 1 && expectingKey {
+          let key = Data(bytes[(index + 1)..<min(end, bytes.endIndex)])
+          guard !escaped, keys.insert(key).inserted else { return false }
+          expectingKey = false
+        }
+        index = end + 1
+        continue
+      }
+      switch byte {
+      case UInt8(ascii: "{"):
+        depth += 1
+        expectingKey = depth == 1
+      case UInt8(ascii: "["):
+        depth += 1
+      case UInt8(ascii: "}"), UInt8(ascii: "]"):
+        depth -= 1
+      case UInt8(ascii: ","):
+        if depth == 1 { expectingKey = true }
+      default:
+        break
+      }
+      index += 1
+    }
+    return true
   }
 
   /// One JSON value, at most JsonText's length.

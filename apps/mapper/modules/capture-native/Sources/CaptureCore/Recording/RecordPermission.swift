@@ -73,7 +73,10 @@ public struct RecordLimits: Equatable, Sendable {
 
 /// Proof that a recording may be made, and of what. Its init is internal: outside CaptureCore
 /// only `RecordPermission.decide` gives one, and inside it only SyntheticSession makes the
-/// synthetic kind, which can only write `origin: synthetic`.
+/// synthetic kind, which can only write `origin: synthetic`. The synthetic grant stays inside
+/// CaptureCore (RecorderCore keeps its grant internal), so a development build can't take one
+/// out of a synthetic recorder. Anything that takes a grant to start the phone's sensors or
+/// export its files must still check `origin == .device`, in case one ever leaks.
 public struct RecordingGrant: Sendable {
   public let profile: RecordProfile
   /// The venues chosen before the start, lowercase.

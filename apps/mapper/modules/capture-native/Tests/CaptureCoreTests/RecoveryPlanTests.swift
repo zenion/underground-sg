@@ -79,6 +79,7 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
     #expect(window.closed)
     #expect(window.close.finalSample)
     #expect(!window.removesFinalLines)
+    #expect(!window.removesClosedEvent)
   }
 
   @Test func aCutOffRecordingIsCutBackToTheLastEndAnchorPlusTheMargin() {
@@ -93,6 +94,7 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
       closed: false)
     #expect(cut == .cut(expected))
     #expect(expected.removesFinalLines)
+    #expect(expected.removesClosedEvent)
     // Written up to before the margin ended: cut at the last line.
     #expect(
       RecoveryPlan.make(journal: summary, recordingJson: nil, lastWrittenT: 32)
@@ -141,9 +143,10 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
         journal: JournalSummary([.end(t: 20)]), recordingJson: nil, lastWrittenT: 40) == .discard)
   }
 
-  /// A walk cut off after End the session here's final sample was handed over but before the
-  /// close was journaled: recovery cuts it back to the end anchor plus the margin, removes the
-  /// final lines, and keeps nothing past the cut (design 12).
+  /// A walk cut off after End the session here's final sample and closing lines were written
+  /// but before the close was journaled: recovery cuts it back to the end anchor plus the
+  /// margin, removes the final lines and the `recording_closed` event, and keeps nothing past
+  /// the cut (design 12).
   @Test func recoveryOfACutOffRecordingRemovesOnlyLines() throws {
     let h = Harness()
     h.openAtTwo()
@@ -152,13 +155,18 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
     h.frames(from: 10.0167, to: 12)
     h.sink.checkpoint()
     h.frames(from: 12.0167, to: 15.2)
-    // The crash: the files as they are, and the journal without its closed record.
-    let reading = Journal.decode(h.sink.journalBytes)
-    #expect(!reading.records.contains { if case .closed = $0 { true } else { false } })
+    #expect(h.sink.state == .awaitingBoundary)
+    // The crash: the files as they are, and the journal without its closed record, as FileSink
+    // leaves them between the writers' last flush and the journal's write.
+    let records = Journal.decode(h.sink.journalBytes).records.filter {
+      if case .closed = $0 { false } else { true }
+    }
+    let summary = JournalSummary(records)
     let paths = h.sink.paths.filter { $0.hasSuffix(".jsonl") && $0 != "mesh/history.jsonl" }
+    #expect(try h.decode("events.jsonl", as: RecordingEventLine.self).last?.detail == "end_anchor")
     let lastWrittenT = paths.compactMap { RecoveryScan.jsonl(h.sink.file($0)!).lastT }.max()
     let plan = RecoveryPlan.make(
-      journal: reading.summary, recordingJson: h.sink.recordingJson, lastWrittenT: lastWrittenT)
+      journal: summary, recordingJson: h.sink.recordingJson, lastWrittenT: lastWrittenT)
     guard case .cut(let window) = plan else {
       Issue.record("a cut-off recording with an end anchor is cut back")
       return
@@ -167,7 +175,8 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
     for path in paths {
       let data = h.sink.file(path)!
       let scan = RecoveryScan.jsonl(
-        data, cutT: window.close.endT, dropFinal: window.removesFinalLines)
+        data, cutT: window.close.endT, dropFinal: window.removesFinalLines,
+        dropClosedEvent: path == "events.jsonl" && window.removesClosedEvent)
       let kept = data.prefix(scan.keepBytes)
       #expect(data.starts(with: kept))
       let times = try kept.split(separator: 0x0A).map {
@@ -175,8 +184,10 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
       }
       #expect(
         times.allSatisfy { $0.t >= 2 && $0.t <= window.close.endT && $0.final != true }, "\(path)")
+      // Its detail would say end_anchor while recording.json says interrupted.
+      #expect(times.allSatisfy { $0.kind != "recording_closed" }, "\(path)")
     }
-    let checkpoint = try #require(reading.summary.lastCheckpoint)
+    let checkpoint = try #require(summary.lastCheckpoint)
     let bin = h.sink.file("mesh/history.bin")!
     let mesh = RecoveryScan.meshHistory(
       index: h.sink.file("mesh/history.jsonl")!, binBytes: Int64(bin.count),
@@ -186,11 +197,40 @@ private func recordingJson(ended: WindowEndReason?) throws -> Data {
     #expect(mesh.stop == .finalLine)
     #expect(mesh.lines == 2)
   }
+
+  /// The same from the journal alone: open, an end anchor and End the session here, no closed{}.
+  @Test func aCutBackRecordingLosesItsClosedEvent() throws {
+    let summary = JournalSummary([.open(open), .end(t: 30), .closing(deadline: 35)])
+    let events = Data(
+      [
+        #"{"detail":null,"kind":"recording_opened","t":3.2}"#,
+        #"{"detail":null,"kind":"memory_warning","t":34.983333}"#,
+        #"{"detail":"end_anchor","kind":"recording_closed","t":34.983333}"#,
+      ].map { $0 + "\n" }.joined().utf8)
+    let lastWrittenT = RecoveryScan.jsonl(events).lastT
+    guard
+      case .cut(let window) = RecoveryPlan.make(
+        journal: summary, recordingJson: nil, lastWrittenT: lastWrittenT)
+    else {
+      Issue.record("a cut-off recording with an end anchor is cut back")
+      return
+    }
+    #expect(window.close.endT == 34.983333)
+    #expect(window.removesClosedEvent)
+    let scan = RecoveryScan.jsonl(
+      events, cutT: window.close.endT, dropFinal: window.removesFinalLines,
+      dropClosedEvent: window.removesClosedEvent)
+    // The event at the same t before it stays.
+    #expect(scan.stop == .closedEvent)
+    #expect(scan.lines == 2)
+    #expect(scan.lastT == 34.983333)
+  }
 }
 
 private struct Timed: Decodable {
   let t: Double
   let final: Bool?
+  let kind: String?
 }
 
 #endif

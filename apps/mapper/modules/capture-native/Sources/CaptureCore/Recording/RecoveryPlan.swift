@@ -10,6 +10,10 @@ public struct RecoveredWindow: Equatable, Sendable {
 
   /// Lines with `"final": true` go: a cut-back recording has no final sample (design 12).
   public var removesFinalLines: Bool { !closed }
+  /// events.jsonl's `recording_closed` goes too: the recorder may have written it before the
+  /// app died, and its detail would contradict `interrupted`. Recovery only removes lines, so
+  /// it isn't rewritten.
+  public var removesClosedEvent: Bool { !closed }
 }
 
 /// What recovery at launch does with one recording (design 3.1 and 7.7). It only ever removes:

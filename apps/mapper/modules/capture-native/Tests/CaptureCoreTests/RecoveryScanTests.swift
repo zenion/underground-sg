@@ -56,6 +56,17 @@ private func lines(_ ts: [Double], final: Bool = false) -> Data {
     #expect(scan.stop == .finalLine)
   }
 
+  @Test func theClosedEventIsDroppedOnlyWhenAsked() {
+    let kept = lines([1, 2, 3])
+    let closed = Data((#"{"detail":"stop","kind":"recording_closed","t":3}"# + "\n").utf8)
+    #expect(RecoveryScan.jsonl(kept + closed).stop == .end)
+    let scan = RecoveryScan.jsonl(kept + closed, cutT: 3, dropClosedEvent: true)
+    #expect(scan == JsonlScan(keepBytes: kept.count, lines: 3, lastT: 3, stop: .closedEvent))
+    // A `kind` that isn't a string is no event of the recorder's: the line stays.
+    let other = lines([1]) + Data((#"{"kind":7,"t":2}"# + "\n").utf8)
+    #expect(RecoveryScan.jsonl(other, dropClosedEvent: true).stop == .end)
+  }
+
   @Test func chunksOfAnySizeGiveTheSameResult() {
     let data = lines([1, 2, 3, 4, 5]) + Data(#"{"t":6"#.utf8)
     let whole = RecoveryScan.jsonl(data, cutT: 4.5)

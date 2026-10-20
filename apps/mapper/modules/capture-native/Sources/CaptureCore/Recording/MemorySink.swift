@@ -175,7 +175,8 @@ public final class MemorySink {
   }
 
   /// Design 7.5 in memory: every file cut back to the window's end (a cut checkpoint or the
-  /// watermark buffers in FileSink, the same bytes either way), then the closing lines.
+  /// watermark buffers in FileSink, the same bytes either way), then the closing lines, then
+  /// `closed{}` in the journal before the wait for the boundary flush (step 3).
   private func finalize(_ order: CloseOrder) {
     guard state == .open else { return }
     let endT = order.window.endT
@@ -187,6 +188,12 @@ public final class MemorySink {
       bin = bin?.prefix(end)
     }
     for line in order.closingLines { append(line) }
+    let close = order.window
+    journal.append(
+      .closed(
+        JournalClosed(
+          endT: close.endT, reason: close.reason, trimmed: close.trimmed,
+          finalSample: close.finalSample)))
     pending = order
     state = .awaitingBoundary
     if !order.awaitBoundary { complete() }
@@ -195,11 +202,6 @@ public final class MemorySink {
   private func complete() {
     guard let order = pending, let opening = recordingJson else { return }
     let close = order.window
-    journal.append(
-      .closed(
-        JournalClosed(
-          endT: close.endT, reason: close.reason, trimmed: close.trimmed,
-          finalSample: close.finalSample)))
     let rates = AchievedRates.over(
       startT: close.startT, endT: close.endT, frames: streams[.frames]?.count ?? 0,
       candidates: streams[.frames]?.filter(\.candidate).count ?? 0,

@@ -71,6 +71,27 @@ private func refusal(
     #expect(refusal(boundary(seq: "0.5")) == .malformed)
   }
 
+  /// The decoder here keeps the first of two equal keys and JSON.parse on the PC the last, so a
+  /// repeat would be checked as one value and read as another.
+  @Test func refusesARepeatedKey() {
+    #expect(
+      refusal(#"{"binary":null,"kind":"status","seq":0,"t":3.25,"t":9999,"value":"1"}"#)
+        == .fields)
+    #expect(
+      refusal(#"{"binary":null,"kind":"status","seq":0,"t":3.25,"value":"1","value":"not json"}"#)
+        == .fields)
+    // The same key spelled with an escape (backslash, u0074), and an escaped key on its own.
+    let escapedT = "\"" + String(UnicodeScalar(UInt8(0x5C))) + "u0074\""
+    let repeated =
+      #"{"binary":null,"kind":"status","seq":0,"t":3.25,"# + escapedT + #":9999,"value":"1"}"#
+    #expect(refusal(repeated) == .fields)
+    #expect(
+      refusal(#"{"binary":null,"kind":"status","seq":0,"# + escapedT + #":3.25,"value":"1"}"#)
+        == .fields)
+    // Keys, commas, braces and escaped quotes inside the value are only text.
+    #expect(refusal(boundary(value: #""{\"t\":\"a,\\\"}\",\"seq\":[1,{\"t\":2}]}""#)) == nil)
+  }
+
   @Test func checksKindValueAndBinary() {
     #expect(refusal(boundary(kind: #""onStatus.v2:x-1""#)) == nil)
     #expect(refusal(boundary(kind: #""1status""#)) == .kind)

@@ -32,6 +32,9 @@ Sources/CaptureCore/      Foundation only: WorldTransform, CandidateGate, RateMe
                           do not edit)
 Tests/CaptureCoreTests/   Swift Testing, and Golden/: one file per line type, byte-exact (UPDATE_GOLDENS=1 rewrites them);
                           Support/: the scripted-session harness, and SHA-256 and stored DEFLATE for MemorySink
+Tests/CaptureCorePublicSurfaceTests/, Tests/PublicSurfaceProbe/
+                          CaptureCore without @testable: the tests stop compiling if a member that must
+                          stay internal (RecorderCore's grant) becomes public
 encoder-allowlist.json    the encoder check's allowed places (empty until the blur lands)
 ci/planted/               planted encoder calls for the encoder check's self-test; in no pod
 ```

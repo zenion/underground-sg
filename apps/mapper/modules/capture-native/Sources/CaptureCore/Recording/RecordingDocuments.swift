@@ -29,11 +29,14 @@ public struct ManifestBase: Sendable {
   public var arkit: ArkitSetup
   /// Device motion's reference frame, or nil when device motion is unavailable.
   public var motionFrame: MotionFrame?
+  /// Whether the altimeter runs. Not in recording.json: an event at the open says when it
+  /// doesn't, and altitude.jsonl is then never created.
+  public var altimeter: AltimeterStatus
 
   public init(
     origin: Origin, appVersion: String, gitCommit: String?, easBuildID: String?,
     deviceModel: String, osVersion: String, clock: SessionClock, arkit: ArkitSetup,
-    motionFrame: MotionFrame?
+    motionFrame: MotionFrame?, altimeter: AltimeterStatus
   ) {
     self.origin = origin
     self.appVersion = appVersion
@@ -44,7 +47,16 @@ public struct ManifestBase: Sendable {
     self.clock = clock
     self.arkit = arkit
     self.motionFrame = motionFrame
+    self.altimeter = altimeter
   }
+}
+
+/// The altimeter as the module finds it when the sensors start, at `start`.
+public enum AltimeterStatus: Equatable, Sendable {
+  case available
+  case unavailable
+  /// Motion & Fitness access was refused.
+  case denied
 }
 
 /// The ARWorldTrackingConfiguration the session ran: recording.json's `arkit`.

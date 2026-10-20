@@ -61,11 +61,12 @@ public struct SyntheticSession: Sendable {
       deviceModel: "synthetic", osVersion: "synthetic",
       clock: SessionClock(
         uptime: 5000, media: 5000.000125, wall: Date(timeIntervalSince1970: 1_792_454_400)),
-      arkit: .lean, motionFrame: .xMagneticNorthZVertical)
+      arkit: .lean, motionFrame: .xMagneticNorthZVertical, altimeter: .available)
   }
 
   /// A recorder for this session, with the synthetic grant only a synthetic session gets: what
-  /// it writes is labelled `origin: synthetic`.
+  /// it writes is labelled `origin: synthetic`. The grant stays inside the recorder, out of
+  /// reach of code outside CaptureCore.
   public func makeRecorder(config: RecorderConfig = .lean) -> RecorderCore {
     RecorderCore(
       grant: RecordingGrant(profile: .lean, venues: SyntheticWorld.venues, origin: .synthetic),

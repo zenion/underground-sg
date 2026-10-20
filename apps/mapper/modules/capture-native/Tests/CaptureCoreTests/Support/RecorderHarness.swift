@@ -26,14 +26,16 @@ func walkGrant() -> RecordingGrant {
   return grant
 }
 
-func deviceManifestBase(motion: MotionFrame? = .xMagneticNorthZVertical) -> ManifestBase {
+func deviceManifestBase(
+  motion: MotionFrame? = .xMagneticNorthZVertical, altimeter: AltimeterStatus = .available
+) -> ManifestBase {
   ManifestBase(
     origin: .device, appVersion: "0.1.0", gitCommit: "e191db7c0a4b5d6e7f8091a2b3c4d5e6f7081920",
     easBuildID: "7a1c9e52-4b3d-4f8a-9c6e-1d2b3a4c5e6f", deviceModel: "iPhone18,2",
     osVersion: "iOS 26.7",
     clock: SessionClock(
       uptime: 81_234.5, media: 81_234.5, wall: Date(timeIntervalSince1970: 1_792_455_302.104)),
-    arkit: .lean, motionFrame: motion)
+    arkit: .lean, motionFrame: motion, altimeter: altimeter)
 }
 
 let recordingUUID = UUID(uuidString: "5d0c6f1e-3b7a-4f7e-9c51-2a8e4b6d1f03")!
@@ -59,11 +61,11 @@ final class Harness {
 
   init(
     config: RecorderConfig = RecorderConfig(window: testWindow),
-    motion: MotionFrame? = .xMagneticNorthZVertical
+    motion: MotionFrame? = .xMagneticNorthZVertical, altimeter: AltimeterStatus = .available
   ) {
     core = RecorderCore(
       grant: walkGrant(), id: recordingUUID, config: config,
-      manifestBase: deviceManifestBase(motion: motion))
+      manifestBase: deviceManifestBase(motion: motion, altimeter: altimeter))
   }
 
   func read(_ request: GeometryRequest) -> AnchorReading {

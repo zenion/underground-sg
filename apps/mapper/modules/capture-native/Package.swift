@@ -33,5 +33,17 @@ let package = Package(
       exclude: ["Golden"],
       swiftSettings: recorder
     ),
+    // CaptureCore's public surface as code outside it sees it, without @testable. The probe is a
+    // third module that gives members the same names as ones that must stay internal: if
+    // CaptureCore ever makes one public, the tests stop compiling ("ambiguous use").
+    .target(
+      name: "PublicSurfaceProbe", dependencies: ["CaptureCore"], path: "Tests/PublicSurfaceProbe",
+      swiftSettings: recorder),
+    .testTarget(
+      name: "CaptureCorePublicSurfaceTests",
+      dependencies: ["CaptureCore", "PublicSurfaceProbe"],
+      path: "Tests/CaptureCorePublicSurfaceTests",
+      swiftSettings: recorder
+    ),
   ]
 )

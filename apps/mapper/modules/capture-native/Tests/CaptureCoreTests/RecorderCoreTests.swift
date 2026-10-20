@@ -488,6 +488,38 @@ private func events(_ h: Harness) throws -> [RecordingEventLine] {
     #expect(try events(h).last?.detail == "heat")
   }
 
+  /// The thermal notification comes between frames, so its `t` is past the last frame, where the
+  /// close ends the window. The lines that say why still make it into the recording.
+  @Test func aCriticalThermalEventAfterTheLastFrameKeepsWhyItClosed() throws {
+    let h = Harness()
+    h.openAtTwo()
+    h.frames(from: 2.0167, to: 6)
+    h.run(h.core.event(.thermal(.critical), t: 6.5))
+    let order = try #require(h.finalizeOrder)
+    #expect(order.window.reason == .heat)
+    #expect(order.window.endT == 6)
+    let tail = try events(h).suffix(4)
+    #expect(tail.map(\.kind) == [.thermal, .degradation, .degradation, .recordingClosed])
+    #expect(tail.map(\.detail) == ["critical", "no_mesh_history", "no_recording", "heat"])
+    #expect(tail.allSatisfy { $0.t == 6 })
+    try checkShapes(h.sink)
+  }
+
+  /// An events line already past the last frame (a memory warning) doesn't drag the steps past
+  /// the window's end with it.
+  @Test func anEventPastTheLastFrameDoesntTakeTheStepsWithIt() throws {
+    let h = Harness()
+    h.openAtTwo()
+    h.frames(from: 2.0167, to: 6)
+    h.run(h.core.event(.memoryWarning, t: 6.3))
+    h.telemetry(6.5, thermal: .critical)
+    let order = try #require(h.finalizeOrder)
+    #expect(order.window.endT == 6)
+    let tail = try events(h).suffix(3)
+    #expect(tail.map(\.detail) == ["no_mesh_history", "no_recording", "heat"])
+    #expect(tail.allSatisfy { $0.t == 6 })
+  }
+
   @Test func lowDiskStopsTheMeshHistoryFirstThenClosesAsDisk() throws {
     let h = Harness()
     h.openAtTwo()
@@ -692,8 +724,27 @@ private func events(_ h: Harness) throws -> [RecordingEventLine] {
     h.openAtTwo()
     h.motion([2.5])
     #expect(h.sink.file("motion.jsonl") == Data())
+    // The module knew it when the sensors started, while armed: the event is written at the open.
+    #expect(try events(h).filter { $0.kind == .motionUnavailable }.map(\.t) == [2])
     #expect(try events(h).contains { $0.detail?.hasPrefix("motion_") == true } == false)
     #expect(try h.manifest().motion == nil)
+    // Only the recorder writes it.
+    #expect(h.run(h.core.event(.motionUnavailable, t: 3)).isEmpty)
+  }
+
+  @Test(arguments: [AltimeterStatus.unavailable, .denied])
+  func withoutTheAltimeterAnEventSaysWhy(_ altimeter: AltimeterStatus) throws {
+    let h = Harness(altimeter: altimeter)
+    h.openAtTwo()
+    h.run(h.core.altitude(AltitudeSample(t: 2.5, relativeAltitudeM: 0.2, pressureKpa: 101.3)))
+    let expected: RecordingEventKind =
+      altimeter == .denied ? .altimeterDenied : .altimeterUnavailable
+    #expect(try events(h).filter { $0.kind == expected }.map(\.t) == [2])
+    #expect(h.sink.file("altitude.jsonl") == nil)
+    for event in [RecordingEvent.altimeterUnavailable, .altimeterDenied] {
+      #expect(h.run(h.core.event(event, t: 3)).isEmpty)
+    }
+    #expect(try events(h).filter { $0.kind == expected }.count == 1)
   }
 }
 
@@ -705,9 +756,15 @@ private struct BoundarySeq: Decodable {
 
 @Suite struct RecorderCorePrivacyTests {
   /// Design 12: nothing before the window, nothing past it, from a session with input on every
-  /// stream before the start mark and after the close.
+  /// stream before the start mark and after the close, and samples outside the window while it
+  /// is open, which only `RecorderWindow.accepts` stops. Checked on every line the core hands
+  /// out, not only on the files, which the sink cuts back to the end on its own.
   @Test func noLineIsOutsideTheWindow() throws {
-    let h = Harness()
+    let maxSessionS = 20.0
+    let h = Harness(
+      config: RecorderConfig(
+        window: RecorderWindowConfig(
+          endMarginS: 5, idleTimeoutS: 3, idleRadiusM: 0.5, maxSessionS: maxSessionS)))
     h.addAnchors()
     for t in stride(from: 0.0, to: 2.0, by: 0.25) {
       h.frame(t)
@@ -722,8 +779,18 @@ private struct BoundarySeq: Decodable {
       )
     }
     h.mark(.start, at: 2, streetFacing: true)
+    // Late batches from before the mark, before any later line in their files.
+    h.imu([1.95])
+    h.motion([1.95])
+    var planted = 2
     for i in 121..<720 {
       let t = micro(Double(i) / 60)
+      if i == 300 {
+        // Past the longest session while the window is still open.
+        h.telemetry(2 + maxSessionS + 0.5)
+        h.imu([2 + maxSessionS + 0.5])
+        planted += 2
+      }
       h.frame(t)
       h.imu([micro(t + 0.001)])
       h.run(
@@ -742,6 +809,20 @@ private struct BoundarySeq: Decodable {
     let manifest = try h.manifest()
     let startT = manifest.window.startT
     let endT = try #require(manifest.window.endT)
+    #expect(h.core.counts.outsideWindow == planted)
+    let handedOut = h.commands.flatMap { command -> [PendingLine] in
+      switch command {
+      case .lines(let lines): lines
+      case .finalize(let order): order.closingLines
+      default: []
+      }
+    }
+    #expect(!handedOut.isEmpty)
+    for line in handedOut {
+      #expect(
+        line.t >= startT && line.t <= startT + maxSessionS,
+        "a \(line.file.rawValue) line the window doesn't accept")
+    }
     for (path, times) in try lineTimes(h.sink) {
       #expect(times.allSatisfy { $0 >= startT && $0 <= endT }, "\(path) stays in the window")
     }

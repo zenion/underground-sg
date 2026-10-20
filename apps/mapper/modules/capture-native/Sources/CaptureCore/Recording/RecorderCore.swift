@@ -8,7 +8,9 @@ import Foundation
 //
 // | From          | Input                                    | To and commands                            |
 // | ------------- | ---------------------------------------- | ------------------------------------------ |
-// | armed         | samples, fixes, events, anchors          | armed; held in memory only, nothing out    |
+// | armed         | samples, fixes, anchors, thermal state   | armed; held in memory only, nothing out    |
+// | armed         | other events                             | armed; dropped (sensors' availability is   |
+// |               |                                          | in ManifestBase, written at the open)      |
 // | armed         | stop, discard, failure, background       | discarded; nothing out                     |
 // | armed         | first start mark                         | open: createRecording, the opening lines,  |
 // |               |                                          | baseline anchors and mesh                  |
@@ -108,13 +110,16 @@ public struct RecorderCounts: Equatable, Sendable {
   /// Lines whose `t` would go back in their file.
   public var nonIncreasing = 0
   public var boundaryRefused = 0
-  /// Events only the recorder itself writes (opened, closed, configuration, degradation).
+  /// Events only the recorder itself writes (opened, closed, configuration, degradation, the
+  /// sensors' availability).
   public var ignoredEvents = 0
 }
 
 public final class RecorderCore {
   public let id: UUID
-  public let grant: RecordingGrant
+  /// Internal: SyntheticSession makes its recorder with a synthetic grant, which must never
+  /// reach code outside CaptureCore, where only `RecordPermission.decide` gives a grant.
+  let grant: RecordingGrant
   public let config: RecorderConfig
   public let manifestBase: ManifestBase
   public private(set) var phase: RecorderPhase = .armed
@@ -345,7 +350,10 @@ public final class RecorderCore {
     return lines.isEmpty ? [] : [.lines(lines)]
   }
 
+  /// An altimeter sample. Without the altimeter nothing is written, so altitude.jsonl is never
+  /// created, as the event at the open says.
   public func altitude(_ sample: AltitudeSample) -> [SinkCommand] {
+    guard manifestBase.altimeter == .available else { return [] }
     if case .armed = phase {
       preOpen.add(sample)
       return []
@@ -414,11 +422,13 @@ public final class RecorderCore {
   }
 
   /// An event at `t`, clamped so events.jsonl never goes back. The recorder writes its own
-  /// opened, closed, configuration and degradation events; those are refused here. A thermal
-  /// change runs the degradation ladder.
+  /// opened, closed, configuration, degradation and sensor-availability events; those are
+  /// refused here. A thermal change runs the degradation ladder. Other events while armed are
+  /// dropped: nothing before the window is kept.
   public func event(_ e: RecordingEvent, t: Double) -> [SinkCommand] {
     switch e {
-    case .recordingOpened, .recordingClosed, .configuration, .degradation:
+    case .recordingOpened, .recordingClosed, .configuration, .degradation, .motionUnavailable,
+      .altimeterUnavailable, .altimeterDenied:
       counts.ignoredEvents += 1
       return []
     default:
@@ -426,11 +436,10 @@ public final class RecorderCore {
     }
     if case .thermal(let state) = e { thermal = state }
     guard isLive else { return [] }
+    if case .thermal = e { return degrade(at: t, trigger: e) }
     var lines: [PendingLine] = []
-    let stamped = appendEvent(e, t: t, to: &lines)
-    var commands: [SinkCommand] = lines.isEmpty ? [] : [.lines(lines)]
-    if case .thermal = e { commands += degrade(at: stamped) }
-    return commands
+    appendEvent(e, t: t, to: &lines)
+    return lines.isEmpty ? [] : [.lines(lines)]
   }
 
   /// One telemetry second; runs the degradation ladder.
@@ -441,7 +450,7 @@ public final class RecorderCore {
     var lines: [PendingLine] = []
     admit(.telemetry(s), to: &lines)
     let commands: [SinkCommand] = lines.isEmpty ? [] : [.lines(lines)]
-    return commands + degrade(at: s.t)
+    return commands + degrade(at: s.t, trigger: nil)
   }
 
   // MARK: - Opening and closing
@@ -477,6 +486,7 @@ public final class RecorderCore {
     var lines: [PendingLine] = []
     admit(.event(.recordingOpened, t: t), to: &lines)
     for code in configurationCodes() { admit(.event(.configuration(code), t: t), to: &lines) }
+    for event in unavailableSensors() { admit(.event(event, t: t), to: &lines) }
     let released = preOpen.release(startT: t)
     for sample in released.imu { admit(.imu(sample), to: &lines) }
     if manifestBase.motionFrame != nil {
@@ -521,6 +531,20 @@ public final class RecorderCore {
     return codes.compactMap { $0 }
   }
 
+  /// The sensors the session runs without, as events at the open (design section 5). The module
+  /// learns this when the sensors start, while armed, so it comes in ManifestBase rather than as
+  /// events, which nothing would keep until the open.
+  private func unavailableSensors() -> [RecordingEvent] {
+    var events: [RecordingEvent] = []
+    if manifestBase.motionFrame == nil { events.append(.motionUnavailable) }
+    switch manifestBase.altimeter {
+    case .available: break
+    case .unavailable: events.append(.altimeterUnavailable)
+    case .denied: events.append(.altimeterDenied)
+    }
+    return events
+  }
+
   /// A snapshot every `meshIntervalS` while open: the anchors.jsonl sample and, unless the
   /// ladder stopped it, the mesh job for the anchors updated and removed since the last one.
   private func snapshotIfDue(
@@ -560,9 +584,11 @@ public final class RecorderCore {
   private let noAnchors: (GeometryRequest) -> AnchorReading = { _ in AnchorReading(anchors: []) }
 
   /// The window closed: the final sample when the reason takes one and a frame is at hand
-  /// (`sampling`), the `recording_closed` event, and the finalize order.
+  /// (`sampling`), the `explaining` events and the `recording_closed` event at `endT`, and the
+  /// finalize order. The sink appends the closing lines after it cuts the files back to `endT`.
   private func finish(
-    readAnchors: (GeometryRequest) -> AnchorReading, sampling: Bool, fromFrame: Bool
+    readAnchors: (GeometryRequest) -> AnchorReading, sampling: Bool, fromFrame: Bool,
+    explaining: [RecordingEvent] = []
   ) -> [SinkCommand] {
     guard case .closed(let startT, let endT, let reason, let trimmed) = window.state else {
       return []
@@ -583,6 +609,7 @@ public final class RecorderCore {
         snapshotTs.append(endT)
       }
     }
+    for event in explaining { closing.append(.event(event, t: endT)) }
     closing.append(.event(.recordingClosed(reason), t: endT))
     let kept = closing.filter { window.accepts(t: $0.t) }
     counts.outsideWindow += closing.count - kept.count
@@ -623,7 +650,10 @@ public final class RecorderCore {
     return MeshJob(t: endT, final: true, copies: copies, reuse: reuse, removed: plan.removed)
   }
 
-  private func closeWithoutSample(_ reason: WindowEndReason, at t: Double) -> [SinkCommand] {
+  /// `explaining`: events that say why, written at the window's end before `recording_closed`.
+  private func closeWithoutSample(
+    _ reason: WindowEndReason, at t: Double, explaining: [RecordingEvent] = []
+  ) -> [SinkCommand] {
     switch phase {
     case .armed:
       window.close(at: t, reason: reason)
@@ -632,7 +662,8 @@ public final class RecorderCore {
       switch window.state {
       case .open(let startT), .closing(let startT, _):
         window.close(at: max(startT, t), reason: reason)
-        return finish(readAnchors: noAnchors, sampling: false, fromFrame: false)
+        return finish(
+          readAnchors: noAnchors, sampling: false, fromFrame: false, explaining: explaining)
       case .waiting, .closed, .discarded:
         return []
       }
@@ -653,22 +684,27 @@ public final class RecorderCore {
     return [.journal(.discard), .deleteRecording(id: id)]
   }
 
-  /// The degradation ladder at `t`: each step entered is written as an event, then applied.
-  /// `no_mesh_history` takes effect through `ladder.keepsMeshHistory`; `no_recording` closes
-  /// with `heat` when the phone is critical, else `disk`.
-  private func degrade(at t: Double) -> [SinkCommand] {
+  /// The degradation ladder at `t`, after the thermal event that ran it (`trigger`) or a
+  /// telemetry line: each step entered is written as an event, then applied. `no_mesh_history`
+  /// takes effect through `ladder.keepsMeshHistory`; `no_recording` closes with `heat` when the
+  /// phone is critical, else `disk`.
+  private func degrade(at t: Double, trigger: RecordingEvent?) -> [SinkCommand] {
     guard isLive else { return [] }
     let steps = ladder.update(thermal: thermal, freeDiskBytes: freeDiskBytes)
-    guard !steps.isEmpty else { return [] }
     // Stamped no later than the last frame, which is where a close would end the window.
     let stampT = min(t, lastFrame?.t ?? t)
-    var lines: [PendingLine] = []
-    for step in steps { _ = appendEvent(.degradation(step), t: stampT, to: &lines) }
-    var commands: [SinkCommand] = lines.isEmpty ? [] : [.lines(lines)]
     if steps.contains(.noRecording) {
-      commands += closeWithoutSample(thermal == .critical ? .heat : .disk, at: stampT)
+      // The close ends the window at the last frame and the sink cuts every line past it, so
+      // a trigger or a step written at its own `t` would go with them, often after an events
+      // line already past the frame. They go in with the closing lines instead, at the end.
+      let explaining = (trigger.map { [$0] } ?? []) + steps.map { .degradation($0) }
+      return closeWithoutSample(
+        thermal == .critical ? .heat : .disk, at: stampT, explaining: explaining)
     }
-    return commands
+    var lines: [PendingLine] = []
+    if let trigger { appendEvent(trigger, t: t, to: &lines) }
+    for step in steps { appendEvent(.degradation(step), t: stampT, to: &lines) }
+    return lines.isEmpty ? [] : [.lines(lines)]
   }
 
   private func syncLivePhase() {
@@ -725,13 +761,9 @@ public final class RecorderCore {
     if let line = rebaser.line(s) { admit(line, to: &lines) }
   }
 
-  /// Returns the `t` the event was stamped with.
-  private func appendEvent(_ e: RecordingEvent, t: Double, to lines: inout [PendingLine])
-    -> Double
-  {
-    let stamped = max(t, lastLineT[.events] ?? t)
-    admit(.event(e, t: stamped), to: &lines)
-    return stamped
+  /// Stamped no earlier than the last events line, so events.jsonl never goes back.
+  private func appendEvent(_ e: RecordingEvent, t: Double, to lines: inout [PendingLine]) {
+    admit(.event(e, t: max(t, lastLineT[.events] ?? t)), to: &lines)
   }
 }
 #endif
