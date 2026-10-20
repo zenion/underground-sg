@@ -95,6 +95,12 @@ public struct PendingLine: Sendable {
     return try encoder.line(bothReplaced)
   }
 
+  /// A frames.jsonl line whose frame is a candidate, for recording.json's `candidates_hz`.
+  public var isCandidateFrame: Bool {
+    if case .frame(let line) = payload { return line.candidate != nil }
+    return false
+  }
+
   /// A mesh-history add or update with its block's place in history.bin, once the writer knows
   /// it. Other lines come back unchanged.
   public func placed(offset: Int64, bytes: Int) -> PendingLine {

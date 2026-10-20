@@ -39,12 +39,21 @@ public struct ConfigCode: Equatable, Hashable, Sendable {
 
   /// Device motion's reference frame, in snake case: `motion_x_arbitrary_corrected_z_vertical`.
   public static func motion(_ frame: MotionFrame) -> ConfigCode {
+    ConfigCode(known: "motion_" + snakeCase(frame.rawValue))
+  }
+
+  /// An Apple name in snake case: `smoothedSceneDepth` is `smoothed_scene_depth`.
+  public static func named(_ camelCase: String) -> ConfigCode? {
+    ConfigCode(snakeCase(camelCase))
+  }
+
+  private static func snakeCase(_ camelCase: String) -> String {
     var snake = ""
-    for character in frame.rawValue {
+    for character in camelCase {
       if character.isUppercase { snake += "_" }
       snake += character.lowercased()
     }
-    return ConfigCode(known: "motion_" + snake)
+    return snake
   }
 
   /// The window's margin after an end anchor: `margin_5s`, or `margin_2_5s` for 2.5 s.
