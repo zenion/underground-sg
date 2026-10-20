@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/anchor-line.schema.json",
   "title": "AnchorHistoryLine",
-  "description": "One line of anchors.jsonl in a session recording, recording_version 1 (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh snapshot. The first sample, when the recording opens, writes every anchor as add; the final sample, when it closes, writes every keyframe, image and marked anchor with final true and no movement threshold. Otherwise updates only for anchors that moved more than about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by this schema: t never decreases, an anchor's first line is an add, transform is null exactly for remove, frame is set exactly for keyframe anchors, and capture_id is set only on final lines.",
+  "description": "One line of anchors.jsonl in a session recording, recording_version 1 (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh snapshot (mesh anchors included). The first sample, when the recording opens, writes every anchor as add. The final sample, when the recording closes with end_anchor or idle, writes final true at window.end_t: a remove for each keyframe, image or marked anchor removed since the last sample, then every one that exists (update if already seen, add if new), with no movement threshold. Otherwise updates only for anchors that moved more than about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by this schema: t never decreases, an anchor's first line in the file is an add, transform is null exactly for remove, frame is set exactly for keyframe anchors, final lines are only at window.end_t, and capture_id is null on lines that aren't final.",
   "type": "object",
   "properties": {
     "t": {
@@ -54,7 +54,7 @@
       "type": "boolean"
     },
     "capture_id": {
-      "description": "On a final sample taken at a segment's session-end reads (with continuous_session), that segment's capture_id; else null.",
+      "description": "On a final sample, the segment whose session-end reads it is (the segment open when it was taken), or null when no segment was open; null on other lines.",
       "anyOf": [
         {
           "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"

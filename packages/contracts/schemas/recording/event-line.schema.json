@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/event-line.schema.json",
   "title": "RecordingEventLine",
-  "description": "One line of events.jsonl in a session recording, recording_version 1 (docs/session-recording.md). detail is a short code, never a pose, a time or a fix; the Swift recorder writes events from a typed enum. Checked by validate-recording, not by this schema: t never decreases, and each kind's detail is what RECORDING_EVENT_DETAILS in packages/contracts says (null for most kinds; a RecordingEnded value for recording_closed; a ThermalState for thermal; a degradation step for degradation; a lowercase UUID for image_anchor_detected; decimal digits for session_failed; a short lowercase code for configuration).",
+  "description": "One line of events.jsonl in a session recording, recording_version 1 (docs/session-recording.md). detail is a short code, never a pose, a time or a fix; the Swift recorder writes events from a typed enum. Checked by validate-recording, not by this schema: t never decreases, and each kind's detail is what RECORDING_EVENT_DETAILS in packages/contracts says (null for most kinds; a RecordingEnded value for recording_closed; a ThermalState for thermal; a degradation step for degradation; a lowercase UUID for image_anchor_detected; decimal digits with an optional minus for session_failed; a short lowercase code for configuration).",
   "type": "object",
   "properties": {
     "t": {

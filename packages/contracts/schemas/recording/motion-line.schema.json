@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/motion-line.schema.json",
   "title": "MotionLine",
-  "description": "One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. Checked by validate-recording, not by this schema: t strictly increases, the attitude's norm is within 1e-3 of 1, and heading is null in the arbitrary reference frames.",
+  "description": "One line of motion.jsonl in a session recording, recording_version 1 (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. The file is empty exactly when recording.json's motion is null. Checked by validate-recording, not by this schema: t strictly increases, the attitude's norm is within 1e-3 of 1, and heading is null in the arbitrary reference frames.",
   "type": "object",
   "properties": {
     "t": {

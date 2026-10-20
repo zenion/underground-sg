@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://underground-sg.local/schemas/recording/mesh-history-line.schema.json",
   "title": "MeshHistoryLine",
-  "description": "One line of mesh/history.jsonl in a session recording, recording_version 1 (docs/session-recording.md): the index of one block of mesh/history.bin. The first snapshot, when the recording opens, writes every mesh anchor as add; later snapshots write anchors whose geometry changed; the final snapshot, when it closes, writes every mesh anchor with final true. Checked by validate-recording, not by this schema: t never decreases; an anchor's first line is an add; transform, offset, bytes, vertices and faces are null exactly for remove; each block lies inside history.bin; and capture_id is set only on final lines.",
+  "description": "One line of mesh/history.jsonl in a session recording, recording_version 1 (docs/session-recording.md): the index of one block of mesh/history.bin. The first snapshot, when the recording opens, writes every mesh anchor as add; later snapshots write anchors whose geometry changed; the final snapshot, when it closes with end_anchor or idle (unless the no_mesh_history step was reached), writes every mesh anchor with final true at window.end_t. Checked by validate-recording, not by this schema: t never decreases; an anchor's first line is an add; transform, offset, bytes, vertices and faces are null exactly for remove; each block lies inside history.bin; and capture_id is set only on final lines.",
   "type": "object",
   "properties": {
     "t": {
@@ -88,7 +88,7 @@
       "type": "boolean"
     },
     "capture_id": {
-      "description": "On a final snapshot taken at a segment's session-end reads (with continuous_session), that segment's capture_id; else null.",
+      "description": "On a final snapshot, the segment whose session-end reads it is (the segment open when it was taken), or null when no segment was open; null on other lines.",
       "anyOf": [
         {
           "$ref": "../capture-bundle/defs.schema.json#/$defs/uuid"

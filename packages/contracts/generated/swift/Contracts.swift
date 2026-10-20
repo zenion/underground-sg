@@ -392,15 +392,15 @@ enum BoxKind: String, Codable, Equatable, Sendable {
 }
 
 /// recording.json of a session recording, recording_version 1 (docs/session-recording.md):
-/// written by the Swift recorder when the recording opens and rewritten when it closes.
-/// Until it closes, window.end_t, window.ended and rates are null, closed is false and files
-/// is empty; it is rewritten again when a listed segment finishes or is discarded after the
-/// close (segments only). Unknown fields are rejected; adding one is a recording_version
-/// bump. Checked by validate-recording, not by this schema: files lists every other file
-/// exactly once with matching bytes and SHA-256, window.end_t is not before window.start_t,
-/// each segment's end_t is not before its start_t, build.profile is synthetic exactly when
-/// origin is, a segment with a manifest_sha256 has an end_t, and once the session has
-/// stopped every kept segment has both.
+/// written by the Swift recorder when the recording opens, rewritten atomically as segments
+/// start and end, and when it closes. Until it closes, window.end_t, window.ended and rates
+/// are null, closed is false and files is empty; it is rewritten again when a listed segment
+/// finishes or is discarded after the close (segments only). Unknown fields are rejected;
+/// adding one is a recording_version bump. Checked by validate-recording, not by this
+/// schema: files lists every other file exactly once with matching bytes and SHA-256,
+/// window.end_t is not before window.start_t, each segment's end_t is not before its
+/// start_t, build.profile is synthetic exactly when origin is, a segment with a
+/// manifest_sha256 has an end_t, and in an exported set every kept segment has both.
 struct RecordingManifest: Codable, Equatable, Sendable {
     let arkit: ArkitConfiguration
     let build: RecordingBuild
@@ -801,9 +801,10 @@ struct StageTimings: Codable, Equatable, Sendable {
 }
 
 /// One line of motion.jsonl in a session recording, recording_version 1
-/// (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz.
-/// Checked by validate-recording, not by this schema: t strictly increases, the attitude's
-/// norm is within 1e-3 of 1, and heading is null in the arbitrary reference frames.
+/// (docs/session-recording.md): one Core Motion device-motion sample, at about 100 Hz. The
+/// file is empty exactly when recording.json's motion is null. Checked by
+/// validate-recording, not by this schema: t strictly increases, the attitude's norm is
+/// within 1e-3 of 1, and heading is null in the arbitrary reference frames.
 struct MotionLine: Codable, Equatable, Sendable {
     /// CMDeviceMotion.attitude as a quaternion, in recording.json's motion.reference_frame.
     let attitude: [Double]
@@ -869,18 +870,20 @@ struct AltitudeLine: Codable, Equatable, Sendable {
 
 /// One line of anchors.jsonl in a session recording, recording_version 1
 /// (docs/session-recording.md): an anchor added, moved or removed, sampled with each mesh
-/// snapshot. The first sample, when the recording opens, writes every anchor as add; the
-/// final sample, when it closes, writes every keyframe, image and marked anchor with final
-/// true and no movement threshold. Otherwise updates only for anchors that moved more than
+/// snapshot (mesh anchors included). The first sample, when the recording opens, writes
+/// every anchor as add. The final sample, when the recording closes with end_anchor or idle,
+/// writes final true at window.end_t: a remove for each keyframe, image or marked anchor
+/// removed since the last sample, then every one that exists (update if already seen, add if
+/// new), with no movement threshold. Otherwise updates only for anchors that moved more than
 /// about 1 mm or 0.05 degrees since their last line. Checked by validate-recording, not by
-/// this schema: t never decreases, an anchor's first line is an add, transform is null
-/// exactly for remove, frame is set exactly for keyframe anchors, and capture_id is set only
-/// on final lines.
+/// this schema: t never decreases, an anchor's first line in the file is an add, transform
+/// is null exactly for remove, frame is set exactly for keyframe anchors, final lines are
+/// only at window.end_t, and capture_id is null on lines that aren't final.
 struct AnchorHistoryLine: Codable, Equatable, Sendable {
     /// ARKit's anchor identifier.
     let anchor: String
-    /// On a final sample taken at a segment's session-end reads (with continuous_session), that
-    /// segment's capture_id; else null.
+    /// On a final sample, the segment whose session-end reads it is (the segment open when it
+    /// was taken), or null when no segment was open; null on other lines.
     let captureID: String?
     /// true for the lines of a final sample (written whether or not the anchor moved).
     let anchorHistoryLineFinal: Bool
@@ -927,8 +930,8 @@ enum HistoryOp: String, Codable, Equatable, Sendable {
 /// this schema: t never decreases, and each kind's detail is what RECORDING_EVENT_DETAILS in
 /// packages/contracts says (null for most kinds; a RecordingEnded value for
 /// recording_closed; a ThermalState for thermal; a degradation step for degradation; a
-/// lowercase UUID for image_anchor_detected; decimal digits for session_failed; a short
-/// lowercase code for configuration).
+/// lowercase UUID for image_anchor_detected; decimal digits with an optional minus for
+/// session_failed; a short lowercase code for configuration).
 struct RecordingEventLine: Codable, Equatable, Sendable {
     /// A short code, a number as its decimal text, or null; what it holds depends on kind (see
     /// the doc).
@@ -1077,8 +1080,9 @@ enum ThermalState: String, Codable, Equatable, Sendable {
 /// One line of mesh/history.jsonl in a session recording, recording_version 1
 /// (docs/session-recording.md): the index of one block of mesh/history.bin. The first
 /// snapshot, when the recording opens, writes every mesh anchor as add; later snapshots
-/// write anchors whose geometry changed; the final snapshot, when it closes, writes every
-/// mesh anchor with final true. Checked by validate-recording, not by this schema: t never
+/// write anchors whose geometry changed; the final snapshot, when it closes with end_anchor
+/// or idle (unless the no_mesh_history step was reached), writes every mesh anchor with
+/// final true at window.end_t. Checked by validate-recording, not by this schema: t never
 /// decreases; an anchor's first line is an add; transform, offset, bytes, vertices and faces
 /// are null exactly for remove; each block lies inside history.bin; and capture_id is set
 /// only on final lines.
@@ -1087,8 +1091,8 @@ struct MeshHistoryLine: Codable, Equatable, Sendable {
     let anchor: String
     /// The block's length in history.bin (compressed), or null for remove.
     let bytes: Int?
-    /// On a final snapshot taken at a segment's session-end reads (with continuous_session),
-    /// that segment's capture_id; else null.
+    /// On a final snapshot, the segment whose session-end reads it is (the segment open when it
+    /// was taken), or null when no segment was open; null on other lines.
     let captureID: String?
     /// Faces in the block, or null for remove.
     let faces: Int?

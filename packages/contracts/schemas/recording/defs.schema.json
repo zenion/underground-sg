@@ -50,7 +50,7 @@
     },
     "jsonText": {
       "title": "JsonText",
-      "description": "JSON text: a string that parses as one JSON value, holding what JavaScript passed or received, whose shape the module doesn't fix. At most 16 KiB; readers parse it.",
+      "description": "JSON text: a string that parses as one JSON value, holding what JavaScript passed or received, whose shape the module doesn't fix. At most 16,384 characters (Unicode code points, as maxLength counts them); a larger value is replaced by the marker {\"omitted\":\"too_large\",\"bytes\":N}. Readers parse it.",
       "type": "string",
       "minLength": 1,
       "maxLength": 16384

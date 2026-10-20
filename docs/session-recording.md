@@ -9,8 +9,8 @@ A recording is never part of a bundle, never uploaded to ingest, and no bundle d
 ## Replay sets
 
 - There is one recording per ARKit session: the directory `rec-<recording_id>/`, where `recording_id` is the session's lowercase UUID.
-- A **replay set** is a recording plus the session's bundles (`capture-<capture_id>/`). A `lean` recording made before the blur passes `privacySelfTest()` has no bundles: a bundle needs blurred keyframes.
-- A recording opens at the session's first start-anchor mark. It closes a set margin after the owner marks an end anchor with **End the session here** (which also stops the session then), after an idle timeout, when the app goes to the background (a locked screen included), or at its limits; nothing more of that session is recorded. A recording still open when the session closes, or found cut off at the next launch, is cut back to its last end anchor plus the margin, and the tail is deleted. Sessions start and stop at a public anchor. Nothing outside the window is written.
+- A **replay set** is a recording plus the session's bundles (`capture-<capture_id>/`). A bundle (a segment) runs from a start-anchor mark to an end-anchor mark ([capture-bundle.md](capture-bundle.md#anchorsjson)), so the session's first segment starts when the recording opens, and frames before that mark belong to no bundle. A `lean` recording made before the blur passes `privacySelfTest()` has no bundles: a bundle needs blurred keyframes.
+- A recording opens at the session's first start-anchor mark. It closes a set margin after the owner marks an end anchor with **End the session here** (when the margin ends, the recorder takes the final sample, closes the recording with `ended: end_anchor` and then stops the session, so the cut-back rule below doesn't apply to it), after an idle timeout, when the app goes to the background (a locked screen included), or at its limits; nothing more of that session is recorded. A recording still open when the session closes, or found cut off at the next launch, is cut back to its last end anchor plus the margin, and the tail is deleted. Sessions start and stop at a public anchor. Nothing outside the window is written.
 
 ## Profiles
 
@@ -33,10 +33,10 @@ The rates and sizes are provisional: the spike sets the candidate rate, the gate
 
 ```
 rec-<recording_id>/
-  recording.json             required: written at start, rewritten at close
+  recording.json             required: written at open, rewritten as segments start and end, and at close
   frames.jsonl               required: one line per ARFrame
   imu.jsonl                  required
-  motion.jsonl               required
+  motion.jsonl               required, empty exactly when recording.json's motion is null
   altitude.jsonl             optional: when the altimeter is available and allowed
   anchors.jsonl              required, may be empty
   events.jsonl               required
@@ -66,7 +66,7 @@ Files outside this layout are rejected. Frame names are six-digit session frame 
 
 ## recording.json
 
-Written when the recording opens, rewritten when it closes, and rewritten again when a segment listed in it finishes or is discarded after the close (that changes only `segments`). Until it closes, `window.end_t`, `window.ended` and `rates` are `null`, `closed` is `false` and `files` is empty. `recording.json` isn't in `files`, so rewriting it breaks no hash.
+Written when the recording opens; rewritten (atomically, through a temporary file) when a segment starts, finishes or is discarded, and when the recording closes; and rewritten again when a segment listed in it finishes or is discarded after the close (that changes only `segments`). Until it closes, `window.end_t`, `window.ended` and `rates` are `null`, `closed` is `false` and `files` is empty. `recording.json` isn't in `files`, so rewriting it breaks no hash.
 
 | Field | Notes |
 | --- | --- |
@@ -84,7 +84,7 @@ Written when the recording opens, rewritten when it closes, and rewritten again 
 | `motion` | Device motion's configuration: `reference_frame`, the Core Motion reference frame `motion.jsonl`'s attitude and heading use (`xArbitraryZVertical`, `xArbitraryCorrectedZVertical`, `xMagneticNorthZVertical` or `xTrueNorthZVertical`), or `null` when device motion is unavailable. The spike chooses the frame |
 | `detector_versions` | As the bundle manifest's `privacy.detector_versions`; `null` in `lean` |
 | `venues` | Ids of the seeded venues walked (at most 50), chosen before the start, so a recording can be found and deleted on request |
-| `segments` | One per bundle the session started while the recording was open, in order, listed when it starts (at most 200): `capture_id`; `manifest_sha256`, the SHA-256 of that bundle's `manifest.json` bytes, or `null` while it has none (still open, or discarded before it got one); `start_t`; `end_t`, or `null` until the segment ends; `frame_offset`; and `kept` (`false` for a discarded segment, whose bundle is gone). A kept segment has a non-null `end_t` and `manifest_sha256` once the session has stopped. A segment's frames are in the recording only within the window, so `deriveBundle` refuses a segment that isn't wholly inside it. Recovery at the next launch rebuilds `segments` from the bundles on disk before it trims |
+| `segments` | One per bundle the session started while the recording was open, in order, listed when it starts (at most 200): `capture_id`; `manifest_sha256`, the SHA-256 of that bundle's `manifest.json` bytes, or `null` while it has none (still open, or discarded before it got one); `start_t`; `end_t`, or `null` until the segment ends; `frame_offset`; and `kept` (`false` for a discarded segment, whose bundle is gone). A kept segment has a non-null `end_t` and `manifest_sha256` once the session has stopped. A segment's frames are in the recording only within the window, so `deriveBundle` refuses a segment that isn't wholly inside it. Recovery at the next launch rebuilds `segments` from the bundles on disk before it trims. It also runs for a closed recording that still has a kept segment without `end_t` or `manifest_sha256` (the session ended abnormally after the close): that segment's bundle never finished, so it becomes `kept: false` and its files are deleted. An exported set has no such segment: every kept segment has both |
 | `closed` | `true` once the recorder closed cleanly; a recording left `false` was cut off |
 | `files` | Every other file (at most 60,000): path, bytes and lowercase hex SHA-256, as in the bundle manifest |
 
@@ -119,22 +119,22 @@ Written when the recording opens, rewritten when it closes, and rewritten again 
 
 **`altitude.jsonl`**, as Core Motion delivers it: `t`, `relative_m` (metres since the first sample) and `pressure_kpa`. Never absolute altitude.
 
-**`anchors.jsonl`**, one line per anchor change, sampled with each mesh snapshot. The first sample, when the recording opens, writes every anchor the session already has as `add` (a baseline: the session started before the recording opened), and an anchor's first line is always an `add`. The final sample, when the recording closes (below), writes every keyframe, image and marked anchor that exists, whether or not it moved:
+**`anchors.jsonl`**, one line per anchor change, sampled with each mesh snapshot. The first sample, when the recording opens, writes every anchor the session already has as `add` (a baseline: the session started before the recording opened), and an anchor's first line in this file is always an `add`. Mesh anchors are here too: `add` when ARKit adds them (or in the baseline), `update` when they move past the threshold, `remove` when ARKit removes them. The final sample, when the recording closes (below), writes every keyframe, image and marked anchor that exists, whether or not it moved:
 
 | Field | Notes |
 | --- | --- |
 | `t` | When it was sampled |
 | `anchor` | ARKit's anchor UUID |
 | `kind` | `keyframe`, `image`, `mesh` or `marked` (an anchor `markAnchor` placed) |
-| `op` | `add`, `update` (moved more than about 1 mm or 0.05° since its last line) or `remove` |
+| `op` | `add`, `update` (moved more than about 1 mm or 0.05° since its last line; in a final sample, any anchor already seen) or `remove` |
 | `transform` | Anchor to world, or `null` for `remove` |
 | `frame` | The keyframe's frame for a `keyframe` anchor, else `null` |
 | `final` | `true` for the lines of a final sample, with no movement threshold |
-| `capture_id` | On a final sample taken at a segment's session-end reads (with `continuous_session`), that segment's `capture_id`; else `null` |
+| `capture_id` | On a final sample, the segment whose session-end reads it is (the segment open when it was taken), else `null` (no segment was open). On other lines, `null` |
 
 A mesh anchor's transform at `t` is its latest line at or before `t` in either `anchors.jsonl` (kind `mesh`) or `mesh/history.jsonl`: ARKit moves mesh anchors without changing their geometry, and `history.bin` gets a block only when the geometry changed.
 
-**The final sample.** When the recording closes, at `window.end_t`, the recorder takes a final sample: every keyframe, image and marked anchor in `anchors.jsonl` and every mesh anchor in the mesh history, `final: true`, with the transforms read at that moment. **End the session here** stops the session at that same moment, so the bundle's session-end reads (`refined_keyframes.jsonl`, `mesh/scene.ply`) are this sample, which is what `deriveBundle`'s `recorded` policy rebuilds them from. A recording closed for another reason (`idle`, `background`, `heat`, `disk`, `limit`) also takes one at its close, but a bundle whose session-end reads came later doesn't match it, so `recorded` doesn't apply to that bundle. A recording cut back (`stop` without End the session here, or `interrupted`) has no final sample, since its end is in the past. With `continuous_session`, the session-end reads at each segment's end take a final sample too, marked with that segment's `capture_id` (an open point of the bundle format).
+**The final sample.** When the recording closes with `end_anchor` or `idle`, at `window.end_t`, the recorder takes a final sample, all lines `final: true` at that `t`: in `anchors.jsonl`, first a `remove` for each keyframe, image or marked anchor removed since the last sample, then every keyframe, image and marked anchor that exists (`update` for one already seen, `add` for a new one), with the transform read at that moment; and in the mesh history, every mesh anchor. Its `capture_id` is the segment open at that moment. **End the session here** then stops the session, so that segment's session-end reads (`refined_keyframes.jsonl`, `mesh/scene.ply`) are this sample, and `deriveBundle`'s `recorded` policy rebuilds them from the final lines with that segment's `capture_id`, not from earlier lines. An `idle` close also takes one, but if the session goes on, that segment's later session-end reads don't match it, so `recorded` doesn't apply to it. There is no final sample after a close for `background` (the app has seconds), `heat`, `disk` or `limit` (the recorder is already short of heat, space or budget, and a full mesh snapshot could pass the very limit that closed it), nor after a cut back (`stop` without End the session here, or `interrupted`: its end is in the past); after the `no_mesh_history` degradation step, a final sample has no mesh part. `recorded` doesn't apply to a segment without its final sample. With `continuous_session`, the session-end reads at each segment's end inside the window take a final sample too, with that segment's `capture_id` (an open point of the bundle format).
 
 **`events.jsonl`**, one line per event: `t`, `kind` and `detail`, a short code (a number as its decimal text) or `null`, never a pose, a time or a fix. Each kind's `detail` is fixed by this table, which `RECORDING_EVENT_DETAILS` in `packages/contracts` carries and `validate-recording` checks; the Swift recorder writes events from a typed enum, so it can't put anything else there.
 
@@ -143,7 +143,7 @@ A mesh anchor's transform at `t` is its latest line at or before `t` in either `
 | `recording_opened` | `null` |
 | `recording_closed` | Why: as `window.ended` |
 | `configuration` | What the session ran with, a short lowercase code |
-| `session_failed` | ARKit's error code, as decimal digits |
+| `session_failed` | The error's code, as decimal digits with an optional minus |
 | `interruption_began`, `interruption_ended` | `null` |
 | `relocalization_began`, `relocalization_ended` | `null` |
 | `image_anchor_detected` | The anchor's UUID |
