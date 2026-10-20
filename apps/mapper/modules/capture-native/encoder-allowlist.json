@@ -1,0 +1,4 @@
+{
+  "$comment": "The encoder check's allowed places (ADR 0010): object file (<module>/<file>.o) to the rules it may break. Empty until they land: CaptureBlur (writeBlurredJPEG), the depth and confidence PNG writer, and ARKitSource's frame copy each join it with their own task.",
+  "$example": "{ \"CaptureBlur/Blur.o\": [\"CGImageDestination\"] }"
+}

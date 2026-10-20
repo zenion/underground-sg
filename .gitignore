@@ -60,8 +60,10 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# Xcode
+# Xcode, and SwiftPM (apps/mapper/modules/capture-native)
 DerivedData/
+.build/
+.swiftpm/
 *.xcuserstate
 xcuserdata/
 

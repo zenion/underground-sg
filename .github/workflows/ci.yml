@@ -51,6 +51,70 @@ jobs:
       - if: runner.os == 'Linux'
         run: pnpm audit --audit-level high
 
+  ios:
+    # The capture module's native code (ADR 0007, ADR 0010): the SwiftPM tests, an unsigned build
+    # of the whole app, and the encoder check on the module's compiled objects. No signing and no
+    # secrets: nothing here can reach a phone.
+    name: iOS native (macOS)
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      EXPO_NO_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
+        with:
+          cache: true
+          require-lockfile: true
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          ls -d /Applications/Xcode*.app
+      # CaptureCore and the other pure-Swift targets, with Swift Testing.
+      - name: SwiftPM tests
+        run: swift test --package-path apps/mapper/modules/capture-native
+      # Nothing else compiles packages/contracts' generated Swift yet.
+      - name: Generated Swift types compile
+        run: xcrun swiftc -typecheck packages/contracts/generated/swift/CaptureBundle.swift
+      # The check must catch a planted encoder symbol and a planted CIContext writer selector.
+      - name: Encoder check catches planted calls
+        run: node apps/mapper/scripts/encoder-check.mts --self-test apps/mapper/modules/capture-native/ci/planted
+      - name: Prebuild the iOS project
+        working-directory: apps/mapper
+        run: pnpm exec expo prebuild --platform ios --no-install
+      - name: Install pods
+        working-directory: apps/mapper/ios
+        run: pod install
+      - name: Build the app (unsigned, Debug)
+        working-directory: apps/mapper/ios
+        run: |
+          workspace=$(ls -d *.xcworkspace)
+          xcodebuild build -quiet -workspace "$workspace" -scheme "${workspace%.xcworkspace}" \
+            -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+      # Every pod the module's expo-module.config.json lists. Once the recorder exists, this build
+      # must compile it too (USG_RECORDER), or its objects go unchecked.
+      - name: Encoder check on the capture module
+        run: node apps/mapper/scripts/encoder-check.mts --derived-data "$RUNNER_TEMP/dd"
+
+  swift-linux:
+    # CaptureCore is Foundation only, so it must also build and pass its tests with the Swift
+    # toolchain on Linux (ADR 0010), the toolchain Windows and WSL would use.
+    name: Swift on Linux
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.3.3-noble@sha256:c2f3ac2eb806ce43f68859c3d52bd3bb1cfc88672fb3a948b76e136d98e39278
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: swift test --package-path apps/mapper/modules/capture-native
+      - run: swiftc -typecheck packages/contracts/generated/swift/CaptureBundle.swift
+
   db:
     # Branch protection requires the two check names above; add this one there to require it.
     # The name stays "Database (postgis)" although the job now runs RustFS too, for the API's

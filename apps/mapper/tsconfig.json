@@ -9,5 +9,5 @@
     // Resolve packages' React Native type entries, as Metro does.
     "customConditions": ["react-native"]
   },
-  "include": ["src", "test", "scripts", "app.config.ts", "vitest.config.mts"]
+  "include": ["src", "modules", "test", "scripts", "app.config.ts", "vitest.config.mts"]
 }
