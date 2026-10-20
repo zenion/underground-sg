@@ -102,6 +102,27 @@ private final class ScriptedCalls: @unchecked Sendable {
     #expect(try file.length() == 0)
   }
 
+  @Test func createWritesThroughTheDescriptorThatCreatedTheFile() throws {
+    // Design 7.6: a class-B file created while the phone is locked can't be opened again until
+    // it is unlocked, so DurableFile keeps the one descriptor FileSecurity created it with:
+    // one open, with O_CREAT and O_EXCL, and no second open by path.
+    for mode in [DurableFile.Mode.appendWriteOnly, .appendReadWrite] {
+      let name = "file-\(mode)"
+      let file = try create(name, mode)
+      defer { file.close() }
+      let created = try #require(security.created.last)
+      #expect(created.path == directory.file(name).path)
+      #expect(file.descriptor == created.descriptor)
+      #expect(created.flags == DurableFile.openFlags(mode) | O_CREAT | O_EXCL)
+      // Moved away, as if its path could no longer be opened: the writes still reach it.
+      let moved = directory.file("\(name).moved")
+      try FileManager.default.moveItem(at: directory.file(name), to: moved)
+      try file.appendAll(Data("x\n".utf8))
+      #expect(FileManager.default.contents(atPath: moved.path) == Data("x\n".utf8))
+    }
+    #expect(security.created.count == 2)
+  }
+
   @Test func createRefusesAFileThatExists() throws {
     try create("frames.jsonl").close()
     #expect(throws: IOFailure.system(.create, errno: EEXIST)) { try create("frames.jsonl") }

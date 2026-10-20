@@ -308,7 +308,7 @@ public enum SinkCommand {
 ### 3.2 CaptureIO
 
 ```swift
-final class DurableFile {   // created through FileSecurity with its class, then opened without O_CREAT
+final class DurableFile {   // created through FileSecurity with its class, keeping the descriptor that created it
   static func create(_ url: URL, mode: Mode /* .appendWriteOnly | .appendReadWrite */,
     protection: FileSecurityClass, security: any FileSecurity) throws -> DurableFile
   convenience init(opening: URL, mode: Mode) throws   // a file that exists; never creates one
@@ -326,7 +326,8 @@ final class MeshHistoryWriter { enqueue(t:, block: MeshBlockSource? /* .bytes(Da
 struct AtomicJsonWriter { static func replace(_ d: Data, at: URL, staging: URL, protection: FileSecurityClass,
   security: any FileSecurity) throws }
 protocol FileSecurity: Sendable {   // Darwin impl in ios/; creates exclusively, with the class from the first byte
-  func createFile(_ url: URL, _ cls: FileSecurityClass) throws; func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws
+  func createAndOpen(_ url: URL, _ cls: FileSecurityClass, flags: Int32) throws -> Int32   // O_CREAT|O_EXCL, one open; never reopened (7.6)
+  func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws
   func upgrade(_ url: URL) throws; func excludeFromBackup(_ url: URL) throws
   func protectionClass(_ url: URL) -> FileSecurityClass?; func isExcludedFromBackup(_ url: URL) -> Bool   // read back
   var protectedDataAvailable: Bool { get } }
@@ -527,7 +528,7 @@ A lean background close is expected to take under 1 s: no final sample, about 1.
 
 **7.6 Locked phone.**
 - Open class-B file descriptors stay writable.
-- Staging files are created while locked.
+- Staging files are created while locked. A class-B file created while locked can't be opened again until unlock, so every file is written through the descriptor that created it (`FileSecurity.createAndOpen`), never closed and reopened.
 - Finalize reads nothing.
 - The protection upgrade, recovery, export, list and self-test wait for `isProtectedDataAvailable`.
 - `start` refuses until recovery is done (`ERR_RECOVERY_PENDING`).

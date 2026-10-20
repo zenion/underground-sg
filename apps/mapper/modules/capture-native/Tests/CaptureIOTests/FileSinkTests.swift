@@ -205,6 +205,58 @@ private func files(_ sink: MemorySink) -> [String: Data] {
     #expect(!store.isBusy(id))
   }
 
+  @Test func aRecordingWhoseFinalizeFailedCanBeDiscardedThroughTheStore() throws {
+    // RecorderHost's discard after a sink failure: fail(.io) leaves the journal for recovery but
+    // lets the recording go, so the store's delete removes it and the next launch recovers
+    // nothing the owner discarded.
+    let session = SyntheticSession(seed: 7, durationS: 30)
+    let store = fixture.store()
+    let sink = FileSink(store: store)
+    let disk = DiskSwitch()
+    sink.calls = disk.calls
+    let core = session.makeRecorder()
+    var notices: [SinkNotice] = []
+    session.drive(core) { commands in
+      if commands.contains(where: { if case .finalize = $0 { true } else { false } }) {
+        disk.full = true
+      }
+      notices += sink.apply(commands)
+    }
+    let id = session.recordingID
+    #expect(notices.contains(.failed(.io)))
+    #expect(sink.state == .failed)
+    #expect(fixture.exists(fixture.paths.journal(id)))
+    #expect(!store.isBusy(id))
+
+    try store.delete(id)
+    #expect(!fixture.exists(fixture.paths.recording(id)))
+    #expect(!fixture.exists(fixture.paths.journal(id)))
+    #expect(!fixture.exists(fixture.paths.ballast(id)))
+    let report = RecoveryRunner(store: fixture.store()).run()
+    #expect(report.recovered == 0)
+    #expect(report.finished == 0)
+    #expect(store.list().isEmpty)
+  }
+
+  @Test func aFailedCreateLeavesNothingForADiscardToDelete() throws {
+    // The journal can't be created: the sink removes what it made, so the store finds nothing
+    // (RecorderHost's discard counts notFound as removed, not as busy).
+    let session = SyntheticSession(seed: 10, durationS: 20)
+    let store = fixture.store()
+    let sink = FileSink(store: store)
+    fixture.security.failNext(.createFile)
+    let core = session.makeRecorder()
+    var notices: [SinkNotice] = []
+    session.drive(core) { notices += sink.apply($0) }
+    let id = session.recordingID
+    #expect(notices.contains(.failed(.create)))
+    #expect(sink.state == .failed)
+    #expect(!fixture.exists(fixture.paths.recording(id)))
+    #expect(!fixture.exists(fixture.paths.journal(id)))
+    #expect(!store.isBusy(id))
+    #expect(throws: RecordingStoreError.notFound) { try store.delete(id) }
+  }
+
   @Test func noSpaceLeavesNoPartialLineAndClosesAsDisk() throws {
     let session = SyntheticSession(seed: 8, durationS: 40)
     let store = fixture.store()

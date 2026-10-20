@@ -30,6 +30,17 @@
     }
   }
 
+  /// What `discard` did, for its promise.
+  enum DiscardResult {
+    /// Nothing of the session is kept.
+    case removed
+    /// The recording can't be removed yet (closed while the phone was locked, its files waiting
+    /// for class A): ERR_RECORDING_BUSY.
+    case busy
+    /// Removing it failed: ERR_IO.
+    case failed
+  }
+
   /// One session's recording in the app (the lean recorder design, sections 3.1, 4, 6, 7.5 and
   /// 8): it owns RecorderCore (confined to `Queues.capture`) and its FileSink (confined to
   /// `Queues.recorderIO`), and drives them as SyntheticRecording drives them on the PC.
@@ -182,6 +193,8 @@
     func begin() {
       guard !started else { return }
       started = true
+      // Alive until the recording settles, even if its session is released first.
+      RecorderPlumbing.shared.holdUntilSettled(self)
       batchTimer = makeTimer(queue: Queues.capture, every: RecorderHost.batchIntervalS) {
         [weak self] in
         self?.flush()
@@ -268,37 +281,46 @@
     }
 
     /// JavaScript's `discard`: nothing of the session is kept. A recording already closed (or
-    /// closing for good) is deleted through the store once its files are finished. `done` gets
-    /// whether everything was removed.
-    func discard(_ done: @escaping (Bool) -> Void) {
+    /// closing for good) is deleted through the store once its files are finished; so is one
+    /// whose writing failed, whose journal would otherwise be recovered at the next launch.
+    /// `done` gets what happened.
+    func discard(_ done: @escaping (DiscardResult) -> Void) {
       switch core.phase {
       case .armed, .open, .closing:
         take(core.discard())
-        whenSettled { outcome in
-          if case .failed = outcome {
-            done(false)
-          } else {
-            done(true)
+      case .finalizing, .closed, .discarded:
+        // Closing for good, or already let go: waits for that to settle.
+        break
+      }
+      whenSettled { [id = self.id] outcome in
+        switch outcome {
+        case .none:
+          done(.removed)
+        case .closed, .failed:
+          RecorderHost.deleteFromStore(id, done)
+        }
+      }
+    }
+
+    /// Deletes a settled recording through the store, behind whatever the I/O queue still has
+    /// (a sink's own delete included). One already gone counts as removed: a failed create has
+    /// removed its files itself.
+    private static func deleteFromStore(_ id: UUID, _ done: @escaping (DiscardResult) -> Void) {
+      Queues.recorderIO.async {
+        Queues.store.async {
+          do {
+            try RecorderPlumbing.shared.store.delete(id)
+            captureNote("recording_discarded")
+            done(.removed)
+          } catch RecordingStoreError.notFound {
+            done(.removed)
+          } catch RecordingStoreError.busy {
+            done(.busy)
+          } catch {
+            captureFault("recording_discard_failed")
+            done(.failed)
           }
         }
-      case .finalizing, .closed:
-        whenSettled { [id = self.id] outcome in
-          guard case .closed = outcome else {
-            done(false)
-            return
-          }
-          Queues.store.async {
-            do {
-              try RecorderPlumbing.shared.store.delete(id)
-              captureNote("recording_discarded")
-              done(true)
-            } catch {
-              done(false)
-            }
-          }
-        }
-      case .discarded:
-        whenSettled { _ in done(true) }
       }
     }
 
@@ -514,9 +536,13 @@
 
     /// The chained finalize (design section 4): Core Motion's queue hands over what it holds,
     /// then the held finalize goes to the sink behind those samples.
+    ///
+    /// The barrier holds the host strongly: once the session is released, this chain may be all
+    /// that keeps the host, and with it the held finalize, alive. The block runs once and is then
+    /// dropped, so it makes no cycle; `releaseHeld`'s flush, the sink's notices and
+    /// RecorderPlumbing's holds carry the host from there until it settles.
     private func startBarrier() {
-      motion.barrier { [weak self] in
-        guard let self else { return }
+      motion.barrier {
         Queues.capture.async { self.releaseHeld() }
       }
     }
@@ -667,7 +693,8 @@
       if outcome != nil { finishTimers() }
     }
 
-    /// The recording settled: the capture queue's timers stop, and the sensors with them.
+    /// The recording settled: the capture queue's timers stop, and the sensors with them, and
+    /// RecorderPlumbing lets the host go (unless its files still wait for class A).
     private func finishTimers() {
       guard batchTimer != nil || telemetryTimer != nil else { return }
       flush()
@@ -677,6 +704,7 @@
       telemetryTimer = nil
       Queues.recorderIO.async { self.stopIOTimers() }
       DispatchQueue.main.async { self.stopSensors() }
+      RecorderPlumbing.shared.releaseSettled(self)
     }
 
     private func now() -> Double? {

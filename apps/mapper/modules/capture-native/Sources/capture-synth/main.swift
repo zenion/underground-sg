@@ -50,13 +50,13 @@
   /// Files and directories as the PC has them: no protection classes and no backups. Created
   /// exclusively, as on the phone.
   struct PlainFileSecurity: FileSecurity {
-    func createFile(_ url: URL, _ cls: FileSecurityClass) throws {
+    func createAndOpen(_ url: URL, _ cls: FileSecurityClass, flags: Int32) throws -> Int32 {
       let fd = url.withUnsafeFileSystemRepresentation { path -> Int32 in
         guard let path else { return -1 }
-        return open(path, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0o644)
+        return open(path, flags | O_CREAT | O_EXCL, 0o644)
       }
       guard fd >= 0 else { throw IOFailure.system(.create, errno: errno) }
-      close(fd)
+      return fd
     }
 
     func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws {

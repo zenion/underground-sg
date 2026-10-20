@@ -238,17 +238,21 @@ final class CaptureSession: SharedObject {
   }
 
   /// Stops the session and deletes its recording, if any: nothing of it is kept. Rejects with
-  /// ERR_RECORDING_BUSY when a recording closed while the phone was locked can't be removed yet.
+  /// ERR_RECORDING_BUSY when a recording closed while the phone was locked can't be removed yet,
+  /// and with ERR_IO when removing it failed.
   func discard(_ promise: Promise) {
     DispatchQueue.main.async {
       #if USG_RECORDER
         if let host = self.host {
           Queues.capture.async {
-            host.discard { removed in
-              if removed {
+            host.discard { result in
+              switch result {
+              case .removed:
                 promise.resolve()
-              } else {
+              case .busy:
                 promise.reject(captureError("ERR_RECORDING_BUSY"))
+              case .failed:
+                promise.reject(captureError("ERR_IO"))
               }
             }
             // The recorder has already let the recording go, so the stop keeps nothing.

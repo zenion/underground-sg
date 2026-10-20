@@ -39,6 +39,8 @@
     /// Recordings closed while the phone was locked, whose files wait for class A (design 7.5,
     /// step 7). Kept alive here until unlock, whatever happened to their session.
     private var protectionHolds: [RecorderHost] = []
+    /// Recordings armed, open, closing or finalizing (`holdUntilSettled`). Guarded by `lock`.
+    private var liveHosts: [RecorderHost] = []
     /// Main queue only.
     private var launched = false
     private var permissionRequest: PermissionRequest?
@@ -76,6 +78,22 @@
         }
         self.scheduleRecovery()
       }
+    }
+
+    /// A recording started: its host stays alive here until the recording settled (closed,
+    /// discarded or failed), whatever happens to its session, so a session released mid-close
+    /// can't drop a finalize in flight or a background close's waiter.
+    func holdUntilSettled(_ host: RecorderHost) {
+      lock.lock()
+      if !liveHosts.contains(where: { $0 === host }) { liveHosts.append(host) }
+      lock.unlock()
+    }
+
+    /// The recording settled. A host whose files wait for class A stays in `protectionHolds`.
+    func releaseSettled(_ host: RecorderHost) {
+      lock.lock()
+      liveHosts.removeAll { $0 === host }
+      lock.unlock()
     }
 
     /// A recording finalized while locked: its host finishes the upgrade at the next unlock.

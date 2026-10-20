@@ -28,11 +28,22 @@ final class RecordingFileSecurity: FileSecurity, @unchecked Sendable {
   private let lock = NSLock()
   private var _calls: [Call] = []
   private var _classes: [String: FileSecurityClass] = [:]
+  private var _created: [Created] = []
   private var _excluded: Set<String> = []
   private var _failNext: [Kind: Int32] = [:]
   private var _protectedDataAvailable = true
 
   var calls: [Call] { lock.withLock { _calls } }
+
+  /// A file `createAndOpen` made: the descriptor it returned and the flags it opened it with.
+  struct Created: Equatable {
+    var path: String
+    var descriptor: Int32
+    var flags: Int32
+  }
+
+  /// Every file created, in order.
+  var created: [Created] { lock.withLock { _created } }
 
   /// The class each path was created with or raised to, by its path.
   func protectionClass(_ url: URL) -> FileSecurityClass? {
@@ -53,14 +64,18 @@ final class RecordingFileSecurity: FileSecurity, @unchecked Sendable {
     set { lock.withLock { _protectedDataAvailable = newValue } }
   }
 
-  func createFile(_ url: URL, _ cls: FileSecurityClass) throws {
+  func createAndOpen(_ url: URL, _ cls: FileSecurityClass, flags: Int32) throws -> Int32 {
     try record(.createFile, .createFile(url.path, cls))
+    let openFlags = flags | O_CREAT | O_EXCL
     let fd = url.withUnsafeFileSystemRepresentation { path -> Int32 in
-      open(path!, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0o600)
+      open(path!, openFlags, 0o600)
     }
     guard fd >= 0 else { throw IOFailure.system(.create, errno: errno) }
-    close(fd)
-    lock.withLock { _classes[url.path] = cls }
+    lock.withLock {
+      _classes[url.path] = cls
+      _created.append(Created(path: url.path, descriptor: fd, flags: openFlags))
+    }
+    return fd
   }
 
   func createDirectory(_ url: URL, _ cls: FileSecurityClass) throws {
