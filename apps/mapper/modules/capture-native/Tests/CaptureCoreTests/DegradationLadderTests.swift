@@ -1,3 +1,4 @@
+#if USG_RECORDER
 import Foundation
 import Testing
 
@@ -175,3 +176,5 @@ private func mirror(_ generated: RecordingProfile) -> RecordProfile {
     #expect(ladder.update(thermal: .nominal, freeDiskBytes: 99_999_999) == [.noRecording])
   }
 }
+
+#endif

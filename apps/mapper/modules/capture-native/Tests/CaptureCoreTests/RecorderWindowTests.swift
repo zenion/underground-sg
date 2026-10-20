@@ -1,3 +1,4 @@
+#if USG_RECORDER
 import Testing
 
 @testable import CaptureCore
@@ -378,3 +379,5 @@ private func mirrored(_ ended: RecordingEnded) -> WindowEndReason? {
         == .closed(startT: 100, endT: 100.5, reason: .interrupted, trimmed: true))
   }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if USG_RECORDER
 // The recording window (ADR 0010, "When a recording runs"; docs/session-recording.md): when a
 // session's recording opens, when it closes, and how it is cut back. Nothing outside the window
 // is written, so the recorder asks `accepts(t:)` before writing a sample. Sessions start and
@@ -264,3 +265,5 @@ private func distance(
   let dz = a.z - b.z
   return (dx * dx + dy * dy + dz * dz).squareRoot()
 }
+
+#endif

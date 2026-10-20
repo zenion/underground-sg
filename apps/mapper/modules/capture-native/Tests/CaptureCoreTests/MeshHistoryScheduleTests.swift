@@ -1,3 +1,4 @@
+#if USG_RECORDER
 import Foundation
 import Testing
 
@@ -126,3 +127,5 @@ private func snapshotFrames(_ schedule: inout MeshHistorySchedule, seconds: Int)
       final == MeshSnapshotPlan(t: 0.5, updated: [id("a"), id("b")], removed: [], final: true))
   }
 }
+
+#endif

@@ -18,15 +18,18 @@ public enum LineEncodingError: Error, Equatable, Sendable {
 /// JSONEncoder is a class, but Foundation marks it `@unchecked Sendable` (its settings are
 /// guarded internally), and this never changes the settings after init, so the struct is
 /// Sendable without a lock.
-struct LineEncoder: Sendable {
+///
+/// Public so the writers in another module can hold one and pass it to `PendingLine.encode`;
+/// `line` and `document` stay internal, like the generated types they take.
+public struct LineEncoder: Sendable {
   /// One JSONL line, without its newline: DEFAULT_RECORDING_LIMITS.maxJsonlLineBytes.
-  static let maxLineBytes = 64 * 1024
+  public static let maxLineBytes = 64 * 1024
   /// One JSON document (recording.json, parts.json): DEFAULT_RECORDING_LIMITS.maxJsonBytes.
-  static let maxDocumentBytes = 16 * 1024 * 1024
+  public static let maxDocumentBytes = 16 * 1024 * 1024
 
   private let encoder: JSONEncoder
 
-  init() {
+  public init() {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     // The default, said out loud: a NaN or an infinity throws rather than being written as text.
