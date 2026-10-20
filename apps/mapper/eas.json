@@ -6,7 +6,23 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "USG_RECORDER": "1",
+        "USG_BUILD_PROFILE": "development"
+      }
+    },
+    "walk": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Release",
+        "simulator": false
+      },
+      "env": {
+        "USG_RECORDER": "1",
+        "USG_BUILD_PROFILE": "walk"
+      }
     }
   }
 }

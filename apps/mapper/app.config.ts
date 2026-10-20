@@ -30,7 +30,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // A single-page app: static rendering would run the map (a DOM component) in Node.
     output: "single",
   },
-  plugins: ["expo-router"],
+  // The session recorder's build switch: USG_RECORDER and USG_BUILD_PROFILE, which eas.json's
+  // development and walk profiles set, become the pods' USG_RECORDER condition and the recorder's
+  // Info.plist keys (plugins/with-usg-recorder.ts, ADR 0010).
+  plugins: ["expo-router", "./plugins/with-usg-recorder.ts"],
   extra: {
     ...config.extra,
     // The owner's EAS project (`eas init --id`). Not a secret: it identifies the project for EAS
