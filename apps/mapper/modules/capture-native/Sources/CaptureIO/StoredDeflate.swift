@@ -28,5 +28,26 @@ enum StoredDeflate {
     }
     return out
   }
+
+  /// The bytes of a stream made only of stored blocks, as `encode` writes, or nil for anything
+  /// else (another block type, a bad length, bytes after the final block) or more than `limit`
+  /// bytes. Recovery and the self-test read blocks back with it where Compression is absent.
+  static func decode(_ stream: Data, limit: Int) -> Data? {
+    let bytes = [UInt8](stream)
+    var out = Data()
+    var index = 0
+    while true {
+      guard index + 5 <= bytes.count, bytes[index] & 0xfe == 0 else { return nil }
+      let final = bytes[index] & 0x01 == 1
+      let length = Int(bytes[index + 1]) | Int(bytes[index + 2]) << 8
+      let complement = Int(bytes[index + 3]) | Int(bytes[index + 4]) << 8
+      guard length == ~complement & 0xffff, index + 5 + length <= bytes.count,
+        out.count + length <= limit
+      else { return nil }
+      out.append(contentsOf: bytes[(index + 5)..<(index + 5 + length)])
+      index += 5 + length
+      if final { return index == bytes.count ? out : nil }
+    }
+  }
 }
 #endif

@@ -125,6 +125,8 @@ public struct MeshJobCounts: Equatable, Sendable {
   public var skipped = 0
   /// Final-snapshot anchors with no block to reuse.
   public var missing = 0
+
+  public init() {}
 }
 
 /// The mesh queue's work (design section 8): pack, fingerprint, decide with the ledger,

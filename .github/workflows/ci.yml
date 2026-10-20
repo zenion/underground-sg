@@ -89,6 +89,19 @@ jobs:
       # with Swift Testing.
       - name: SwiftPM tests
         run: swift test --package-path apps/mapper/modules/capture-native
+      # Synthetic recordings written by the recorder's real code (FileSink with Compression and
+      # CryptoKit, TarExporter, and RecoveryRunner after a simulated crash), checked by
+      # validate-recording as directories and as an export's parts (design D13). Under
+      # $RUNNER_TEMP and never committed; the 400 s one splits into two parts.
+      - name: Synthetic recordings through the recorder
+        run: |
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth" --export
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth-interrupted" --interrupt 55 --export
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth-long" --duration 400 --seed 2 --export
+          for set in synth synth-interrupted synth-long; do
+            node packages/contracts/src/recording-validator/cli.ts "$RUNNER_TEMP/$set"/rec-*
+            node packages/contracts/src/recording-validator/cli.ts --parts "$RUNNER_TEMP/$set"/replay-*
+          done
       # The check must catch a planted encoder symbol and a planted CIContext writer selector.
       - name: Encoder check catches planted calls
         run: node apps/mapper/scripts/encoder-check.mts --self-test apps/mapper/modules/capture-native/ci/planted
@@ -123,6 +136,13 @@ jobs:
         with:
           persist-credentials: false
       - run: swift test --package-path apps/mapper/modules/capture-native
+      # The synthetic recordings through the fallbacks. This container has no Node, so
+      # validate-recording checks them only on macOS; here capture-synth's own checks must pass
+      # (the recorder finished, recovery kept the interrupted one, the export wrote its parts).
+      - name: Synthetic recordings through the recorder
+        run: |
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth" --export
+          swift run --package-path apps/mapper/modules/capture-native capture-synth --out "$RUNNER_TEMP/synth-interrupted" --interrupt 55 --export
       # Without the recorder, as a contributor build compiles CaptureCore: nothing outside the
       # recorder may need its code (the USG_RECORDER condition, design D12).
       - name: Build without the recorder

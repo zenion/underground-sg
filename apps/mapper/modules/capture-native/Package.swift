@@ -14,6 +14,11 @@
 // USG_IO_FALLBACKS compiles CaptureIO's pure-Swift SHA-256 and stored-block DEFLATE even where
 // CryptoKit and Compression exist, so `swift test` on macOS checks them against the real ones
 // (design D17). Only this file defines it: the pods never do, so iOS never compiles them.
+//
+// USG_SYNTHETIC_EXPORT compiles TarExporter.exportSynthetic, which exports a generated recording
+// without a RecordingGrant, for the capture-synth executable (SyntheticSession → RecorderCore →
+// FileSink, then the export, for validate-recording in CI). Only this file defines it, so on the
+// phone only a grant exports (design section 2).
 
 import PackageDescription
 
@@ -21,6 +26,8 @@ let recorder: [SwiftSetting] =
   Context.environment["USG_NO_RECORDER"] == "1" ? [] : [.define("USG_RECORDER")]
 
 let fallbacks: [SwiftSetting] = [.define("USG_IO_FALLBACKS")]
+
+let syntheticExport: [SwiftSetting] = [.define("USG_SYNTHETIC_EXPORT")]
 
 let package = Package(
   name: "CaptureNative",
@@ -31,10 +38,15 @@ let package = Package(
   ],
   targets: [
     .target(name: "CaptureCore", path: "Sources/CaptureCore", swiftSettings: recorder),
-    // Durable files, hashing, compression and atomic documents (design 3.2 and 7).
+    // Durable files, hashing, compression, atomic documents, and the recorder's sink, recovery,
+    // export and self-test (design 3.2, 7 and 9).
     .target(
       name: "CaptureIO", dependencies: ["CaptureCore"], path: "Sources/CaptureIO",
-      swiftSettings: recorder + fallbacks),
+      swiftSettings: recorder + fallbacks + syntheticExport),
+    // A synthetic recording, and its export, written by the real code into --out (design D13).
+    .executableTarget(
+      name: "capture-synth", dependencies: ["CaptureCore", "CaptureIO"],
+      path: "Sources/capture-synth", swiftSettings: recorder),
     .testTarget(
       name: "CaptureCoreTests",
       dependencies: ["CaptureCore"],

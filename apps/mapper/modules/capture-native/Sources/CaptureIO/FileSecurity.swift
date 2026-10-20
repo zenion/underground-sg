@@ -33,6 +33,11 @@ public protocol FileSecurity: Sendable {
   func upgrade(_ url: URL) throws
   /// Sets isExcludedFromBackup, which a root keeps for everything under it.
   func excludeFromBackup(_ url: URL) throws
+  /// The class a file or directory has now, read back for the self-test (design D18); nil when
+  /// it has none of these two or can't be read.
+  func protectionClass(_ url: URL) -> FileSecurityClass?
+  /// Whether isExcludedFromBackup is set on `url` itself, read back for the self-test.
+  func isExcludedFromBackup(_ url: URL) -> Bool
   /// False while the phone is locked: class-A files can't be opened, so the protection upgrade,
   /// recovery, export and the self-test wait (design 7.6).
   var protectedDataAvailable: Bool { get }

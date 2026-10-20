@@ -32,8 +32,16 @@ public final class DurableFile {
   public static func create(
     _ url: URL, mode: Mode, protection: FileSecurityClass, security: any FileSecurity
   ) throws -> DurableFile {
+    try create(url, mode: mode, protection: protection, security: security, calls: .system)
+  }
+
+  /// `create` with the calls the tests script.
+  static func create(
+    _ url: URL, mode: Mode, protection: FileSecurityClass, security: any FileSecurity,
+    calls: FileCalls
+  ) throws -> DurableFile {
     try security.createFile(url, protection)
-    return try DurableFile(opening: url, mode: mode)
+    return try DurableFile(opening: url, mode: mode, calls: calls)
   }
 
   /// Opens a file that exists. Never creates one.
@@ -127,6 +135,16 @@ public final class DurableFile {
     precondition(length >= 0, "a length")
     let fd = try openDescriptor()
     try retryingEINTR(.truncate) { calls.ftruncate(fd, length) }
+  }
+
+  /// Allocates `bytes` of disk to an empty file and sets its length to them: the ballast that
+  /// keeps room for a recording's close (design 7.1).
+  public func reserve(_ bytes: Int64) throws {
+    precondition(bytes >= 0, "a length")
+    let fd = try openDescriptor()
+    let failure = sysPreallocate(fd, bytes)
+    guard failure == 0 else { throw IOFailure.system(.reserve, errno: failure) }
+    try retryingEINTR(.truncate) { calls.ftruncate(fd, bytes) }
   }
 
   /// Closes the descriptor; again does nothing. close(2) is not retried: the descriptor is gone

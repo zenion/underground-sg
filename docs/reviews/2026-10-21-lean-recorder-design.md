@@ -126,8 +126,11 @@ apps/mapper/
                                    (+ AnchorSampler.sampleFinal)
     Sources/CaptureIO/             DurableFile, Sha256Stream (+Sha256Fallback), Deflate (+StoredDeflate),
                                    JsonlFileWriter, MeshHistoryWriter, AtomicJsonWriter, FileSecurity,
-                                   RecordingPaths, RecordingStore, FileSink, RecoveryRunner, TarExporter, SelfTest
+                                   TarParts (TarPartWriter, PartsReader), RecordingPaths, RecordingStore,
+                                   FileSink, RecoveryRunner, TarExporter, SelfTest, SyntheticRecording
     Sources/capture-synth/main.swift   SyntheticSession → RecorderCore → FileSink → --out; --export
+                                   (TarExporter.exportSynthetic, only under Package.swift's
+                                   USG_SYNTHETIC_EXPORT); --interrupt (a simulated crash, then RecoveryRunner)
     ios/  CaptureNativeModule, CaptureSession, CaptureView (render + attach), PrivacyShield (+callbacks),
           Capabilities, Log (+LogRing), Queues, BuildFacts,
           Recorder/ (each file whole under #if USG_RECORDER): ARKitAdapter, MeshCopier, MotionSource,
@@ -135,13 +138,14 @@ apps/mapper/
     Tests/CaptureCoreTests/, Tests/CaptureIOTests/
 .github/workflows/ci.yml           macOS: swift test, capture-synth → validate-recording (dir and --parts),
                                    prebuild walk-like, Release build, encoder check (3 pods), React import probe;
-                                   Linux: swift test, USG_NO_RECORDER=1 swift build
+                                   Linux: swift test, capture-synth (no Node in the container, so not
+                                   validated there), USG_NO_RECORDER=1 swift build
 .github/workflows/walk-build.yml   workflow_dispatch, environment "walk" (required reviewer), eas build --local
 ```
 
 **Gated under `#if USG_RECORDER`:**
 - CaptureCore: RecorderWindow, MeshHistorySchedule, DegradationLadder, and everything in `Recording/` except MeshBlockLayout, MeshFingerprint, TarLayout, PartPlan and JsonText. GnssWindows and AnchorSampler stay ungated: bundles use them later.
-- CaptureIO: everything except DurableFile, Sha256Stream, Deflate, AtomicJsonWriter, FileSecurity and the tar writer, which `packBundle` reuses.
+- CaptureIO: everything except DurableFile, Sha256Stream, Deflate, AtomicJsonWriter, FileSecurity and the tar writer (TarParts), which `packBundle` reuses.
 - ios/Recorder/.
 
 Generated `Contracts.swift` stays ungated: its types are internal and dead-stripped, and task 8 checks that.
@@ -203,7 +207,7 @@ A CI assertion catches a silent compile-out: after the Release build with the sw
 - `Bundle.main.url(forResource:"main", withExtension:"jsbundle") != nil`;
 - `NSClassFromString("EXDevLauncherController") == nil` [perf; expo-dev-launcher is debugOnly].
 
-Refusals: `notCompiled`, `notWalkBuild`, `debugBuild`, `notEmbedded`, `devClient`, `profileUnavailable` (standard and dense before the blur), `invalidVenues` (1–50 lowercase UUIDs), `lowDisk` (< 2 × 8 GiB). `LocationSource.init(grant:)`, `RecorderHost.init(grant:)` and `TarExporter.export(id:, grant:)` all require a grant, so the development build's refusals hold at compile time. SyntheticSession makes a synthetic grant inside CaptureCore for its recorder, and it never leaves: RecorderCore keeps its grant internal, and a test without `@testable` (CaptureCorePublicSurfaceTests) stops compiling if it becomes public. Each of the three also checks `origin == .device` at run time.
+Refusals: `notCompiled`, `notWalkBuild`, `debugBuild`, `notEmbedded`, `devClient`, `profileUnavailable` (standard and dense before the blur), `invalidVenues` (1–50 lowercase UUIDs), `lowDisk` (< 2 × 8 GiB). `LocationSource.init(grant:)`, `RecorderHost.init(grant:)` and `TarExporter.export(id:, grant:)` all require a grant, so the development build's refusals hold at compile time. SyntheticSession makes a synthetic grant inside CaptureCore for its recorder, and it never leaves: RecorderCore keeps its grant internal, and a test without `@testable` (CaptureCorePublicSurfaceTests) stops compiling if it becomes public. Each of the three also checks `origin == .device` at run time. The PC's `capture-synth` exports its generated recordings through `TarExporter.exportSynthetic`, which needs no grant but exists only where `Package.swift` defines `USG_SYNTHETIC_EXPORT` (the pods never do) and refuses any recording whose recording.json doesn't say `origin: synthetic`; it never makes up `BuildFacts` to get a grant.
 
 ---
 
@@ -309,21 +313,24 @@ final class DurableFile { init(path:, mode: .appendWriteOnly | .appendReadWrite,
   func fsync() throws; func fullSync() throws /* F_FULLFSYNC; fsync on Linux */; func truncate(to: Int64) throws; func close() }
 struct Sha256Stream { mutating func update(_:); func snapshot() -> Sha256Stream; func hex() -> String }  // CryptoKit | fallback
 enum Deflate { static func raw(_ src: Data) throws -> Data }   // compression_stream COMPRESSION_ZLIB | stored blocks
-final class JsonlFileWriter { enqueue(_ line: Data, t: Double); flush(watermark: Double) throws
-  registerCut(_ cutT: Double); finish(endT: Double, useCut: Bool) throws -> FileDigest
-  var committedBytes: Int64; var backlogBytes: Int }
-final class MeshHistoryWriter { enqueue(t:, block: MeshBlockSource /* .bytes(Data) | .reuse(offset,bytes) */, line: PendingLine)
-  same flush/registerCut/finish; bin opened appendReadWrite; block bytes always before its index line }
+final class JsonlFileWriter { enqueue(_ line: Data, t: Double, flagged: Bool); flush(watermark: Double) throws
+  registerCut(_ cutT: Double); cutBack(to endT: Double, useCut: Bool) throws  // then the closing lines
+  finish() throws -> FileDigest; var committedBytes: Int64; var backlogBytes: Int }
+final class MeshHistoryWriter { enqueue(t:, block: MeshBlockSource? /* .bytes(Data) | .copy(offset,bytes) */, line: Data)
+  same flush/registerCut/cutBack/finish; bin opened appendReadWrite; block bytes always before its index line }
 struct AtomicJsonWriter { static func replace(_ d: Data, at: URL, staging: URL, security: FileSecurity) throws }
 protocol FileSecurity { func create(_ url: URL, _ cls: FileSecurityClass) throws; func upgrade(_ url: URL) throws
   func excludeFromBackup(_ url: URL) throws; var protectedDataAvailable: Bool { get } }   // Darwin impl in ios/
 final class RecordingStore { root, exportsRoot, stagingRoot; list() -> [RecordingSummary]; delete(id:) throws
   freeBytes() -> Int64 (volumeAvailableCapacityForImportantUsage, cached 1 s); reserveBallast(id:) / releaseBallast(id:)
   busy(id:) -> Bool (lock) }
-final class FileSink { apply(_ cmds: [SinkCommand]); tick() /* 1 s: watermark flush */; checkpoint() /* 5 s */
-  var figures: SinkFigures }
-final class RecoveryRunner { run() -> RecoveryReport /* counts: recovered, finished, discarded, swept */ }
-final class TarExporter { plan(id:) throws -> PartPlan; export(id:, grant:, progress:) throws -> ExportResult }
+final class FileSink { apply(_ cmds: [SinkCommand]) -> [SinkNotice]; tick() /* 1 s: watermark flush */
+  checkpoint() /* 5 s */; boundaryWaitExpired(); protectedDataBecameAvailable(); var figures: SinkFigures }
+  // SinkNotice: stopSession, closeRequested(disk|limit) → RecorderCore.sinkLimitReached, awaitingBoundary,
+  // finalized → finalizeCompleted, deleted, failed (left to recovery, e.g. lines past endT with no cut)
+final class RecoveryRunner { run() -> RecoveryReport /* counts: recovered, finished, discarded, swept, exports */ }
+final class TarExporter { plan(id:) throws -> ExportPlan; export(id:, grant:, progress:) throws -> ExportResult
+  exportSynthetic(id:) /* only under Package.swift's USG_SYNTHETIC_EXPORT, for capture-synth */ }
 final class SelfTest { run(keep: Bool, grant: RecordingGrant?) -> SelfTestReport }
 ```
 

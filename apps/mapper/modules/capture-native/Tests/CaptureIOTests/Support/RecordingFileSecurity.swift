@@ -39,7 +39,9 @@ final class RecordingFileSecurity: FileSecurity, @unchecked Sendable {
     lock.withLock { _classes[url.path] }
   }
 
-  func isExcluded(_ url: URL) -> Bool { lock.withLock { _excluded.contains(url.path) } }
+  func isExcludedFromBackup(_ url: URL) -> Bool {
+    lock.withLock { _excluded.contains(url.path) }
+  }
 
   /// The next call of `kind` throws `errno` as a system error, and does nothing.
   func failNext(_ kind: Kind, errno: Int32 = EACCES) {

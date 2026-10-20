@@ -26,7 +26,7 @@ public enum IOFailure: Error, Equatable, Sendable {
 }
 
 public enum IOOperation: String, Sendable {
-  case create, open, write, read, sync, fullSync, truncate, stat, rename, remove
+  case create, open, write, read, sync, fullSync, truncate, stat, rename, remove, reserve
 }
 
 /// A system call's result, with its errno when it failed (`value < 0`).
@@ -97,6 +97,29 @@ func sysRename(_ from: UnsafePointer<CChar>, _ to: UnsafePointer<CChar>) -> Int3
 }
 
 func sysUnlink(_ path: UnsafePointer<CChar>) -> Int32 { unlink(path) }
+
+/// Allocates `bytes` of disk to the file from offset 0, so they are really held back: Darwin's
+/// F_PREALLOCATE (contiguous first, then any), posix_fallocate on Linux. Returns 0 or the errno.
+/// The file's length is set separately (ftruncate), as the ballast needs (design 7.1).
+func sysPreallocate(_ fd: Int32, _ bytes: Int64) -> Int32 {
+  #if canImport(Darwin)
+    var store = fstore_t(
+      fst_flags: UInt32(F_ALLOCATECONTIG | F_ALLOCATEALL), fst_posmode: F_PEOFPOSMODE,
+      fst_offset: 0, fst_length: off_t(bytes), fst_bytesalloc: 0)
+    if fcntl(fd, F_PREALLOCATE, &store) == 0 { return 0 }
+    store.fst_flags = UInt32(F_ALLOCATEALL)
+    return fcntl(fd, F_PREALLOCATE, &store) == 0 ? 0 : errno
+  #else
+    return posix_fallocate(fd, 0, off_t(bytes))
+  #endif
+}
+
+/// The bytes free for an ordinary user on the volume holding `path`, from statvfs(3), or nil.
+func sysAvailableBytes(_ path: UnsafePointer<CChar>) -> Int64? {
+  var info = statvfs()
+  guard statvfs(path, &info) == 0 else { return nil }
+  return Int64(info.f_bavail) * Int64(info.f_frsize)
+}
 
 /// Runs `body` with a path's file-system representation, refusing a URL that has none.
 func withPath<T>(
