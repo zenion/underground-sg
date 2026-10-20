@@ -1,12 +1,12 @@
 # @usg/mapper
 
-The mapper app ([ADR 0007](../../docs/decisions/0007-expo-mapper-app.md)): Expo SDK 57, TypeScript, Expo Router, React Native's New Architecture. For now it is a shell that runs in the App Store's **Expo Go**, because there is no Apple Developer account yet and so no development build. LiDAR capture needs the Swift module `capture-native`, which needs a development build (below).
+The mapper app ([ADR 0007](../../docs/decisions/0007-expo-mapper-app.md)): Expo SDK 57, TypeScript, Expo Router, React Native's New Architecture. It runs in the App Store's **Expo Go** for the map and the floor-plan benchmark, and in the app's own **development build** (`eas build --profile development`, then `pnpm dev:phone --dev-client`, [docs/phone-testing.md](../../docs/phone-testing.md)) for everything native: LiDAR capture needs the Swift module `capture-native`, which Expo Go can't load (below).
 
 | Tab | What it does | In Expo Go |
 | --- | --- | --- |
 | Map | The published map from the API over OneMap's street map, with the webapp's style (`@usg/map-style`), a level switcher and a demo badge, and polygon and point drawing on top: maplibre-gl v6 and terra-draw in an Expo DOM component (a WebView). The count of drawn features lives in the native screen. The map is mounted only while its tab is showing, so it is gone on the Capture screen (ADR 0007) | Yes (tiles and the published map need a connection) |
 | Floor plan | Runs `@usg/floorplan` on a synthetic corridor generated on the phone (about 25k, 106k or 1.1M triangles) and shows each stage's time and the plan. This is the Hermes measurement for spike criterion 4 | Yes |
-| Capture | Looks for the `CaptureNative` module and shows the device, whether LiDAR is expected on it, and whether the map is unmounted | Explains that capture needs a development build |
+| Capture | The `capture-native` module's checks (ARKit's LiDAR and tracking support, video formats) and a camera check: the camera with the live mesh, Start and Stop, and the module's 5 Hz status. Also the device, whether LiDAR is expected on it, and whether the map is unmounted | Explains that capture needs a development build |
 | About | App and SDK versions, the JavaScript engine (Hermes check), the API base URL and whether `GET /health` answers | Yes |
 
 ## Run it on the iPhone with Expo Go (from Windows)
@@ -63,7 +63,7 @@ opens the whole app at <http://localhost:8081>. The map is the same DOM componen
 
 ## What needs a development build
 
-- The `capture-native` Swift module (ARKit, keyframes, blur, bundle writer): Expo Go runs only the native code it ships with.
+- The `capture-native` Swift module ([modules/capture-native/README.md](modules/capture-native/README.md)): ARKit, and later the keyframes, blur, bundle writer and recorder. Expo Go runs only the native code it ships with.
 - A development build needs the Apple Developer Program membership (US$99 a year), an Expo account, the phone registered with `eas device:create`, and Developer Mode on the phone. Then `eas build --profile development --platform ios` with the `development` profile in `eas.json` (`developmentClient: true`, internal distribution). `expo-dev-client` is already installed; Expo Go ignores it.
 - **Walks use the walk build**, not the development build: the same capture module in release configuration, without the dev client, with the JavaScript embedded (EAS internal distribution), so a capture in a venue needs no Metro, no tunnel and no signal ([ADR 0010](../../docs/decisions/0010-capture-recording-and-replay.md)). Both builds compile the session recorder, but only the walk build records; the `walk` profile is a backlog task.
 - **Bundle identifier:** `com.xennion.usg.mapper`, from the owner's domain (confirmed 2026-10-17). It can't change once the app is registered with Apple. `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` are placeholders for that build; Expo Go uses its own.
@@ -95,14 +95,16 @@ Each script except `test` first runs `scripts/maplibre-worker.mts`. maplibre-gl 
 
 ```
 app.config.ts, eas.json, metro.config.js (what Metro may read, and its cache key)
-scripts/maplibre-worker.mts
+native-dependencies.json   the reviewed native packages (ADR 0010), checked against autolinking
+modules/capture-native/    the Swift module: its README has the layout and how it is tested
+scripts/maplibre-worker.mts, encoder-check.mts (and -lib): the macOS CI job's encoder check
 src/
   app/            Expo Router tabs: _layout, index (Map), floorplan, capture, about
   map/            draw-map.tsx (the DOM component), published.ts (loads and checks the published
                   map), bands.ts (the level switcher's bands), camera.ts, features.ts, worker.ts,
                   presence.ts (counts mounted maps)
   floorplan/      the on-phone benchmark and SVG paths
-  capture/        device checks
+  capture/        device checks, and the wording of the module's status
   about/          API URL, health check, JavaScript engine
   config.ts       reads EXPO_PUBLIC_ variables
 test/             Vitest
