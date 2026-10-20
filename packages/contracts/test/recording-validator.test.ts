@@ -8,6 +8,7 @@ import { deflateRawSync } from "node:zlib";
 import { afterAll, describe, expect, test } from "vitest";
 import type { MeshHistoryLine, RecordingManifest } from "../src/index.ts";
 import {
+  formatRecordingReport,
   RECORDING_PROBLEM_CODES,
   RECORDING_REQUIRED_FILES,
   type RecordingProblem,
@@ -1044,6 +1045,23 @@ describe("hostile input", () => {
     const json = JSON.stringify(report);
     for (const value of ["1234.5678", "8765.4321", "1.2345678", "secretdetail", "103.8553"]) {
       expect(json).not.toContain(value);
+    }
+  });
+
+  test("the bundles' reports it carries never echo values either", async () => {
+    const set = replaySet(undefined, (spec) => {
+      spec.anchors[0].facing = [0, 0.1234567, -0.9876543];
+    });
+    const root = writeSetDirectory(set);
+    const report = await validateRecording(root);
+    expectProblem(report, "bundle.invalid", `${BUNDLE_DIR}/`);
+    expect(report.bundles[0]?.report.errors.map((problem) => problem.code)).toContain(
+      "anchors.facing",
+    );
+    const length = Math.hypot(0.1234567, -0.9876543);
+    const outputs = [JSON.stringify(report), formatRecordingReport(report, "set")];
+    for (const value of ["1234", "0.12", "9876", "0.98", length.toFixed(4), length.toFixed(3)]) {
+      for (const output of outputs) expect(output, value).not.toContain(value);
     }
   });
 });

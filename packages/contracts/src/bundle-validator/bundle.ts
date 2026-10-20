@@ -956,12 +956,17 @@ export class BundleCollector {
       const label = `Anchor ${index} (${anchor.role})`;
       const [x, y, z] = anchor.facing;
       const length = Math.hypot(x, y, z);
-      if (Math.abs(y) > FACING_TOLERANCE || Math.abs(length - 1) > FACING_TOLERANCE) {
-        this.#add(
-          "anchors.facing",
-          "anchors.json",
-          `${label}: facing has y = ${y.toFixed(4)} and length ${length.toFixed(4)}; it must be horizontal (|y| <= ${FACING_TOLERANCE}) and of unit length (within ${FACING_TOLERANCE})`,
-        );
+      // Names the rule that failed, never the values: facing is geometry in the phone's world.
+      const failed = [
+        ...(Math.abs(y) > FACING_TOLERANCE
+          ? [`not horizontal (|y| above ${FACING_TOLERANCE})`]
+          : []),
+        ...(Math.abs(length - 1) > FACING_TOLERANCE
+          ? [`not of unit length (off by more than ${FACING_TOLERANCE})`]
+          : []),
+      ];
+      if (failed.length > 0) {
+        this.#add("anchors.facing", "anchors.json", `${label}: facing is ${failed.join(" and ")}`);
       }
       this.#checkTransform(anchor.transform, "anchors.json");
       const photo = classifyBundlePath(anchor.photo);

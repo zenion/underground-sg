@@ -30,8 +30,10 @@ import {
   type BundleFiles,
   bundle,
   concat,
+  type FixtureSpec,
   jpeg,
   jsonl,
+  minimalSpec,
   png,
   sha256,
   text,
@@ -432,9 +434,15 @@ export interface ReplaySet {
   readonly bundles: Map<string, BundleFiles>;
 }
 
-/** The bundle fixture's directory as the session's one kept segment. */
-export function replaySet(change?: (spec: RecordingSpec) => void): ReplaySet {
-  const bundleFiles = bundle();
+/**
+ * The bundle fixture's directory as the session's one kept segment. `changeBundle` changes the
+ * bundle's spec first; the segment's manifest digest follows.
+ */
+export function replaySet(
+  change?: (spec: RecordingSpec) => void,
+  changeBundle?: (spec: FixtureSpec) => void,
+): ReplaySet {
+  const bundleFiles = bundle(minimalSpec(), changeBundle);
   const manifest = bundleFiles.get("manifest.json") ?? new Uint8Array(0);
   const spec = leanSpec();
   spec.manifest.segments = [
