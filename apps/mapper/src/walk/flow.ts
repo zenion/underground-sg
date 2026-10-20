@@ -74,8 +74,23 @@ export interface RecordingProgress {
 
 export type SessionCall = "start" | "markAnchor" | "addTag" | "stop" | "permissions";
 
-/** Where an error came from: a call, or the recorder's own `failed` state. */
+/** Where an error came from: a call, or the recorder's own `failed` or `discarded` state. */
 export type ErrorSource = SessionCall | "recorder";
+
+/**
+ * A Lean recording the module let go of while the session still runs, so nothing more is
+ * recorded: before the window opened (the app went to the background, or the phone got hot,
+ * while armed), or after it opened but before an end mark.
+ */
+export type RecordingDropped = "beforeStart" | "beforeEnd";
+
+export interface WalkError {
+  readonly source: ErrorSource;
+  /** Null for a rejection without a code, and for a dropped recording. */
+  readonly code: CaptureErrorCode | null;
+  /** Set when the recording was dropped while the session runs: the walker should Stop. */
+  readonly dropped?: RecordingDropped;
+}
 
 export interface WalkState {
   readonly step: WalkStep;
@@ -105,8 +120,14 @@ export interface WalkState {
   /** Whole seconds the session ran, and the recording window was open, counted from ticks. */
   readonly sessionS: number;
   readonly recordingS: number;
-  /** The last call's error code (null for a rejection without one), until dismissed. */
-  readonly error: { readonly source: ErrorSource; readonly code: CaptureErrorCode | null } | null;
+  /**
+   * Whether this session's recording window ever opened (a start mark's `opened`, or the
+   * recording's `open` event): tells a recording dropped before the start mark from one dropped
+   * before an end mark.
+   */
+  readonly windowOpened: boolean;
+  /** The last error (a call's code, null for a rejection without one), until dismissed. */
+  readonly error: WalkError | null;
 }
 
 export type WalkAction =
@@ -173,7 +194,17 @@ export function initialWalkState(canRecord: boolean): WalkState {
     recording: NO_RECORDING,
     sessionS: 0,
     recordingS: 0,
+    windowOpened: false,
     error: null,
+  };
+}
+
+/** The error for a Lean recording dropped while the session runs. */
+function droppedError(state: WalkState): WalkError {
+  return {
+    source: "recorder",
+    code: null,
+    dropped: state.windowOpened ? "beforeEnd" : "beforeStart",
   };
 }
 
@@ -333,20 +364,27 @@ function holdTick(state: WalkState): WalkState {
 function marked(state: WalkState, window: MarkWindow): WalkState {
   const mark = state.mark;
   if (!mark) return state;
+  const recording = window === "opened" || window === "open" || window === "closing";
   const counted: WalkState = {
     ...state,
     mark: null,
     streetFacing: false,
     startMarks: state.startMarks + (mark.role === "start" ? 1 : 0),
     endMarks: state.endMarks + (mark.role === "end" ? 1 : 0),
+    windowOpened: state.windowOpened || recording,
   };
   // Stop, or a close, came while the call was in flight: the anchor was still made, so count it
   // and leave the step where that put it.
   if (state.step !== "marking") return counted;
+  if (mark.role === "start" && state.record === "lean" && window === "not_open") {
+    // The module let go of the recording while it was armed (background, heat): the anchor was
+    // made, but nothing is recorded. Stay armed and say so, so the walker stops and starts again
+    // instead of walking the corridor for nothing.
+    return { ...counted, step: "armed", error: droppedError(state) };
+  }
   if (mark.role === "start" || !mark.endSessionHere) return { ...counted, step: "walking" };
   // With a recording window the module closes it a margin later and stops the session itself;
   // without one (record off) the screen stops the session.
-  const recording = window === "opened" || window === "open" || window === "closing";
   return recording
     ? { ...counted, step: "closing" }
     : { ...counted, step: "stopping", stopRequested: true };
@@ -366,6 +404,7 @@ function stopped(state: WalkState, outcome: RecordingOutcome | null): WalkState 
     holdRemainingS: null,
     tagging: null,
     recording,
+    windowOpened: state.windowOpened || outcome !== null,
     step: finishing ? "saving" : "summary",
   };
 }
@@ -376,12 +415,18 @@ function recordingChanged(
 ): WalkState {
   switch (event.phase) {
     case "armed":
+      return { ...state, recording: { ...state.recording, phase: event.phase } };
     case "open":
     case "closing":
-      return { ...state, recording: { ...state.recording, phase: event.phase } };
+      return {
+        ...state,
+        recording: { ...state.recording, phase: event.phase },
+        windowOpened: true,
+      };
     case "finalizing":
       return {
         ...state,
+        windowOpened: true,
         recording: { ...state.recording, phase: "finalizing" },
         step: state.step === "summary" ? state.step : "saving",
         holdRemainingS: null,
@@ -393,22 +438,24 @@ function recordingChanged(
         trimmed: event.trimmed ?? null,
         closed: event.closed ?? null,
       };
+      const next: WalkState = { ...state, recording, windowOpened: true };
       // End the session here stops the session too, and so does Stop, whatever closed the
       // recording: wait for it. Any other close while the session runs (idle, background, heat,
       // disk, limit) leaves the walker to tap Stop.
-      if (!state.sessionRunning) return { ...state, recording, step: "summary" };
-      if (event.ended === "end_anchor" || state.stopRequested) {
-        return { ...state, recording, step: "saving" };
-      }
+      if (!state.sessionRunning) return { ...next, step: "summary" };
+      if (event.ended === "end_anchor" || state.stopRequested) return { ...next, step: "saving" };
       const step = state.step === "saving" || state.step === "closing" ? "walking" : state.step;
-      return { ...state, recording, step };
+      return { ...next, step };
     }
-    case "discarded":
-      return {
-        ...state,
-        recording: { ...NO_RECORDING, phase: "discarded" },
-        step: state.sessionRunning ? state.step : "summary",
-      };
+    case "discarded": {
+      const recording: RecordingProgress = { ...NO_RECORDING, phase: "discarded" };
+      if (!state.sessionRunning) return { ...state, recording, step: "summary" };
+      // Stop discards a recording with no end mark: expected. Anything else (the app went to the
+      // background, the phone got hot) drops it while the session keeps running, and nothing more
+      // is recorded: say so, so the walker stops and starts a new session.
+      if (state.stopRequested) return { ...state, recording };
+      return { ...state, recording, error: droppedError(state) };
+    }
     case "failed":
       return {
         ...state,
@@ -420,7 +467,7 @@ function recordingChanged(
 }
 
 function callFailed(state: WalkState, call: SessionCall, code: CaptureErrorCode | null): WalkState {
-  const error = { source: call, code };
+  const error: WalkError = { source: call, code };
   switch (call) {
     case "permissions":
       return { ...state, requestingPermissions: false, error };
@@ -468,6 +515,8 @@ export interface WalkSummary {
   readonly sessionS: number;
   readonly recordingS: number;
   readonly recording: RecordingProgress;
+  /** Whether the recording window ever opened (see `WalkState.windowOpened`). */
+  readonly windowOpened: boolean;
 }
 
 export function walkSummary(state: WalkState): WalkSummary {
@@ -479,5 +528,6 @@ export function walkSummary(state: WalkState): WalkSummary {
     sessionS: state.sessionS,
     recordingS: state.recordingS,
     recording: state.recording,
+    windowOpened: state.windowOpened,
   };
 }

@@ -137,9 +137,11 @@ describe("a lean walk, ending with End the session here", () => {
       sessionS: 60 + HOLD_STILL_S + 5,
       recordingS: 60 + HOLD_STILL_S + 5,
       recording: { phase: "closed", ended: "end_anchor", trimmed: false, closed: true },
+      windowOpened: true,
     });
 
     state = run(state, { type: "newSession" });
+    expect(state.windowOpened).toBe(false);
     expect(state.step).toBe("ready");
     expect(state.venues).toEqual([SOUTH_BEACH]);
     expect(state.record).toBe("lean");
@@ -378,6 +380,81 @@ describe("refusals and early ends", () => {
     expect(state.step).toBe("walking");
     expect(state.sessionRunning).toBe(true);
     expect(run(state, ...ticks(3)).recordingS).toBe(0);
+  });
+
+  test("a recording dropped while armed is shown, and a start mark then stays armed", () => {
+    // Backgrounded or too hot on the way to the start door: the module discards the armed
+    // recording while the session keeps running.
+    const dropped = run(armed(), { type: "recording", phase: "discarded" });
+    expect(dropped.step).toBe("armed");
+    expect(dropped.sessionRunning).toBe(true);
+    expect(dropped.error).toEqual({ source: "recorder", code: null, dropped: "beforeStart" });
+
+    // The walker dismisses it (or never saw it) and marks the start: the anchor is made, but the
+    // window is "not_open", so the flow stays armed and says so again rather than walking.
+    const marked = run(
+      dropped,
+      { type: "dismissError" },
+      { type: "markStart" },
+      { type: "marked", window: "not_open" },
+    );
+    expect(marked.step).toBe("armed");
+    expect(marked.startMarks).toBe(1);
+    expect(marked.error).toEqual({ source: "recorder", code: null, dropped: "beforeStart" });
+    expect(run(marked, { type: "markEnd" }).step).toBe("armed");
+
+    const done = run(marked, { type: "stop" }, { type: "stopped", recording: null });
+    expect(done.step).toBe("summary");
+    expect(walkSummary(done)).toMatchObject({
+      windowOpened: false,
+      recordingS: 0,
+      recording: { phase: "discarded" },
+    });
+  });
+
+  test("a start mark's not_open with no discard event yet still stays armed", () => {
+    const state = run(armed(), { type: "markStart" }, { type: "marked", window: "not_open" });
+    expect(state.step).toBe("armed");
+    expect(state.error).toEqual({ source: "recorder", code: null, dropped: "beforeStart" });
+  });
+
+  test("record off: a start mark's not_open is expected and walks on", () => {
+    const state = run(
+      initialWalkState(false),
+      { type: "toggleVenue", id: SOUTH_BEACH },
+      { type: "confirmVenues" },
+      { type: "confirmRecord" },
+      { type: "start" },
+      { type: "started" },
+      { type: "markStart" },
+      { type: "marked", window: "not_open" },
+    );
+    expect(state.step).toBe("walking");
+    expect(state.error).toBe(null);
+  });
+
+  test("a recording dropped after it opened, without Stop, is shown too", () => {
+    const state = run(walking(), { type: "recording", phase: "discarded" });
+    expect(state.step).toBe("walking");
+    expect(state.error).toEqual({ source: "recorder", code: null, dropped: "beforeEnd" });
+    expect(walkSummary(state).windowOpened).toBe(true);
+  });
+
+  test("Stop before the start mark discards quietly", () => {
+    const state = run(
+      armed(),
+      { type: "stop" },
+      { type: "recording", phase: "discarded" },
+      { type: "stopped", recording: null },
+    );
+    expect(state.step).toBe("summary");
+    expect(state.error).toBe(null);
+    expect(walkSummary(state)).toMatchObject({
+      windowOpened: false,
+      recording: { phase: "discarded" },
+    });
+    const stopOpen = run(walking(), { type: "stop" }, { type: "recording", phase: "discarded" });
+    expect(stopOpen.error).toBe(null);
   });
 
   test("a recorder failure is shown; ticks stop counting the window", () => {

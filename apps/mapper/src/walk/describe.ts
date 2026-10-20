@@ -10,7 +10,7 @@ import type {
 import type { FigureRow } from "../capture/figures.ts";
 import { formatDuration } from "../capture/figures.ts";
 import type { SessionStatus } from "../capture/native.ts";
-import type { ErrorSource, WalkState, WalkSummary } from "./flow.ts";
+import type { ErrorSource, RecordingDropped, WalkError, WalkState, WalkSummary } from "./flow.ts";
 import { NODE_TAG_ROW } from "./tags.ts";
 
 const REFUSAL_TEXT: Record<RecordRefusal, string> = {
@@ -57,11 +57,16 @@ const SOURCE_TEXT: Record<ErrorSource, string> = {
   recorder: "The recorder",
 };
 
+const DROPPED_TEXT: Record<RecordingDropped, string> = {
+  beforeStart:
+    "The recording was dropped before the start mark (the app went to the background, or the phone got too hot), so nothing is being recorded. Stop, then start a new session.",
+  beforeEnd:
+    "The recording was dropped before an end mark (the app went to the background, or the phone got too hot), so nothing more is being recorded. Stop, then start a new session.",
+};
+
 /** What the screen says about the flow's error: where it came from, its code and what to do. */
-export function describeWalkError(
-  error: NonNullable<WalkState["error"]>,
-  refusal: RecordRefusal | null,
-): string {
+export function describeWalkError(error: WalkError, refusal: RecordRefusal | null): string {
+  if (error.dropped) return DROPPED_TEXT[error.dropped];
   const where = SOURCE_TEXT[error.source];
   if (error.code === null) return `${where} failed.`;
   if (error.code === "ERR_RECORD_REFUSED" && refusal) {
@@ -135,7 +140,14 @@ export function summaryRows(summary: WalkSummary): FigureRow[] {
       rows.push({ label: "Recording", value: "None (no start mark, or record off)" });
       break;
     case "discarded":
-      rows.push({ label: "Recording", value: "Discarded (no end mark)" });
+      // The module also discards a recording that never opened: stopped, backgrounded or too hot
+      // before the start mark.
+      rows.push({
+        label: "Recording",
+        value: summary.windowOpened
+          ? "Discarded (no end mark)"
+          : "None (ended before the start mark)",
+      });
       break;
     case "failed":
       rows.push({ label: "Recording", value: "Failed" });

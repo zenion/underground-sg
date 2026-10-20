@@ -186,6 +186,7 @@ describe("the walk screen's wording", () => {
       sessionS: 312,
       recordingS: 290,
       recording: { phase: "closed", ended: "end_anchor", trimmed: false, closed: true },
+      windowOpened: true,
     };
     expect(summaryRows(walkSummary(state))).toEqual([
       { label: "Session", value: "5:12" },
@@ -202,5 +203,35 @@ describe("the walk screen's wording", () => {
       walkSummary({ ...state, recording: { ...state.recording, phase: "discarded" } }),
     );
     expect(discarded).toContainEqual({ label: "Recording", value: "Discarded (no end mark)" });
+  });
+
+  test("the summary: a recording discarded before it opened isn't worded as a missing end mark", () => {
+    // Stopped, backgrounded or too hot before the start mark: the module discards the armed
+    // recording, though no window ever opened.
+    const state: WalkState = {
+      ...initialWalkState(true),
+      step: "summary",
+      sessionS: 40,
+      recording: { phase: "discarded", ended: null, trimmed: null, closed: null },
+      windowOpened: false,
+    };
+    const rows = summaryRows(walkSummary(state));
+    expect(rows).toContainEqual({
+      label: "Recording",
+      value: "None (ended before the start mark)",
+    });
+    expect(rows).not.toContainEqual({ label: "Recording", value: "Discarded (no end mark)" });
+  });
+
+  test("a dropped recording tells the walker to stop and start again", () => {
+    const before = describeWalkError(
+      { source: "recorder", code: null, dropped: "beforeStart" },
+      null,
+    );
+    expect(before).toMatch(/^The recording was dropped before the start mark/);
+    expect(before).toMatch(/Stop, then start a new session\.$/);
+    expect(
+      describeWalkError({ source: "recorder", code: null, dropped: "beforeEnd" }, null),
+    ).toMatch(/^The recording was dropped before an end mark/);
   });
 });
