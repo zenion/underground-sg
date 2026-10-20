@@ -98,6 +98,8 @@ pnpm dev:phone --dev-client
 
 Everything else is the same: the API on the reserved domain, Metro on a random https address behind the same ngrok rules. The summary prints a QR code for the build's deep link (`exp+underground-sg://expo-development-client/?url=…`): scan it with the Camera app, or open **Underground SG Mapper** and in its launcher tap **Enter URL manually** and type the `https://…ngrok.app` address. No Expo sign-in is needed for the development build. Swift changes need a new build (`eas build --profile development --platform ios`; the first took about 5 minutes); TypeScript changes reload through Metro.
 
+Both the development and the walk build compile the session recorder (`USG_RECORDER=1` in their `eas.json` profiles), but only the walk build records. The walk build (`eas build --profile walk`, [apps/mapper/README.md](../apps/mapper/README.md#the-build-profiles-and-the-recorder-switch)) is Release with its JavaScript embedded: it never connects to Metro or `dev:phone`, and installing it replaces the development build (the same bundle identifier) and keeps the app's data. Reinstall the development build to go back to desk testing, after exporting and copying off any recordings: the development build can't export them.
+
 ## Stop it
 
 Press **Ctrl+C** in the terminal. Metro stops, then dev:phone stops ngrok and the API: every process it started, with their children, and nothing else (your own `node` or `ngrok` windows are left alone). The reserved domain then answers ngrok's "endpoint offline" page, and the Metro address is gone for good. PostGIS and RustFS keep running; `docker compose stop` stops them and keeps the data.

@@ -65,8 +65,37 @@ opens the whole app at <http://localhost:8081>. The map is the same DOM componen
 
 - The `capture-native` Swift module ([modules/capture-native/README.md](modules/capture-native/README.md)): ARKit, and later the keyframes, blur, bundle writer and recorder. Expo Go runs only the native code it ships with.
 - A development build needs the Apple Developer Program membership (US$99 a year), an Expo account, the phone registered with `eas device:create`, and Developer Mode on the phone. Then `eas build --profile development --platform ios` with the `development` profile in `eas.json` (`developmentClient: true`, internal distribution). `expo-dev-client` is already installed; Expo Go ignores it.
-- **Walks use the walk build**, not the development build: the same capture module in release configuration, without the dev client, with the JavaScript embedded (EAS internal distribution), so a capture in a venue needs no Metro, no tunnel and no signal ([ADR 0010](../../docs/decisions/0010-capture-recording-and-replay.md)). Both builds compile the session recorder, but only the walk build records; the `walk` profile is a backlog task.
+- **Walks use the walk build**, not the development build: the same capture module in release configuration, without the dev client, with the JavaScript embedded (EAS internal distribution), so a capture in a venue needs no Metro, no tunnel and no signal ([ADR 0010](../../docs/decisions/0010-capture-recording-and-replay.md)). Both builds compile the session recorder, but only the walk build records (below).
 - **Bundle identifier:** `com.xennion.usg.mapper`, from the owner's domain (confirmed 2026-10-17). It can't change once the app is registered with Apple. `NSCameraUsageDescription` and `NSLocalNetworkUsageDescription` are placeholders for that build; Expo Go uses its own.
+
+## The build profiles and the recorder switch
+
+`eas.json` has two profiles, both internal distribution with the same bundle identifier, so installing one replaces the other and keeps the app's data, recordings included. Neither has a submit profile or an update channel, and the app has no `expo-updates`: the walk build's JavaScript is always the `main.jsbundle` embedded in it.
+
+| Profile | Build | Recorder switch |
+| --- | --- | --- |
+| `development` | Debug, the dev client; JavaScript from Metro (`pnpm dev:phone --dev-client`), for desk testing | `USG_RECORDER=1`, `USG_BUILD_PROFILE=development`: the recorder is compiled in, but the module's `RecordPermission` grants only the walk build, so it never records or exports |
+| `walk` | Release on a device, no dev client and no dev menu, the JavaScript embedded | `USG_RECORDER=1`, `USG_BUILD_PROFILE=walk`: the only build that records |
+
+The switch ([the lean recorder design](../../docs/reviews/2026-10-21-lean-recorder-design.md#2-build-switch), section 2) is the config plugin `plugins/with-usg-recorder.ts`, registered in `app.config.ts`. When Expo evaluates the config (prebuild, EAS Build, `expo config`) it reads the two variables:
+
+- With `USG_RECORDER=1` it needs `USG_BUILD_PROFILE` set to `development` or `walk`, and throws otherwise (also on any other value of `USG_RECORDER`, or a profile without the switch), so a typo fails the build instead of compiling the recorder out of a walk build. It writes `"usg.recorder": "true"` into `ios/Podfile.properties.json`, which `modules/capture-native/usg-recorder.rb` turns into the `USG_RECORDER` Swift condition of every pod of the module, and adds to Info.plist `UIFileSharingEnabled` (the exports folder over USB), `NSMotionUsageDescription`, `USGBuildProfile`, `USGGitCommit` (EAS Build's commit, else `GITHUB_SHA`, only if it is 40 lowercase hex characters) and `USGEasBuildId` (`EAS_BUILD_ID`, only if it is a UUID). Only the walk build gets `NSLocationWhenInUseUsageDescription`: without it the development build can't be authorised for Core Location, whatever its code does.
+- Without the switch (Expo Go, `expo export`, a contributor build) it sets none of them and removes them all, so a stale `ios/` folder can't keep the switch.
+- `LSSupportsOpeningDocumentsInPlace` is never set, and always removed.
+
+`test/with-usg-recorder.test.ts` covers each rule, `test/eas-profiles.test.ts` the profiles and `test/podspecs.test.ts` that every pod of the module uses `usg-recorder.rb`. CI's macOS job builds the app as the walk build is built: prebuild with the walk profile's variables, `pod install`, an unsigned Release device build with the JavaScript bundled and embedded, then the encoder check and an `nm` check that the recorder is compiled in ([modules/capture-native/README.md](modules/capture-native/README.md#testing)).
+
+EAS Build runs `package.json`'s `eas-build-post-install` script after installing: it writes the git-ignored MapLibre worker (below) that a Release build's JavaScript bundle needs. Debug builds don't bundle, so the development build never needed it.
+
+### The first walk build (W1)
+
+The first walk build runs on EAS's servers, started by the owner from the PC, interactively, because it is the build that creates the signing credentials: an ad hoc provisioning profile for the registered iPhone (`eas device:create` first), kept by EAS for the Expo account. From the repo root:
+
+```bash
+pnpm --filter @usg/mapper exec eas build --platform ios --profile walk
+```
+
+Answer the prompts: let EAS manage the credentials, sign in to the Apple Developer account when asked, and pick the iPhone for the profile. The install link on expo.dev stays private to the account; open it on the iPhone to install over the development build. Later walk builds can run on a GitHub macOS runner from the same credentials (the lean recorder design's `walk-build.yml`, still to come). Never share the build's log or its install link: they name the device and the team.
 
 ## The capture port and the walk flow
 
@@ -96,9 +125,10 @@ When the API exists it has to listen on all interfaces (not only `localhost`), a
 | `start` | Metro (`expo start`); add `--go` for Expo Go |
 | `web` | The app in a browser |
 | `build` | `expo export --platform ios` into `dist/ios`: the Hermes bytecode bundle and the map's DOM-component bundle. Proves the JavaScript compiles; `pnpm build` at the root and CI run it |
+| `eas-build-post-install` | Only `scripts/maplibre-worker.mts`: EAS Build runs it after installing, for the walk build's embedded bundle (above) |
 | `build:web` | `expo export --platform web` into `dist/web` |
 | `typecheck` | `tsc` |
-| `test` | Vitest on the pure logic in `test/` (API URL, health check, features, the benchmark, SVG paths, loading and checking the published map, the level bands and the camera, device checks, the capture port, `Redacted`, the boundary trace against the recording schema, the log guard, the walk flow, venues and tags), the no-pose lint over the source, and `metro.config.js` (what Metro may read, the cache key) |
+| `test` | Vitest on the pure logic in `test/` (API URL, health check, features, the benchmark, SVG paths, loading and checking the published map, the level bands and the camera, device checks, the capture port, `Redacted`, the boundary trace against the recording schema, the log guard, the walk flow, venues and tags, the recorder switch, `eas.json`'s profiles and the module's podspecs), the no-pose lint over the source, and `metro.config.js` (what Metro may read, the cache key) |
 
 Each script except `test` first runs `scripts/maplibre-worker.mts`. maplibre-gl v6 finds its worker script next to its own module (`import.meta.url`), which a Metro bundle doesn't have, so the script copies `maplibre-gl/dist/maplibre-gl-worker.mjs` into the git-ignored `src/map/generated/maplibre-worker.ts` as a string, and the map hands it to `setWorkerUrl()` as a `blob:` URL. That works the same over the LAN, through a tunnel, in a browser and from `file://` in a release build.
 
@@ -106,6 +136,7 @@ Each script except `test` first runs `scripts/maplibre-worker.mts`. maplibre-gl 
 
 ```
 app.config.ts, eas.json, metro.config.js (what Metro may read, and its cache key)
+plugins/with-usg-recorder.ts   the recorder switch: the config plugin for the development and walk builds
 native-dependencies.json   the reviewed native packages (ADR 0010), checked against autolinking
 modules/capture-native/    the Swift module: its README has the layout and how it is tested
 scripts/maplibre-worker.mts, encoder-check.mts (and -lib): the macOS CI job's encoder check;

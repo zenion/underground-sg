@@ -10,7 +10,8 @@
     "build": "node scripts/maplibre-worker.mts && expo export --platform ios --output-dir dist/ios",
     "build:web": "node scripts/maplibre-worker.mts && expo export --platform web --output-dir dist/web",
     "typecheck": "node scripts/maplibre-worker.mts && tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eas-build-post-install": "node scripts/maplibre-worker.mts"
   },
   "dependencies": {
     "@expo/log-box": "57.0.4",

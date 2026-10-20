@@ -200,6 +200,30 @@ public struct PartDigest: Equatable, Sendable {
   }
 }
 
+/// recording.json's fields that the I/O module reads back: holds times, so never logged.
+public struct ManifestFacts: Equatable, Sendable {
+  public let recordingID: UUID?
+  public let origin: ManifestBase.Origin
+  public let profile: RecordProfile
+  public let venues: [String]
+  public let closed: Bool
+  public let startT: Double
+  public let endT: Double?
+  /// Null until the recording is finished, by the recorder or by recovery (design D3).
+  public let ended: WindowEndReason?
+  public let trimmed: Bool
+  public let files: [FileDigest]
+  public let sessionStartedAt: String
+}
+
+/// parts.json's fields, read back.
+public struct ExportPartsFacts: Equatable, Sendable {
+  public let recordingID: UUID
+  public let tarBytes: Int64
+  public let tarSha256: String
+  public let parts: [PartDigest]
+}
+
 /// Why a document could not be made. No case carries a value from the recording.
 public enum RecordingDocumentError: Error, Equatable, Sendable {
   /// The opening recording.json given to `closed` doesn't decode.
@@ -280,6 +304,37 @@ public enum RecordingDocuments {
       recordingID: recordingID.uuidString.lowercased(), recordingVersion: recordingVersion,
       tarBytes: Int(tarBytes), tarSha256: tarSha256)
     return try LineEncoder().document(document)
+  }
+
+  /// What the I/O module needs from a recording.json it reads back (the list, recovery, the
+  /// export), or nil when the bytes aren't one.
+  public static func facts(_ data: Data) -> ManifestFacts? {
+    guard let manifest = try? JSONDecoder().decode(RecordingManifest.self, from: data),
+      let profile = RecordProfile(rawValue: manifest.profile.rawValue)
+    else { return nil }
+    return ManifestFacts(
+      recordingID: UUID(uuidString: manifest.recordingID),
+      origin: manifest.origin == .synthetic ? .synthetic : .device, profile: profile,
+      venues: manifest.venues, closed: manifest.closed, startT: manifest.window.startT,
+      endT: manifest.window.endT,
+      ended: manifest.window.ended.flatMap { WindowEndReason(rawValue: $0.rawValue) },
+      trimmed: manifest.window.trimmed,
+      files: manifest.files.map {
+        FileDigest(path: $0.path, bytes: Int64($0.bytes), sha256: $0.sha256)
+      },
+      sessionStartedAt: manifest.sessionStartedAt)
+  }
+
+  /// parts.json read back, or nil when the bytes aren't one.
+  public static func exportPartsFacts(_ data: Data) -> ExportPartsFacts? {
+    guard let document = try? JSONDecoder().decode(ExportParts.self, from: data),
+      let id = UUID(uuidString: document.recordingID)
+    else { return nil }
+    return ExportPartsFacts(
+      recordingID: id, tarBytes: Int64(document.tarBytes), tarSha256: document.tarSha256,
+      parts: document.parts.map {
+        PartDigest(name: $0.name, bytes: Int64($0.bytes), sha256: $0.sha256)
+      })
   }
 
   /// RECORDING_VERSION in packages/contracts.
