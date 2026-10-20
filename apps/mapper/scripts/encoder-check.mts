@@ -22,6 +22,7 @@ import {
   describeFinding,
   type Finding,
   findViolations,
+  machOSections,
   methodNames,
   parseSymbols,
 } from "./encoder-check-lib.mts";
@@ -55,6 +56,23 @@ function readObject(file: string, object: string): Finding[] {
 function counts(file: string): string {
   const symbols = parseSymbols(xcrun(["nm", "-u", "-j", file])).length;
   return `${symbols} undefined symbols, ${methodNames(readFileSync(file)).length} selectors`;
+}
+
+/**
+ * What a planted object holds, printed when the self-test fails: its sections and its undefined
+ * symbols, demangled. Only for the planted files, which hold no data.
+ */
+function describePlanted(file: string): string {
+  const sections = machOSections(readFileSync(file)).map(
+    (s) => `  section ${s.segment},${s.section} (${s.bytes.length} bytes)`,
+  );
+  const symbols = parseSymbols(xcrun(["nm", "-u", "-j", file]));
+  const demangled = xcrun(["swift-demangle"], `${symbols.join("
+")}
+`).split(/?
+/);
+  return [...sections, ...demangled.filter(Boolean).map((name) => `  symbol ${name}`)].join("
+");
 }
 
 let allowList: AllowList | undefined;
@@ -131,7 +149,10 @@ function selfTest(dir: string): number {
     console.log(
       `${ok ? "ok  " : "FAIL"} ${name}: expected ${expected ?? "no findings"}, found ${rules.length ? rules.join(", ") : "none"} (${counts(object)})`,
     );
-    if (!ok) failures++;
+    if (!ok) {
+      console.log(describePlanted(object));
+      failures++;
+    }
   }
   return failures;
 }

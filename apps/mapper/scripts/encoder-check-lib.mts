@@ -133,21 +133,24 @@ function headerName(bytes: Uint8Array, offset: number): string {
   return new TextDecoder("latin1").decode(end === -1 ? raw : raw.subarray(0, end));
 }
 
+export interface MachOSection {
+  readonly segment: string;
+  readonly section: string;
+  readonly bytes: Uint8Array;
+}
+
 /**
- * The bytes of one section of a 64-bit little-endian Mach-O file (an arm64 object file), or null
- * when it has none. Read directly rather than through otool, whose output for a section depends
- * on the section's type. In an object file every section sits in one unnamed segment, so the
- * section's own segment name is what is matched.
+ * Every section of a 64-bit little-endian Mach-O file (an arm64 object file), with its bytes.
+ * Read directly rather than through otool, whose output for a section depends on the section's
+ * type. In an object file every section sits in one unnamed segment and carries its own segment
+ * name, which is what this returns.
  */
-export function machOSection(
-  file: Uint8Array,
-  segment: string,
-  section: string,
-): Uint8Array | null {
+export function machOSections(file: Uint8Array): MachOSection[] {
   const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
   if (file.byteLength < 32 || view.getUint32(0, true) !== MH_MAGIC_64) {
     throw new Error("not a 64-bit little-endian Mach-O file");
   }
+  const found: MachOSection[] = [];
   const commands = view.getUint32(16, true);
   let offset = 32;
   for (let command = 0; command < commands; command++) {
@@ -158,17 +161,35 @@ export function machOSection(
       const sections = view.getUint32(offset + 64, true);
       for (let index = 0; index < sections; index++) {
         const base = offset + 72 + index * 80;
-        if (headerName(file, base) !== section || headerName(file, base + 16) !== segment) continue;
+        const section = headerName(file, base);
         const bytes = Number(view.getBigUint64(base + 40, true));
         const start = view.getUint32(base + 48, true);
-        if (start + bytes > file.byteLength)
+        // Zero-fill sections (__bss, __common) have no bytes in the file.
+        const zeroFill = start === 0;
+        if (!zeroFill && start + bytes > file.byteLength) {
           throw new Error(`section ${section} runs past the file`);
-        return file.subarray(start, start + bytes);
+        }
+        found.push({
+          segment: headerName(file, base + 16),
+          section,
+          bytes: zeroFill ? new Uint8Array(0) : file.subarray(start, start + bytes),
+        });
       }
     }
     offset += size;
   }
-  return null;
+  return found;
+}
+
+/** The bytes of one section, or null when the file has none. */
+export function machOSection(
+  file: Uint8Array,
+  segment: string,
+  section: string,
+): Uint8Array | null {
+  return (
+    machOSections(file).find((s) => s.segment === segment && s.section === section)?.bytes ?? null
+  );
 }
 
 /** The Objective-C method names an object file uses: its `__TEXT,__objc_methname` strings. */
