@@ -67,12 +67,8 @@ function describePlanted(file: string): string {
     (s) => `  section ${s.segment},${s.section} (${s.bytes.length} bytes)`,
   );
   const symbols = parseSymbols(xcrun(["nm", "-u", "-j", file]));
-  const demangled = xcrun(["swift-demangle"], `${symbols.join("
-")}
-`).split(/?
-/);
-  return [...sections, ...demangled.filter(Boolean).map((name) => `  symbol ${name}`)].join("
-");
+  const demangled = xcrun(["swift-demangle"], `${symbols.join("\n")}\n`).split(/\r?\n/);
+  return [...sections, ...demangled.filter(Boolean).map((name) => `  symbol ${name}`)].join("\n");
 }
 
 let allowList: AllowList | undefined;
