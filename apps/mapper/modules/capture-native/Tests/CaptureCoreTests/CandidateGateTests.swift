@@ -9,7 +9,7 @@ private let frameInterval = 1.0 / 60
 
 private func run(
   _ gate: inout CandidateGate, frames: Int, tracking: (Int) -> Bool = { _ in true },
-  forceAt: Set<Int> = [], pose: (Double) -> Transform
+  forceAt: Set<Int> = [], pose: (Double) -> WorldTransform
 ) -> [(frame: Int, trigger: CandidateTrigger)] {
   var out: [(Int, CandidateTrigger)] = []
   for frame in 0..<frames {
@@ -83,14 +83,14 @@ private func run(
   }
 }
 
-@Suite struct TransformTests {
+@Suite struct WorldTransformTests {
   @Test func distanceAndRotation() {
-    let a = Transform.yaw(0, x: 1, y: 2, z: 3)
-    let b = Transform.yaw(Double.pi / 2, x: 4, y: 6, z: 3)
+    let a = WorldTransform.yaw(0, x: 1, y: 2, z: 3)
+    let b = WorldTransform.yaw(Double.pi / 2, x: 4, y: 6, z: 3)
     #expect(abs(a.distance(to: b) - 5) < 1e-6)
     #expect(abs(a.rotationDegrees(to: b) - 90) < 1e-3)
     #expect(a.rotationDegrees(to: a) == 0)
-    #expect(abs(Transform.identity.rotationDegrees(to: .yaw(Double.pi)) - 180) < 1e-3)
+    #expect(abs(WorldTransform.identity.rotationDegrees(to: .yaw(Double.pi)) - 180) < 1e-3)
   }
 }
 

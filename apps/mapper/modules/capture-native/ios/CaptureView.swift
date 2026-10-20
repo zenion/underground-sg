@@ -139,7 +139,7 @@ final class CaptureView: ExpoView, ARSessionDelegate {
       trackingReason = trackingReasonName(reason)
     }
     mapping = mappingName(frame.worldMappingStatus)
-    if gate.offer(t: t, transform: Transform(camera.transform), trackingNormal: normal) != nil {
+    if gate.offer(t: t, transform: WorldTransform(camera.transform), trackingNormal: normal) != nil {
       candidates += 1
       candidateRate.tick(t)
     }
@@ -208,7 +208,7 @@ final class CaptureView: ExpoView, ARSessionDelegate {
   }
 }
 
-extension Transform {
+extension WorldTransform {
   /// ARKit's column-major matrix as CaptureCore's 16 floats.
   init(_ matrix: simd_float4x4) {
     let c = matrix.columns

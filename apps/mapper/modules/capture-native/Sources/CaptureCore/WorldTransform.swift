@@ -3,7 +3,7 @@ import Foundation
 /// A rigid transform in the session's world frame: 16 floats, column-major, as ARKit's
 /// `simd_float4x4` and the capture bundle store it (docs/capture-bundle.md). CaptureCore can't
 /// import simd, so the module copies ARKit's matrix into this.
-public struct Transform: Equatable, Sendable {
+public struct WorldTransform: Equatable, Sendable {
   /// Column-major: `m[column * 4 + row]`. The translation is `m[12]`, `m[13]`, `m[14]`.
   public let m: [Float]
 
@@ -12,7 +12,7 @@ public struct Transform: Equatable, Sendable {
     self.m = m
   }
 
-  public static let identity = Transform(columnMajor: [
+  public static let identity = WorldTransform(columnMajor: [
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 1, 0,
@@ -21,11 +21,11 @@ public struct Transform: Equatable, Sendable {
 
   /// A rotation of `radians` about the vertical (y) axis, then a translation.
   public static func yaw(_ radians: Double, x: Double = 0, y: Double = 0, z: Double = 0)
-    -> Transform
+    -> WorldTransform
   {
     let c = Float(cos(radians))
     let s = Float(sin(radians))
-    return Transform(columnMajor: [
+    return WorldTransform(columnMajor: [
       c, 0, -s, 0,
       0, 1, 0, 0,
       s, 0, c, 0,
@@ -38,7 +38,7 @@ public struct Transform: Equatable, Sendable {
   }
 
   /// Straight-line distance between the two origins, in metres.
-  public func distance(to other: Transform) -> Double {
+  public func distance(to other: WorldTransform) -> Double {
     let a = translation
     let b = other.translation
     let dx = a.x - b.x
@@ -50,7 +50,7 @@ public struct Transform: Equatable, Sendable {
   /// The angle of the rotation that takes this orientation to the other's, in degrees (0 to 180).
   /// From the trace of Rᵀ R': cos θ = (tr − 1) / 2, where tr sums the products of matching
   /// elements of the two 3 × 3 rotation parts.
-  public func rotationDegrees(to other: Transform) -> Double {
+  public func rotationDegrees(to other: WorldTransform) -> Double {
     var trace = 0.0
     for column in 0..<3 {
       for row in 0..<3 {

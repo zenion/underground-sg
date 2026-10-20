@@ -19,7 +19,7 @@ index.ts, src/types.ts    the TypeScript side: the module, the view and their ty
 ios/                      the Expo module (ARKit, RealityKit, UIKit): only the app build compiles it
 Package.swift             SwiftPM, for `swift test`; the podspecs exclude it and Tests/
 CaptureCore.podspec       CaptureCore as its own pod, so it is its own Swift module in the app too
-Sources/CaptureCore/      Foundation only: Transform, CandidateGate, RateMeter
+Sources/CaptureCore/      Foundation only: WorldTransform, CandidateGate, RateMeter
 Tests/CaptureCoreTests/   Swift Testing
 encoder-allowlist.json    the encoder check's allowed places (empty until the blur lands)
 ci/planted/               planted encoder calls for the encoder check's self-test; in no pod

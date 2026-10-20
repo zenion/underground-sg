@@ -36,7 +36,7 @@ public enum CandidateTrigger: String, Equatable, Sendable {
 
 public struct CandidateGate: Sendable {
   public let config: CandidateGateConfig
-  private var last: (t: Double, transform: Transform)?
+  private var last: (t: Double, transform: WorldTransform)?
   private var forcePending = false
 
   public init(config: CandidateGateConfig = .provisional) {
@@ -51,7 +51,7 @@ public struct CandidateGate: Sendable {
   /// Offers the frame at `t` (seconds) with the camera's `transform`. Returns why it is a
   /// candidate, or nil when it isn't one. Without normal tracking the pose can't be trusted, so
   /// only a forced frame gets through.
-  public mutating func offer(t: Double, transform: Transform, trackingNormal: Bool)
+  public mutating func offer(t: Double, transform: WorldTransform, trackingNormal: Bool)
     -> CandidateTrigger?
   {
     if forcePending {
