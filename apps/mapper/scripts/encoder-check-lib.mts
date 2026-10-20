@@ -123,15 +123,65 @@ export function parseSymbols(output: string): string[] {
     .filter((line) => line.length > 0 && !line.endsWith(":"));
 }
 
+const MH_MAGIC_64 = 0xfeedfacf;
+const LC_SEGMENT_64 = 0x19;
+
+/** A fixed-size, NUL-padded name in a Mach-O header. */
+function headerName(bytes: Uint8Array, offset: number): string {
+  const raw = bytes.subarray(offset, offset + 16);
+  const end = raw.indexOf(0);
+  return new TextDecoder("latin1").decode(end === -1 ? raw : raw.subarray(0, end));
+}
+
 /**
- * `otool -v -s __TEXT __objc_methname`: a header, then one string per line after its address.
- * An object without the section prints only the file name.
+ * The bytes of one section of a 64-bit little-endian Mach-O file (an arm64 object file), or null
+ * when it has none. Read directly rather than through otool, whose output for a section depends
+ * on the section's type. In an object file every section sits in one unnamed segment, so the
+ * section's own segment name is what is matched.
  */
-export function parseMethodNames(output: string): string[] {
+export function machOSection(
+  file: Uint8Array,
+  segment: string,
+  section: string,
+): Uint8Array | null {
+  const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
+  if (file.byteLength < 32 || view.getUint32(0, true) !== MH_MAGIC_64) {
+    throw new Error("not a 64-bit little-endian Mach-O file");
+  }
+  const commands = view.getUint32(16, true);
+  let offset = 32;
+  for (let command = 0; command < commands; command++) {
+    const cmd = view.getUint32(offset, true);
+    const size = view.getUint32(offset + 4, true);
+    if (size < 8 || offset + size > file.byteLength) throw new Error("bad Mach-O load command");
+    if (cmd === LC_SEGMENT_64) {
+      const sections = view.getUint32(offset + 64, true);
+      for (let index = 0; index < sections; index++) {
+        const base = offset + 72 + index * 80;
+        if (headerName(file, base) !== section || headerName(file, base + 16) !== segment) continue;
+        const bytes = Number(view.getBigUint64(base + 40, true));
+        const start = view.getUint32(base + 48, true);
+        if (start + bytes > file.byteLength)
+          throw new Error(`section ${section} runs past the file`);
+        return file.subarray(start, start + bytes);
+      }
+    }
+    offset += size;
+  }
+  return null;
+}
+
+/** The Objective-C method names an object file uses: its `__TEXT,__objc_methname` strings. */
+export function methodNames(file: Uint8Array): string[] {
+  const section = machOSection(file, "__TEXT", "__objc_methname");
+  if (!section) return [];
+  const decoder = new TextDecoder("latin1");
   const names: string[] = [];
-  for (const line of output.split(/\r?\n/)) {
-    const match = /^[0-9a-f]{8,16}\s+(\S.*)$/i.exec(line);
-    if (match?.[1]) names.push(match[1].trim());
+  let start = 0;
+  for (let index = 0; index < section.length; index++) {
+    if (section[index] !== 0) continue;
+    if (index > start) names.push(decoder.decode(section.subarray(start, index)));
+    start = index + 1;
   }
   return names;
 }

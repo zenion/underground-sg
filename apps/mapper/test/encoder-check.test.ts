@@ -4,8 +4,9 @@
 import { describe, expect, test } from "vitest";
 import {
   findViolations,
+  machOSection,
+  methodNames,
   type ObjectContents,
-  parseMethodNames,
   parseSymbols,
 } from "../scripts/encoder-check-lib.mts";
 
@@ -138,19 +139,56 @@ describe("parsers", () => {
     ]);
   });
 
-  test("otool -v -s __TEXT __objc_methname", () => {
-    const output = [
-      "/tmp/dd/CaptureView.o:",
-      "Contents of (__TEXT,__objc_methname) section",
-      "0000000000000000  init",
-      "0000000000000005  runWithConfiguration:options:",
-      "0000000000000023  JPEGRepresentationOfImage:colorSpace:options:",
-    ].join("\n");
-    expect(parseMethodNames(output)).toEqual([
+  test("the Objective-C method names of a Mach-O object file", () => {
+    const strings =
+      "init\0runWithConfiguration:options:\0JPEGRepresentationOfImage:colorSpace:options:\0";
+    const file = machO([
+      ["__TEXT", "__text", new Uint8Array([0x1f, 0x20, 0x03, 0xd5])],
+      ["__TEXT", "__objc_methname", new TextEncoder().encode(strings)],
+      ["__DATA", "__objc_methname", new TextEncoder().encode("decoy\0")],
+    ]);
+    expect(methodNames(file)).toEqual([
       "init",
       "runWithConfiguration:options:",
       "JPEGRepresentationOfImage:colorSpace:options:",
     ]);
-    expect(parseMethodNames("/tmp/dd/Clean.o:\n")).toEqual([]);
+    expect([...(machOSection(file, "__TEXT", "__text") ?? [])]).toEqual([0x1f, 0x20, 0x03, 0xd5]);
+    expect(machOSection(file, "__TEXT", "__cstring")).toBeNull();
+    expect(methodNames(machO([["__TEXT", "__text", new Uint8Array(4)]]))).toEqual([]);
+  });
+
+  test("refuses what isn't a 64-bit Mach-O file", () => {
+    expect(() => methodNames(new Uint8Array(64))).toThrow(/Mach-O/);
+    const truncated = machO([["__TEXT", "__objc_methname", new TextEncoder().encode("init\0")]]);
+    expect(() => methodNames(truncated.subarray(0, truncated.length - 3))).toThrow(/past the file/);
   });
 });
+
+/** A minimal arm64 object file: one LC_SEGMENT_64 holding the given sections, then their bytes. */
+function machO(sections: [segment: string, section: string, bytes: Uint8Array][]): Uint8Array {
+  const commandSize = 72 + 80 * sections.length;
+  const dataStart = 32 + commandSize;
+  const total = dataStart + sections.reduce((sum, [, , bytes]) => sum + bytes.length, 0);
+  const file = new Uint8Array(total);
+  const view = new DataView(file.buffer);
+  const name = (offset: number, text: string) => file.set(new TextEncoder().encode(text), offset);
+  view.setUint32(0, 0xfeedfacf, true); // MH_MAGIC_64
+  view.setUint32(4, 0x0100000c, true); // CPU_TYPE_ARM64
+  view.setUint32(12, 1, true); // MH_OBJECT
+  view.setUint32(16, 1, true); // one load command
+  view.setUint32(20, commandSize, true);
+  view.setUint32(32, 0x19, true); // LC_SEGMENT_64, with an empty segment name
+  view.setUint32(36, commandSize, true);
+  view.setUint32(32 + 64, sections.length, true);
+  let data = dataStart;
+  sections.forEach(([segment, section, bytes], index) => {
+    const base = 32 + 72 + index * 80;
+    name(base, section);
+    name(base + 16, segment);
+    view.setBigUint64(base + 40, BigInt(bytes.length), true);
+    view.setUint32(base + 48, data, true);
+    file.set(bytes, data);
+    data += bytes.length;
+  });
+  return file;
+}

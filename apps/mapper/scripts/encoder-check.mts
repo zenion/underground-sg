@@ -1,5 +1,6 @@
 // The encoder check on the capture module's compiled objects (ADR 0010), run by the macOS CI job
-// after the unsigned app build. macOS only: it uses Xcode's nm, otool and swift-demangle.
+// after the unsigned app build. macOS only: it uses Xcode's nm and swift-demangle, and reads the
+// Objective-C method names from each object file itself.
 //
 //   node scripts/encoder-check.mts --derived-data <dir> --module CaptureNative --module CaptureCore
 //       Checks every object file of each module's build directory in the app build's DerivedData,
@@ -21,7 +22,7 @@ import {
   describeFinding,
   type Finding,
   findViolations,
-  parseMethodNames,
+  methodNames,
   parseSymbols,
 } from "./encoder-check-lib.mts";
 
@@ -46,10 +47,14 @@ function readObject(file: string, object: string): Finding[] {
     undefinedSymbols.length > 0
       ? xcrun(["swift-demangle"], `${undefinedSymbols.join("\n")}\n`).split(/\r?\n/)
       : [];
-  const selectors = parseMethodNames(
-    xcrun(["otool", "-v", "-s", "__TEXT", "__objc_methname", file]),
-  );
+  const selectors = methodNames(readFileSync(file));
   return findViolations({ object, undefinedSymbols, demangled, selectors }, loadAllowList());
+}
+
+/** How much the check read from an object, for the self-test's output. */
+function counts(file: string): string {
+  const symbols = parseSymbols(xcrun(["nm", "-u", "-j", file])).length;
+  return `${symbols} undefined symbols, ${methodNames(readFileSync(file)).length} selectors`;
 }
 
 let allowList: AllowList | undefined;
@@ -124,7 +129,7 @@ function selfTest(dir: string): number {
       ? expected.split("|").some((rule) => rules.includes(rule.trim()))
       : findings.length === 0;
     console.log(
-      `${ok ? "ok  " : "FAIL"} ${name}: expected ${expected ?? "no findings"}, found ${rules.length ? rules.join(", ") : "none"}`,
+      `${ok ? "ok  " : "FAIL"} ${name}: expected ${expected ?? "no findings"}, found ${rules.length ? rules.join(", ") : "none"} (${counts(object)})`,
     );
     if (!ok) failures++;
   }
