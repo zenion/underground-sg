@@ -6,16 +6,18 @@ import Foundation
 /// - main: UIKit, the ARView and the privacy shield, `session.run` and `pause`, background tasks
 ///   and the idle timer. Nothing per frame.
 /// - `capture`: the ARSession's delegate queue (design D4). Frames, the candidate gate, marks and
-///   tags (handled on the next frame), the 5 Hz status timer; the recorder's state machine.
+///   tags (handled on the next frame), the 5 Hz status timer; the recorder's state machine, the
+///   mesh geometry copies (D5), telemetry once a second and the 100 ms command batches.
 /// - `motion`: Core Motion's handlers (an OperationQueue that runs one operation at a time on
 ///   its own serial queue), batched onto `capture`.
-/// - `mesh`: packing, fingerprinting and compressing mesh geometry for the history.
-/// - `recorderIO`: the recording's files (encoding, writes, syncs, finalize).
+/// - `recorderIO`: the recording's files (encoding, writes, syncs, finalize), and the mesh
+///   history's packing, fingerprinting and DEFLATE, which FileSink runs in order with the writes
+///   (CaptureIO's MeshJobRunner places each block): the design's separate `usg.mesh` queue
+///   isn't needed while that is so.
 /// - `store`: the recordings as a whole: recovery at launch, list, export, delete and the
 ///   self-test, one at a time.
 enum Queues {
   static let capture = DispatchQueue(label: "usg.capture", qos: .userInitiated)
-  static let mesh = DispatchQueue(label: "usg.mesh", qos: .utility)
   static let recorderIO = DispatchQueue(label: "usg.recorder.io", qos: .utility)
   static let store = DispatchQueue(label: "usg.recordings.store", qos: .utility)
 

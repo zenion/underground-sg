@@ -155,8 +155,9 @@ jobs:
         run: node apps/mapper/scripts/encoder-check.mts --derived-data "$RUNNER_TEMP/dd"
       # A silent compile-out must fail the job (the lean recorder design, section 2): with the
       # switch on, CaptureCore's objects define RecorderCore's symbols, CaptureIO's define FileSink's,
-      # and CaptureNative's objects reference React's RCTSetLogFunction from the walk build's log
-      # guard (ios/Recorder/LogGuard.swift), which also proves that the pod can import React.
+      # CaptureNative's define RecorderHost's (ios/Recorder/RecorderHost.swift), and CaptureNative's
+      # objects reference React's RCTSetLogFunction from the walk build's log guard
+      # (ios/Recorder/LogGuard.swift), which also proves that the pod can import React.
       # nm prints symbol names only.
       - name: The recorder is compiled in
         run: |
@@ -168,6 +169,9 @@ jobs:
           io=$(objects CaptureIO | xargs xcrun nm -U -j | xcrun swift-demangle | grep -cF 'CaptureIO.FileSink' || true)
           echo "CaptureIO: ${io:-0} FileSink symbols"
           test "${io:-0}" -gt 0
+          host=$(objects CaptureNative | xargs xcrun nm -U -j | xcrun swift-demangle | grep -cF 'CaptureNative.RecorderHost' || true)
+          echo "CaptureNative: ${host:-0} RecorderHost symbols"
+          test "${host:-0}" -gt 0
           probe=$(objects CaptureNative | xargs xcrun nm -u -j | grep -cxF '_RCTSetLogFunction' || true)
           echo "CaptureNative: ${probe:-0} references to RCTSetLogFunction"
           test "${probe:-0}" -gt 0

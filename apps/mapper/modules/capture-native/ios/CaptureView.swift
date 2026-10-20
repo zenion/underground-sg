@@ -25,6 +25,11 @@ final class CaptureView: ExpoView {
     badge.isHidden = true
     shield.onScreenshot = { [weak self] in self?.screenshotTaken() }
     shield.onCoveredChange = { [weak self] covered in self?.session?.coverChanged(covered) }
+    shield.onBackground = { [weak self] in self?.session?.sceneDidEnterBackground() }
+    shield.onForeground = { [weak self] in self?.session?.sceneWillEnterForeground() }
+    shield.onScreenCaptureChange = { [weak self] captured in
+      self?.session?.screenCaptureChanged(captured)
+    }
   }
 
   override func layoutSubviews() {

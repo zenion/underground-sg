@@ -4,9 +4,10 @@ Date: 2026-10-21. Status: the plan the Swift spike follows from here to the firs
 
 How it was made: three independent designs, each from a different priority (crash safety first, sustained performance and heat first, fewest native builds first), scored by two judges against the docs and the code, then merged into one from the design both judges chose (crash safety), with the others' best ideas grafted in and every flaw the judges found fixed. Section 0 records the decisions that settled their disagreements.
 
-Two notes since it was written:
+Notes since it was written:
 - PR0 is done in the change that adds this file: `pnpm gen` writes `Contracts.swift` into `CaptureCore`, `packages/contracts/generated/` is gone, and `swift test` compiles the generated types, so CI needs no separate typecheck step (D22).
 - B1, the development build that checks the camera shield, was built on 2026-10-20 from main after the module skeleton (D23).
+- PR5 as built (2026-10-21) differs in three places. The mesh history's packing, fingerprinting and DEFLATE run inside `FileSink` on the I/O queue (CaptureIO's `MeshJobRunner` places each block), so there is no `usg.mesh` queue: the snapshot waits while a mesh job is in flight (`meshQueueIdle`). The ARSession's delegate stays `CaptureLoop` in `CaptureSession.swift`, since builds without the recorder need it too; `ARKitAdapter` holds the recorder's reads of ARKit. And the chained finalize (section 4) holds the finalize on the capture queue until Core Motion's queue has handed over its last batch, whose samples up to `end_t` go in through `RecorderCore.lateSamples` ahead of it.
 
 ## Defaults taken for the open questions
 

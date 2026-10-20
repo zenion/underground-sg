@@ -830,4 +830,67 @@ private struct BoundarySeq: Decodable {
     #expect(try checkShapes(h.sink) > 0)
   }
 }
+
+/// What the app's RecorderHost needs besides the state table: the samples Core Motion still held
+/// when the window closed (design section 4, the chained finalize), and the steps for the status.
+@Suite struct RecorderCoreHostTests {
+  private func imuSample(_ t: Double) -> ImuSample {
+    ImuSample(t: t, accelG: SIMD3(0, -1, 0), gyro: SIMD3(0, 0, 0.01))
+  }
+
+  private func motionSample(_ t: Double) -> MotionSample {
+    MotionSample(
+      t: t, attitude: SIMD4(0, 0, 0, 1), gravityG: SIMD3(0, 0, -1), userAccelG: SIMD3(0, 0, 0),
+      rotation: SIMD3(0, 0, 0), magneticField: SIMD3(12.5, -31.25, -18.75),
+      magneticAccuracy: .high, heading: 90)
+  }
+
+  /// The host holds the finalize until the motion queue's last batch is in: those samples, up to
+  /// `end_t`, land ahead of it; the rest are dropped as outside the window.
+  @Test func lateSamplesLandUpToTheEndAheadOfTheFinalize() throws {
+    let h = Harness()
+    h.openAtTwo()
+    h.frames(from: 2.0167, to: 6)
+    h.imu([5.99])
+    // The close's commands, held back from the sink as the host holds them.
+    let closing = h.core.close(at: 6.2, reason: .background)
+    #expect(h.core.phase != .open)
+    // The ordinary paths refuse them once the window has closed.
+    #expect(h.core.imu([imuSample(5.995)]).isEmpty)
+    let outsideBefore = h.core.counts.outsideWindow
+    let late = h.core.lateSamples(
+      imu: [imuSample(5.995), imuSample(6), imuSample(6.01)],
+      motion: [motionSample(5.996), motionSample(6.2)],
+      altitude: [AltitudeSample(t: 5.997, relativeAltitudeM: 0.25, pressureKpa: 101.3)])
+    #expect(h.core.counts.outsideWindow == outsideBefore + 2)
+    h.run(late + closing)
+    #expect(h.sink.state == .finished)
+    #expect(try h.decode("imu.jsonl", as: ImuLine.self).map(\.t) == [5.99, 5.995, 6])
+    #expect(try h.decode("motion.jsonl", as: MotionLine.self).map(\.t) == [5.996])
+    let altitude = try h.decode("altitude.jsonl", as: AltitudeLine.self)
+    #expect(altitude.map(\.t) == [5.997])
+    #expect(try h.manifest().window.endT == 6)
+    // Closed: nothing more.
+    #expect(h.core.lateSamples(imu: [imuSample(5.999)], motion: [], altitude: []).isEmpty)
+    try checkShapes(h.sink)
+  }
+
+  @Test func lateSamplesAreRefusedUnlessTheWindowHasClosed() {
+    let h = Harness()
+    h.frames(from: 0, to: 0.5)
+    #expect(h.core.lateSamples(imu: [imuSample(0.4)], motion: [], altitude: []).isEmpty)
+    h.openAtTwo()
+    h.frames(from: 2.0167, to: 3)
+    #expect(h.core.lateSamples(imu: [imuSample(2.9)], motion: [], altitude: []).isEmpty)
+    #expect(h.lines("imu.jsonl").isEmpty)
+  }
+
+  @Test func theStepsTakenAreReadableForTheStatus() {
+    let h = Harness()
+    h.openAtTwo()
+    #expect(h.core.degradationSteps.isEmpty)
+    h.run(h.core.event(.thermal(.serious), t: 2.1))
+    #expect(h.core.degradationSteps == [.noMeshHistory])
+  }
+}
 #endif

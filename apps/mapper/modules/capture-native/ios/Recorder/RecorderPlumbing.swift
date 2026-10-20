@@ -20,9 +20,8 @@
   final class RecorderPlumbing: @unchecked Sendable {
     static let shared = RecorderPlumbing()
 
-    /// Whether `start` can record yet. RecorderHost, which runs a recording, lands with the rest
-    /// of design PR5; until then `canRecord` is false and `start` refuses a profile.
-    static let recorderWired = false
+    /// Whether `start` can record: RecorderHost runs a recording (design PR5's second half).
+    static let recorderWired = true
 
     /// A well-formed venue id, for the decisions that are about the build alone (export, the
     /// self-test's set, the permission prompts, `canRecord`). The venues are chosen at `start`,
@@ -37,6 +36,9 @@
     /// Guarded by `lock`.
     private var recovery = RecoveryReport()
     private var recoveryRunning = false
+    /// Recordings closed while the phone was locked, whose files wait for class A (design 7.5,
+    /// step 7). Kept alive here until unlock, whatever happened to their session.
+    private var protectionHolds: [RecorderHost] = []
     /// Main queue only.
     private var launched = false
     private var permissionRequest: PermissionRequest?
@@ -70,9 +72,31 @@
         LogGuard.installIfWalkBuild()
         self.security.startObserving { [weak self] in
           self?.scheduleRecovery()
+          self?.finishProtection()
         }
         self.scheduleRecovery()
       }
+    }
+
+    /// A recording finalized while locked: its host finishes the upgrade at the next unlock.
+    func holdUntilProtected(_ host: RecorderHost) {
+      lock.lock()
+      if !protectionHolds.contains(where: { $0 === host }) { protectionHolds.append(host) }
+      lock.unlock()
+    }
+
+    func releaseProtectionHold(_ host: RecorderHost) {
+      lock.lock()
+      protectionHolds.removeAll { $0 === host }
+      lock.unlock()
+    }
+
+    /// Protected data is available again: each held recording upgrades its files to class A.
+    private func finishProtection() {
+      lock.lock()
+      let hosts = protectionHolds
+      lock.unlock()
+      for host in hosts { host.protectedDataBecameAvailable() }
     }
 
     /// Runs RecoveryRunner on the store queue, unless it has run or is running. Ahead of any

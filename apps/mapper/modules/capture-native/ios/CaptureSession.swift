@@ -21,9 +21,10 @@ import UIKit
 // the `t` every event carries, are the only pose-bearing values that reach JavaScript, where
 // src/capture/native.ts traces them and wraps them in Redacted.
 //
-// This half of the glue runs the camera with `record: off` (the Capture tab's camera check and
-// desk checks). With a grant (the walk build), `start` refuses with ERR_PROFILE_UNAVAILABLE until
-// RecorderHost lands with the rest of design PR5.
+// With `record: off` (the Capture tab's camera check, desk checks, every build) nothing is
+// written. With a profile, `start` asks RecordPermission: only the walk build gets a grant, and
+// with it a RecorderHost (ios/Recorder/) records the session from the first start mark. A
+// development build refuses with ERR_RECORD_REFUSED and the refusal's name.
 
 // MARK: - Options
 
@@ -56,6 +57,14 @@ struct MarkAnchorOptions: Record {
   @Field var streetFacing: Bool = false
   @Field var endSessionHere: Bool = false
   @Field var name: String? = nil
+
+  /// The arguments as JavaScript passed them, for actions.jsonl.
+  var arguments: [String: Any] {
+    [
+      "role": role.rawValue, "kind": kind.rawValue, "streetFacing": streetFacing,
+      "endSessionHere": endSessionHere, "name": name.map { $0 as Any } ?? NSNull(),
+    ]
+  }
 }
 
 enum TagType: String, Enumerable {
@@ -67,6 +76,11 @@ struct AddTagOptions: Record {
   @Field var type: TagType = .node
   @Field var kind: String = ""
   @Field var name: String? = nil
+
+  /// The arguments as JavaScript passed them, for actions.jsonl.
+  var arguments: [String: Any] {
+    ["type": type.rawValue, "kind": kind, "name": name.map { $0 as Any } ?? NSNull()]
+  }
 }
 
 // MARK: - Errors
@@ -93,6 +107,11 @@ final class CaptureSession: SharedObject {
   private var idleTimerWasDisabled = false
   /// The recorder's state, for the view's REC badge.
   private(set) var recorderState = "off"
+  #if USG_RECORDER
+    /// The recording of the session last started with a grant. It outlives the session's stop
+    /// until its files are finished, and is replaced at the next `start`.
+    private var host: RecorderHost?
+  #endif
 
   /// The ARSession's delegate, confined to `Queues.capture`.
   private let loop = CaptureLoop()
@@ -130,7 +149,11 @@ final class CaptureSession: SharedObject {
   func start(_ options: StartOptions) throws -> [String: Any] {
     let result: [String: Any] = ["recordingId": NSNull()]
     if running { return result }
-    try checkRecordMode(options)
+    #if USG_RECORDER
+      let grant = try recordGrant(options)
+    #else
+      try refuseRecording(options)
+    #endif
     guard ARWorldTrackingConfiguration.isSupported else {
       throw captureError("ERR_TRACKING", reason: "worldTrackingUnsupported")
     }
@@ -144,10 +167,24 @@ final class CaptureSession: SharedObject {
     let session = arView.session
     let fps = configuration.videoFormat.framesPerSecond
     let covered = view.isCovered
+    #if USG_RECORDER
+      // Device motion's reference frame and the altimeter's state, for recording.json.
+      let motion: MotionSource? = grant == nil ? nil : MotionSource()
+    #endif
+    // The session clock (design D26): the three clocks read together just before `session.run`.
     let start = ProcessInfo.processInfo.systemUptime
+    #if USG_RECORDER
+      let clock = SessionClock(uptime: start, media: CACurrentMediaTime(), wall: Date())
+      let recorder = try makeRecorder(
+        grant: grant, motion: motion, clock: clock, configuration: configuration, fps: fps)
+      host = recorder
+    #endif
     // Ordered ahead of the first delegate callback, which ARKit queues on the same serial queue.
     Queues.capture.async { [loop, weak self] in
-      loop.begin(owner: self, t0: start, fps: fps, covered: covered)
+      loop.begin(owner: self, session: session, t0: start, fps: fps, covered: covered)
+      #if USG_RECORDER
+        loop.attach(recorder)
+      #endif
     }
     session.delegate = loop
     session.delegateQueue = Queues.capture
@@ -159,6 +196,9 @@ final class CaptureSession: SharedObject {
     running = true
     idleTimerWasDisabled = UIApplication.shared.isIdleTimerDisabled
     UIApplication.shared.isIdleTimerDisabled = true
+    #if USG_RECORDER
+      recorder?.startSensors()
+    #endif
     captureNote("session_started")
     return result
   }
@@ -177,28 +217,58 @@ final class CaptureSession: SharedObject {
     }
   }
 
-  /// Stops the session. With `record: off` there is no recording, so `recording` is null.
+  /// Stops the session. With a recording, the stop is handled on the next frame (design section
+  /// 6) and resolves once the recording has settled, with its outcome; without one, `recording`
+  /// is null.
   func stop(_ promise: Promise) {
     DispatchQueue.main.async {
       let t = self.running ? self.sessionTime() : self.lastT
+      #if USG_RECORDER
+        if self.host != nil {
+          Queues.capture.async { [loop = self.loop] in
+            loop.requestStop(promise, fallbackT: t)
+          }
+          return
+        }
+      #endif
       self.stopRunning()
       let result: [String: Any] = ["t": t, "recording": NSNull()]
       promise.resolve(result)
     }
   }
 
-  /// Stops the session and deletes the recording, if any (there is none with `record: off`).
+  /// Stops the session and deletes its recording, if any: nothing of it is kept. Rejects with
+  /// ERR_RECORDING_BUSY when a recording closed while the phone was locked can't be removed yet.
   func discard(_ promise: Promise) {
     DispatchQueue.main.async {
+      #if USG_RECORDER
+        if let host = self.host {
+          Queues.capture.async {
+            host.discard { removed in
+              if removed {
+                promise.resolve()
+              } else {
+                promise.reject(captureError("ERR_RECORDING_BUSY"))
+              }
+            }
+            // The recorder has already let the recording go, so the stop keeps nothing.
+            DispatchQueue.main.async { self.stopRunning() }
+          }
+          return
+        }
+      #endif
       self.stopRunning()
       promise.resolve()
     }
   }
 
   /// The boundary trace's lines (session-recording.md, boundary.jsonl). Plumbing: nothing traces
-  /// it. With `record: off` there is no recording to write them into, so they are dropped.
+  /// it. Without a recording they are dropped.
   func appendBoundary(_ lines: [String], _ isFinal: Bool, _ promise: Promise) {
-    promise.resolve()
+    Queues.capture.async { [loop] in
+      loop.appendBoundary(lines, final: isFinal)
+      promise.resolve()
+    }
   }
 
   // MARK: From the view and the delegate (main)
@@ -214,10 +284,50 @@ final class CaptureSession: SharedObject {
   func screenshotTaken() {
     let payload: [String: Any] = ["t": running ? sessionTime() : lastT, "kind": "screenshot"]
     emit(event: "warning", payload: payload)
+    #if USG_RECORDER
+      if let host { Queues.capture.async { host.event(.screenshot) } }
+    #endif
+  }
+
+  /// The screen began or stopped being recorded or mirrored (the cover is on while it is).
+  func screenCaptureChanged(_ captured: Bool) {
+    #if USG_RECORDER
+      if let host {
+        Queues.capture.async { host.event(captured ? .screenCaptureBegan : .screenCaptureEnded) }
+      }
+    #endif
+  }
+
+  /// The view's scene entered the background, a locked screen included: an open recording
+  /// closes as `background` (design section 6), inside a background task that ends once its
+  /// files are finished.
+  func sceneDidEnterBackground() {
+    #if USG_RECORDER
+      guard let host else { return }
+      let task = BackgroundClose.begin()
+      Queues.capture.async {
+        host.closeForBackground {
+          DispatchQueue.main.async { task.end() }
+        }
+      }
+    #endif
+  }
+
+  func sceneWillEnterForeground() {
+    #if USG_RECORDER
+      if let host { Queues.capture.async { host.event(.foreground) } }
+    #endif
   }
 
   /// The ARSession failed; the delegate has emitted the warning.
   func sessionFailed() {
+    DispatchQueue.main.async {
+      self.stopRunning()
+    }
+  }
+
+  /// The delegate handled `stop` on a frame: the session stops now.
+  func stopAfterRecorder() {
     DispatchQueue.main.async {
       self.stopRunning()
     }
@@ -247,9 +357,15 @@ final class CaptureSession: SharedObject {
     UIApplication.shared.isIdleTimerDisabled = idleTimerWasDisabled
     lastT = sessionTime()
     let t = lastT
-    // The last status and `stopped` go out from the capture queue, after any frame in flight.
+    #if USG_RECORDER
+      // Core Motion's last batch is queued ahead of anything the recorder's close asks of it.
+      host?.stopSensors()
+    #endif
+    let session = arSession
+    // The last status and `stopped` go out from the capture queue, after any frame in flight. A
+    // recording still open is stopped there on the session's last frame.
     Queues.capture.async { [loop] in
-      loop.end(at: t)
+      loop.end(at: t, lastFrame: session?.currentFrame)
     }
     captureNote("session_stopped")
   }
@@ -258,30 +374,74 @@ final class CaptureSession: SharedObject {
     sessionSeconds(ProcessInfo.processInfo.systemUptime - t0)
   }
 
-  /// `record: off` needs nothing. Anything else needs the recorder, a grant (only the walk build
-  /// gets one) and recovery done.
-  private func checkRecordMode(_ options: StartOptions) throws {
-    if options.record == .off { return }
-    #if USG_RECORDER
+  #if USG_RECORDER
+    /// `record: off` needs nothing. Anything else needs a grant (only the walk build gets one)
+    /// and recovery done.
+    private func recordGrant(_ options: StartOptions) throws -> RecordingGrant? {
+      if options.record == .off { return nil }
       let decision = RecordPermission.decide(
         profile: RecordProfile(rawValue: options.record.rawValue), facts: .current,
         venues: options.venues, freeDiskBytes: RecorderPlumbing.shared.store.freeBytes())
       switch decision {
       case .off:
-        return
+        return nil
       case .refused(let refusal):
         throw refusalError(refusal)
-      case .granted:
+      case .granted(let grant):
+        guard RecorderPlumbing.recorderWired else {
+          throw captureError("ERR_PROFILE_UNAVAILABLE")
+        }
         guard RecorderPlumbing.shared.recoveryDone else {
           throw captureError("ERR_RECOVERY_PENDING")
         }
-        // RecorderHost lands with the rest of design PR5; until then nothing can record.
-        throw captureError("ERR_PROFILE_UNAVAILABLE")
+        return grant
       }
-    #else
+    }
+
+    /// The session's recorder, with what recording.json says about the build, the phone, the
+    /// clocks and the configuration. Nil without a grant.
+    private func makeRecorder(
+      grant: RecordingGrant?, motion: MotionSource?, clock: SessionClock,
+      configuration: ARWorldTrackingConfiguration, fps: Int
+    ) throws -> RecorderHost? {
+      guard let grant, let motion else { return nil }
+      let base = ManifestBase(
+        origin: .device, appVersion: AppBuild.appVersion, gitCommit: AppBuild.gitCommit,
+        easBuildID: AppBuild.easBuildID, deviceModel: Capabilities.hardwareModel(),
+        osVersion: CaptureSession.osVersion(), clock: clock,
+        arkit: ARKitAdapter.setup(configuration), motionFrame: motion.referenceFrame,
+        altimeter: motion.altimeter)
+      guard
+        let host = RecorderHost(
+          grant: grant, base: base, fps: fps, motion: motion,
+          emit: { [weak self] name, payload in
+            self?.emit(event: name, payload: payload)
+          },
+          stopSession: { [weak self] in
+            DispatchQueue.main.async { self?.stopRunning() }
+          },
+          stateChanged: { [weak self] state in
+            DispatchQueue.main.async { self?.setRecorderState(state) }
+          })
+      else {
+        throw captureError("ERR_RECORD_REFUSED", reason: RecordRefusal.notWalkBuild.rawValue)
+      }
+      return host
+    }
+
+    /// `os_version` as the bundle manifest writes it: `iOS 26.6.1`, or `iOS 26.7`.
+    private static func osVersion() -> String {
+      let os = ProcessInfo.processInfo.operatingSystemVersion
+      let base = "iOS \(os.majorVersion).\(os.minorVersion)"
+      return os.patchVersion > 0 ? base + ".\(os.patchVersion)" : base
+    }
+  #else
+    /// Without the recorder only `record: off` runs.
+    private func refuseRecording(_ options: StartOptions) throws {
+      if options.record == .off { return }
       throw captureError("ERR_RECORD_REFUSED", reason: "notCompiled")
-    #endif
-  }
+    }
+  #endif
 
   private static func configuration() -> ARWorldTrackingConfiguration {
     let configuration = ARWorldTrackingConfiguration()
@@ -326,9 +486,10 @@ func sessionSeconds(_ seconds: Double) -> Double {
 /// The ARSession's delegate (design D4), on `Queues.capture`: every property is read and written
 /// only there. An `ARFrame` or `ARAnchor` is read and released within the callback.
 ///
-/// Every frame goes through the candidate gate, as in every capture (ADR 0010). Marks and tags
-/// wait for the next frame, which they force to be a candidate; a mark refuses without normal
-/// tracking (open question Q11) or without a floor under the screen's centre.
+/// Every frame goes through the candidate gate, as in every capture (ADR 0010), then, with a
+/// recording, to the RecorderHost. Marks, tags and a recording's stop wait for the next frame;
+/// marks and tags force it to be a candidate. A mark refuses without normal tracking (open
+/// question Q11) or without a floor under the screen's centre.
 final class CaptureLoop: NSObject, ARSessionDelegate {
   private struct PendingMark {
     let id: Int
@@ -344,13 +505,18 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
 
   /// How long a mark or tag waits for a frame before it gives up with ERR_TRACKING.
   private static let requestTimeoutS = 2.0
+  /// How long a recording's stop waits for a frame before it reads the session's current one.
+  private static let stopTimeoutS = 0.5
   /// Emits `status` every 0.2 s, and the debug figures with every fifth.
   private static let statusIntervalS = 0.2
   private static let debugEvery = 5
 
   private weak var owner: CaptureSession?
+  private weak var arSession: ARSession?
   private var running = false
   private var t0 = 0.0
+  /// The session time the session stopped at.
+  private var endedT = 0.0
   private var fps = 60
   private var covered = true
   private var gate = CandidateGate()
@@ -373,11 +539,17 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
   private var nextRequestID = 0
   private var pendingMarks: [PendingMark] = []
   private var pendingTags: [PendingTag] = []
+  #if USG_RECORDER
+    private var host: RecorderHost?
+    private var pendingStops: [Promise] = []
+    private var stopRound = 0
+  #endif
 
   // MARK: Session lifecycle (capture queue)
 
-  func begin(owner: CaptureSession?, t0: Double, fps: Int, covered: Bool) {
+  func begin(owner: CaptureSession?, session: ARSession, t0: Double, fps: Int, covered: Bool) {
     self.owner = owner
+    arSession = session
     self.t0 = t0
     self.fps = fps
     self.covered = covered
@@ -398,19 +570,42 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
     lagMs = 0
     delegateUs = RecentTimings()
     statusCount = 0
+    #if USG_RECORDER
+      host = nil
+      pendingStops.removeAll()
+    #endif
     startStatusTimer()
   }
 
-  /// The session stopped at session time `t`: the last status, then `stopped`.
-  func end(at t: Double) {
+  #if USG_RECORDER
+    /// The session records: its frames, marks, tags, events and stop go to `host`. Right after
+    /// `begin`, before the first frame.
+    func attach(_ recorder: RecorderHost?) {
+      host = recorder
+      recorder?.begin()
+    }
+  #endif
+
+  /// The session stopped at session time `t`; `lastFrame` is the session's current frame, read
+  /// on this queue. A recording still open stops on it. Then the last status, and `stopped`.
+  func end(at t: Double, lastFrame: ARFrame?) {
     guard running else { return }
     running = false
+    endedT = t
     statusTimer?.cancel()
     statusTimer = nil
     for mark in pendingMarks { mark.promise.reject(captureError("ERR_NOT_RUNNING")) }
     for tag in pendingTags { tag.promise.reject(captureError("ERR_NOT_RUNNING")) }
     pendingMarks.removeAll()
     pendingTags.removeAll()
+    #if USG_RECORDER
+      if let host {
+        host.sessionEnded(frame: lastFrame, t: t)
+        let stops = pendingStops
+        pendingStops.removeAll()
+        for promise in stops { resolveStop(promise, t: t, host: host) }
+      }
+    #endif
     emitStatus(at: t)
     let payload: [String: Any] = ["t": t]
     owner?.emit(event: "stopped", payload: payload)
@@ -422,7 +617,7 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
     if running { emitStatus(at: now()) }
   }
 
-  // MARK: Marks and tags (capture queue)
+  // MARK: Marks, tags and stop (capture queue)
 
   func requestMark(_ options: MarkAnchorOptions, _ promise: Promise) {
     guard running else {
@@ -462,6 +657,67 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
     }
   }
 
+  #if USG_RECORDER
+    /// A recording session's `stop`: handled on the next frame, or on the session's current
+    /// frame if none comes within half a second; it resolves once the recording settled.
+    /// `fallbackT` is the session time the main queue saw, for a session already stopped.
+    func requestStop(_ promise: Promise, fallbackT: Double) {
+      guard let host else {
+        let result: [String: Any] = ["t": fallbackT, "recording": NSNull()]
+        promise.resolve(result)
+        return
+      }
+      guard running else {
+        resolveStop(promise, t: endedT, host: host)
+        return
+      }
+      pendingStops.append(promise)
+      guard pendingStops.count == 1 else { return }
+      stopRound += 1
+      let round = stopRound
+      Queues.capture.asyncAfter(deadline: .now() + CaptureLoop.stopTimeoutS) { [weak self] in
+        self?.stopTimedOut(round)
+      }
+    }
+
+    private func stopTimedOut(_ round: Int) {
+      guard running, round == stopRound, !pendingStops.isEmpty else { return }
+      let frame = arSession?.currentFrame
+      let t = frame.map { sessionSeconds($0.timestamp - t0) } ?? now()
+      handleStops(frame: frame, t: t)
+    }
+
+    /// The recorder stops on `frame`, then the session stops; the promises resolve once the
+    /// recording settled.
+    private func handleStops(frame: ARFrame?, t: Double) {
+      guard let host else { return }
+      let stops = pendingStops
+      pendingStops.removeAll()
+      stopRound += 1
+      host.stop(frame: frame, t: t)
+      for promise in stops { resolveStop(promise, t: t, host: host) }
+      owner?.stopAfterRecorder()
+    }
+
+    private func resolveStop(_ promise: Promise, t: Double, host: RecorderHost) {
+      host.whenSettled { outcome in
+        if case .failed = outcome {
+          promise.reject(captureError("ERR_IO"))
+        } else {
+          let result: [String: Any] = ["t": t, "recording": outcome.value]
+          promise.resolve(result)
+        }
+      }
+    }
+  #endif
+
+  /// TypeScript's boundary lines, for the recording if there is one.
+  func appendBoundary(_ lines: [String], final: Bool) {
+    #if USG_RECORDER
+      host?.boundary(lines, final: final)
+    #endif
+  }
+
   private func serviceRequests(_ session: ARSession, _ frame: ARFrame, t: Double, index: Int) {
     let camera = frame.camera.transform
     let cameraValues = matrixValues(camera)
@@ -472,6 +728,7 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
 
     for mark in marks {
       guard trackingNormal else {
+        recordAction(.markAnchor, t: t, args: mark.options.arguments, error: "ERR_TRACKING")
         mark.promise.reject(captureError("ERR_TRACKING"))
         continue
       }
@@ -480,12 +737,19 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
       let query = frame.raycastQuery(
         from: CGPoint(x: 0.5, y: 0.5), allowing: .estimatedPlane, alignment: .horizontal)
       guard let hit = session.raycast(query).first else {
+        recordAction(.markAnchor, t: t, args: mark.options.arguments, error: "ERR_NO_FLOOR_HIT")
         mark.promise.reject(captureError("ERR_NO_FLOOR_HIT"))
         continue
       }
       let anchor = ARAnchor(
         name: "usg.marked.\(mark.options.role.rawValue)", transform: hit.worldTransform)
       session.add(anchor: anchor)
+      // The recorder handles the mark on this frame: the first start mark opens the recording.
+      #if USG_RECORDER
+        let window = host?.marked(mark.options, frame: frame) ?? "not_open"
+      #else
+        let window = "not_open"
+      #endif
       let columns = hit.worldTransform.columns
       let hitValues: [String: Any] = [
         "point": [Double(columns.3.x), Double(columns.3.y), Double(columns.3.z)],
@@ -507,14 +771,15 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
         "hit": hitValues,
         "facing": facing,
         "camera": cameraValues,
-        // Nothing records with `record: off`, so there is never a window.
-        "window": "not_open",
+        "window": window,
       ]
+      recordAction(.markAnchor, t: t, args: mark.options.arguments, result: result)
       mark.promise.resolve(result)
     }
 
     for tag in tags {
       guard trackingNormal else {
+        recordAction(.addTag, t: t, args: tag.options.arguments, error: "ERR_TRACKING")
         tag.promise.reject(captureError("ERR_TRACKING"))
         continue
       }
@@ -525,8 +790,29 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
         "position": [Double(position.x), Double(position.y), Double(position.z)],
         "camera": cameraValues,
       ]
+      recordAction(.addTag, t: t, args: tag.options.arguments, result: result)
       tag.promise.resolve(result)
     }
+  }
+
+  /// A session call's line in actions.jsonl, while a recording is open.
+  private func recordAction(
+    _ call: CallName, t: Double, args: [String: Any], result: [String: Any]? = nil,
+    error: String? = nil
+  ) {
+    #if USG_RECORDER
+      guard let host else { return }
+      switch call {
+      case .markAnchor: host.recordAction(.markAnchor, t: t, args: args, result: result, error: error)
+      case .addTag: host.recordAction(.addTag, t: t, args: args, result: result, error: error)
+      }
+    #endif
+  }
+
+  /// The calls the delegate resolves on a frame.
+  private enum CallName {
+    case markAnchor
+    case addTag
   }
 
   // MARK: ARSessionDelegate (capture queue)
@@ -563,15 +849,31 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
     }
     mapping = mappingName(frame.worldMappingStatus)
 
-    if !pendingMarks.isEmpty || !pendingTags.isEmpty {
-      serviceRequests(session, frame, t: t, index: index)
-    }
-    if gate.offer(t: t, transform: WorldTransform(camera.transform), trackingNormal: trackingNormal)
-      != nil
-    {
+    // The gate first: a mark or tag forced this frame to be a candidate.
+    let gateStarted = CACurrentMediaTime()
+    let trigger = gate.offer(
+      t: t, transform: WorldTransform(camera.transform), trackingNormal: trackingNormal)
+    if trigger != nil {
       candidates += 1
       candidateRate.tick(t)
     }
+    // Then the recorder sees the frame, so a mark handled on it opens or ends the window there.
+    #if USG_RECORDER
+      if let host {
+        let gateMs = (CACurrentMediaTime() - gateStarted) * 1000
+        host.frame(frame, index: index, candidate: trigger != nil, gateMs: gateMs)
+      }
+    #else
+      _ = gateStarted
+    #endif
+    if !pendingMarks.isEmpty || !pendingTags.isEmpty {
+      serviceRequests(session, frame, t: t, index: index)
+    }
+    #if USG_RECORDER
+      if !pendingStops.isEmpty {
+        handleStops(frame: frame, t: t)
+      }
+    #endif
     delegateUs.add((CACurrentMediaTime() - started) * 1e6, at: t)
   }
 
@@ -579,12 +881,28 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
     guard running else { return }
     for anchor in anchors where anchor is ARMeshAnchor {
       meshAnchorIDs.insert(anchor.identifier)
+      #if USG_RECORDER
+        host?.meshUpdated(anchor.identifier)
+      #endif
     }
+  }
+
+  func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+    guard running else { return }
+    #if USG_RECORDER
+      guard let host else { return }
+      for anchor in anchors where anchor is ARMeshAnchor {
+        host.meshUpdated(anchor.identifier)
+      }
+    #endif
   }
 
   func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
     for anchor in anchors {
       meshAnchorIDs.remove(anchor.identifier)
+      #if USG_RECORDER
+        if running, anchor is ARMeshAnchor { host?.meshRemoved(anchor.identifier) }
+      #endif
     }
   }
 
@@ -594,6 +912,9 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
     captureLog.error("session failed with ARKit error \(code, privacy: .public)")
     LogRing.shared.add("session_failed")
     guard running else { return }
+    #if USG_RECORDER
+      host?.event(.sessionFailed(code: code))
+    #endif
     let payload: [String: Any] = ["t": now(), "kind": "sessionFailed", "code": code]
     owner?.emit(event: "warning", payload: payload)
     owner?.sessionFailed()
@@ -601,12 +922,18 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
 
   func sessionWasInterrupted(_ session: ARSession) {
     guard running else { return }
+    #if USG_RECORDER
+      host?.event(.interruptionBegan)
+    #endif
     let payload: [String: Any] = ["t": now(), "kind": "interrupted"]
     owner?.emit(event: "warning", payload: payload)
   }
 
   func sessionInterruptionEnded(_ session: ARSession) {
     guard running else { return }
+    #if USG_RECORDER
+      host?.event(.interruptionEnded)
+    #endif
     let payload: [String: Any] = ["t": now(), "kind": "interruptionEnded"]
     owner?.emit(event: "warning", payload: payload)
   }
@@ -633,6 +960,16 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
 
   private func emitStatus(at t: Double) {
     statusCount += 1
+    let off: [String: Any] = [
+      "state": "off",
+      "degradation": NSNull(),
+      "closingInS": NSNull(),
+    ]
+    #if USG_RECORDER
+      let recorder = host?.statusValue() ?? off
+    #else
+      let recorder = off
+    #endif
     var status: [String: Any] = [
       "t": t,
       "running": running,
@@ -646,11 +983,7 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
       "candidates": candidates,
       "meshAnchors": meshAnchorIDs.count,
       "thermal": thermalStateName(ProcessInfo.processInfo.thermalState),
-      "recorder": [
-        "state": "off",
-        "degradation": NSNull(),
-        "closingInS": NSNull(),
-      ] as [String: Any],
+      "recorder": recorder,
     ]
     if let trackingReason {
       status["trackingReason"] = trackingReason
@@ -664,13 +997,19 @@ final class CaptureLoop: NSObject, ARSessionDelegate {
   /// The debug card's figures (design 13): counts and timings, never a pose or a time of day.
   private func debugFigures(at t: Double) -> [String: Any] {
     let timings = delegateUs.percentiles(at: t)
-    return [
+    let figures: [String: Any] = [
       "delegateP50Us": timings.p50,
       "delegateP95Us": timings.p95,
       "gapsTotal": gapsTotal,
       "gapMax": gapMax,
       "deliveryLagMs": (lagMs * 10).rounded() / 10,
     ]
+    #if USG_RECORDER
+      if let host {
+        return figures.merging(host.debugFigures()) { mine, _ in mine }
+      }
+    #endif
+    return figures
   }
 }
 
