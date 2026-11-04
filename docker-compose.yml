@@ -39,7 +39,7 @@ services:
   rustfs:
     # RustFS 1.0.1 (Apache-2.0), pinned by digest. SeaweedFS is the fallback; MinIO's
     # community edition is archived.
-    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
     environment:
       # Root credentials. The scripts use them as their S3 key pair.
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?copy .env.example to .env}
